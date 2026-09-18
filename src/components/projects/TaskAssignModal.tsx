@@ -793,7 +793,7 @@ export default function TaskAssignModal({
                     : '2. Đối tác Vendor'}
                 </Text>
 
-                {isSupportMode && (
+                {/* {isSupportMode && (
                   <TouchableOpacity
                     className="flex-row items-center gap-1.5 py-1"
                     onPress={handleToggleTeamAssignment}
@@ -806,7 +806,7 @@ export default function TaskAssignModal({
                     />
                     <Text className="text-[11px] font-bold text-primary">Nhờ hỗ trợ từ team khác</Text>
                   </TouchableOpacity>
-                )}
+                )} */}
               </View>
 
               {/* Assignee / Team Selection */}
