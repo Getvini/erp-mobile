@@ -365,6 +365,8 @@ export default function TaskDetailScreen() {
               </TouchableOpacity>
             )}
 
+          {/* Deprecated cross-team support buttons */}
+          {/*
           {task.status === 'SUPPORT_PENDING' && currentUserId === task.supportLeadId && (
             <>
               <TouchableOpacity
@@ -422,6 +424,7 @@ export default function TaskDetailScreen() {
                 </TouchableOpacity>
               </>
             )}
+          */}
 
           {canManageProjectTask &&
             (task.assigneeId || task.helperId) &&

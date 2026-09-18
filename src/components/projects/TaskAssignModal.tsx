@@ -660,6 +660,8 @@ export default function TaskAssignModal({
         });
 
         Alert.alert('Thành công', `Đã phân công ${tasks.length} công việc hàng loạt thành công!`);
+      /*
+      // Deprecated cross-team assignSupportTeam mutation
       } else if (isTeamAssignment) {
         if (representativeTask && representativeTask.status === 'DOING' && !isSupportRequested) {
           await requestSupportMutation.mutateAsync({
@@ -675,6 +677,7 @@ export default function TaskAssignModal({
           projectId,
         });
         Alert.alert('Thành công', 'Đã phân công Team hỗ trợ thực hiện công việc thành công!');
+      */
       } else {
         const finalAssigneeId = performerType === 'INTERNAL' ? selectedAssigneeId : selectedVendorId;
         await assignTaskMutation.mutateAsync({
