@@ -94,6 +94,14 @@ const MODULES = [
     badge: 'Real-time',
   },
   {
+    id: 'settings',
+    title: 'Cài đặt hệ thống & QC',
+    desc: 'Cấu hình bảo mật sinh trắc học, thông báo, AI QC đối chiếu sản phẩm và xóa bộ nhớ cache.',
+    icon: 'settings-outline' as const,
+    color: '#EA580C',
+    badge: 'Hệ thống',
+  },
+  {
     id: 'profile',
     title: 'Hồ sơ cá nhân',
     desc: 'Quản lý thông tin tài khoản, vai trò cá nhân và cài đặt ứng dụng.',
@@ -188,6 +196,10 @@ export default function ExploreScreen() {
 
       case 'notifications':
         router.push('/notifications' as any);
+        break;
+
+      case 'settings':
+        router.push('/settings' as any);
         break;
 
       case 'profile':

@@ -152,4 +152,10 @@ export const queryKeys = {
     all: ['financeDocuments'] as const,
     byContract: (contractId: string) => [...queryKeys.financeDocuments.all, 'contract', contractId] as const,
   },
+
+  // Settings / Cài đặt hệ thống & QC
+  settings: {
+    all: ['settings'] as const,
+    qc: () => [...queryKeys.settings.all, 'qc'] as const,
+  },
 };

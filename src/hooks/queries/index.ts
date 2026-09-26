@@ -12,6 +12,7 @@ export * from './useTasks';
 export * from './useAcceptances';
 export * from './useTaskResultChecks';
 export * from './useQcSpellCheck';
+export * from './useSettings';
 export {
   useDebtsQuery,
   useDebtDetailQuery,
