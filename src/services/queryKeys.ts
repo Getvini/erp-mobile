@@ -130,4 +130,14 @@ export const queryKeys = {
     detail: (id: string) => [...queryKeys.paymentRequests.details(), id] as const,
     totalDebt: (params?: Record<string, any>) => [...queryKeys.paymentRequests.all, 'total-debt', params || {}] as const,
   },
+
+  // Debts / Công nợ hợp đồng & đối soát
+  debts: {
+    all: ['debts'] as const,
+    lists: () => [...queryKeys.debts.all, 'list'] as const,
+    list: (params?: Record<string, any>) => [...queryKeys.debts.lists(), params || {}] as const,
+    byContract: (contractId: string) => [...queryKeys.debts.all, 'contract', contractId] as const,
+    details: () => [...queryKeys.debts.all, 'detail'] as const,
+    detail: (id: string) => [...queryKeys.debts.details(), id] as const,
+  },
 };

@@ -12,3 +12,14 @@ export * from './useTasks';
 export * from './useAcceptances';
 export * from './useTaskResultChecks';
 export * from './useQcSpellCheck';
+export {
+  useDebtsQuery,
+  useDebtDetailQuery,
+  useDebtsByContractQuery,
+  useActivateDebtItemMutation,
+  useCreateDebtPaymentMutation,
+  useDeleteDebtPaymentMutation,
+  useDeleteDebtMutation,
+  useUnlockDebtMutation,
+} from './useDebts';
+
