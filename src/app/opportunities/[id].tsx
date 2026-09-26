@@ -407,7 +407,7 @@ export default function OpportunityDetailScreen() {
       case 'QUOTE_APPROVED':
         return { text: 'Báo giá đã duyệt', color: '#0D9488', bg: '#CCFBF1' };
       case 'CONTRACT_CREATED':
-        return { text: 'Đã tạo hợp đồng', color: '#7C3AED', bg: '#EDE9FE' };
+        return { text: 'Đang làm hợp đồng', color: '#7C3AED', bg: '#EDE9FE' };
       case 'PROJECT_ASSIGNED':
         return { text: 'Đã giao dự án', color: '#4F46E5', bg: '#EEF2FF' };
       case 'IMPLEMENTATION':
