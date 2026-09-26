@@ -109,4 +109,14 @@ export const queryKeys = {
     all: ['finance'] as const,
     contractDebts: () => [...queryKeys.finance.all, 'contract-debts'] as const,
   },
+
+  // Payment Requests / Đề xuất thanh toán & tạm ứng
+  paymentRequests: {
+    all: ['paymentRequests'] as const,
+    lists: () => [...queryKeys.paymentRequests.all, 'list'] as const,
+    list: (params?: Record<string, any>) => [...queryKeys.paymentRequests.lists(), params || {}] as const,
+    details: () => [...queryKeys.paymentRequests.all, 'detail'] as const,
+    detail: (id: string) => [...queryKeys.paymentRequests.details(), id] as const,
+    totalDebt: (params?: Record<string, any>) => [...queryKeys.paymentRequests.all, 'total-debt', params || {}] as const,
+  },
 };
