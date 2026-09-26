@@ -11,15 +11,17 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import {
   usePaymentMilestonesByContractQuery,
-  useUpdatePaymentStatusMutation,
 } from '@/hooks/queries/useMilestones';
+import { useDebtsByContractQuery } from '@/hooks/queries/useDebts';
 import {
   PaymentMilestone,
   PaymentMilestoneStatus,
   PAYMENT_MILESTONE_STATUS_CONFIG,
   PAYMENT_MILESTONE_STATUS_LABELS,
 } from '@/services/paymentMilestoneService';
+import { Debt } from '@/services/debtService';
 import { MilestoneModal } from './MilestoneModal';
+import { PaymentRecordModal } from './PaymentRecordModal';
 import { formatVND, formatDateToDDMMYYYY } from '@/utils/formatters';
 import { useAuthStore } from '@/stores/useAuthStore';
 
@@ -48,7 +50,9 @@ export const MilestoneTrackerTab: React.FC<MilestoneTrackerTabProps> = ({
   }, [isReadOnly, userRole]);
 
   const [modalVisible, setModalVisible] = useState(false);
-  const [updatingMilestoneId, setUpdatingMilestoneId] = useState<string | null>(null);
+  const [paymentModalMilestone, setPaymentModalMilestone] = useState<PaymentMilestone | null>(null);
+
+  const { data: debts = [], refetch: refetchDebts } = useDebtsByContractQuery(contractId);
 
   const {
     data: milestones = [],
@@ -57,9 +61,7 @@ export const MilestoneTrackerTab: React.FC<MilestoneTrackerTabProps> = ({
     refetch,
   } = usePaymentMilestonesByContractQuery(contractId);
 
-  const updateStatusMutation = useUpdatePaymentStatusMutation();
-
-  // Thống kê tiến độ thu tiền
+  // Thống kê tiến độ thu tiền (chuẩn hóa 100% với Web FinancialInfo.jsx)
   const stats = useMemo(() => {
     const totalContractAmount = Number(sellingPrice || 0);
     let totalPlanAmount = 0;
@@ -73,9 +75,19 @@ export const MilestoneTrackerTab: React.FC<MilestoneTrackerTabProps> = ({
       const amt = Number(m.amount || 0);
       totalPlanAmount += amt;
 
-      const isPaid = m.status === PaymentMilestoneStatus.PAID || m.status === 'COMPLETED';
-      if (isPaid) {
-        totalPaidAmount += amt;
+      const debt = debts.find((d) => d.milestoneId === m.id || d.milestone?.id === m.id);
+      let milestonePaid = 0;
+      if (debt) {
+        const payments = debt.payments?.map((p) => Number(p.amount || 0)) || [];
+        milestonePaid = payments.reduce((sum, p) => sum + p, 0);
+      } else if (m.status === PaymentMilestoneStatus.PAID || m.status === 'COMPLETED') {
+        milestonePaid = amt;
+      }
+
+      totalPaidAmount += milestonePaid;
+
+      const isCompleted = (debt && milestonePaid >= amt) || m.status === PaymentMilestoneStatus.PAID || m.status === 'COMPLETED';
+      if (isCompleted) {
         paidCount += 1;
       } else if (m.dueDate) {
         const due = new Date(m.dueDate);
@@ -99,7 +111,7 @@ export const MilestoneTrackerTab: React.FC<MilestoneTrackerTabProps> = ({
       paidCount,
       overdueCount,
     };
-  }, [milestones, sellingPrice]);
+  }, [milestones, debts, sellingPrice]);
 
   const handleOpenModal = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -115,64 +127,31 @@ export const MilestoneTrackerTab: React.FC<MilestoneTrackerTabProps> = ({
     onRefresh?.();
   }, [refetch, onRefresh]);
 
-  // Đổi trạng thái nhanh Đã thanh toán / Chưa thanh toán
-  const handleToggleStatus = useCallback(
+  // Mở modal ghi nhận thanh toán
+  const handleOpenPaymentModal = useCallback(
     (milestone: PaymentMilestone) => {
       if (!canManage) return;
-
-      const isCurrentlyPaid =
-        milestone.status === PaymentMilestoneStatus.PAID || milestone.status === 'COMPLETED';
-      const newStatus = isCurrentlyPaid
-        ? PaymentMilestoneStatus.WAITING_PAYMENT
-        : PaymentMilestoneStatus.PAID;
-
-      const actionText = isCurrentlyPaid ? 'chuyển sang Chờ thanh toán' : 'xác nhận Đã thanh toán';
-
-      Alert.alert(
-        'Cập nhật trạng thái',
-        `Bạn có chắc chắn muốn ${actionText} cho "${milestone.name}"?`,
-        [
-          { text: 'Hủy', style: 'cancel' },
-          {
-            text: 'Đồng ý',
-            onPress: async () => {
-              try {
-                setUpdatingMilestoneId(milestone.id);
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                await updateStatusMutation.mutateAsync({
-                  id: milestone.id,
-                  status: newStatus,
-                  paidDate: isCurrentlyPaid ? undefined : new Date().toISOString(),
-                });
-                refetch();
-                onRefresh?.();
-              } catch (err: any) {
-                Alert.alert('Lỗi', err.message || 'Không thể cập nhật trạng thái đợt thanh toán');
-              } finally {
-                setUpdatingMilestoneId(null);
-              }
-            },
-          },
-        ]
-      );
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setPaymentModalMilestone(milestone);
     },
-    [canManage, updateStatusMutation, refetch, onRefresh]
+    [canManage]
   );
+
 
   return (
     <View style={styles.container}>
-      {/* 1. Header Box & Nút thiết lập */}
+      {/* 1. Header Lộ trình Thanh Toán */}
       <View style={styles.headerRow}>
         <View style={styles.headerTitleGroup}>
           <View style={styles.headerIconWrapper}>
-            <Feather name="calendar" size={16} color="#D97706" />
+            <Feather name="calendar" size={15} color="#F38820" />
           </View>
-          <View>
-            <Text style={styles.headerTitle}>
-              Đợt thanh toán ({stats.totalCount})
+          <View style={styles.headerTextCol}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              Lộ trình Thanh Toán
             </Text>
-            <Text style={styles.headerSubtitle}>
-              {stats.paidCount}/{stats.totalCount} đợt đã hoàn tất
+            <Text style={styles.headerSubtitle} numberOfLines={1}>
+              Theo dõi tiến độ từ lập kế hoạch đến khi thanh toán đủ
             </Text>
           </View>
         </View>
@@ -183,64 +162,13 @@ export const MilestoneTrackerTab: React.FC<MilestoneTrackerTabProps> = ({
             onPress={handleOpenModal}
             activeOpacity={0.7}
           >
-            <Feather name="sliders" size={14} color="#EA580C" />
-            <Text style={styles.manageBtnText}>Thiết lập</Text>
+            <Feather name="sliders" size={13} color="#F38820" />
+            <Text style={styles.manageBtnText}>Quản lý lộ trình</Text>
           </TouchableOpacity>
         )}
       </View>
 
-      {/* 2. Card Tiến độ thu tiền tổng thể (Progress Bar) */}
-      <View style={styles.progressCard}>
-        <View style={styles.progressRowTop}>
-          <View>
-            <Text style={styles.progressLabel}>Tiến độ thu tiền</Text>
-            <Text style={styles.progressAmountPaid}>
-              {formatVND(stats.totalPaidAmount)}
-              <Text style={styles.progressAmountTotal}>
-                {' '}/ {formatVND(stats.totalContractAmount)}
-              </Text>
-            </Text>
-          </View>
-          <View style={styles.percentBadge}>
-            <Text style={styles.percentText}>{stats.progressPercent}%</Text>
-          </View>
-        </View>
-
-        {/* Thanh tiến trình Progress Bar */}
-        <View style={styles.progressBarTrack}>
-          <View
-            style={[
-              styles.progressBarFill,
-              {
-                width: `${stats.progressPercent}%`,
-                backgroundColor: stats.progressPercent >= 100 ? '#10B981' : '#F38820',
-              },
-            ]}
-          />
-        </View>
-
-        {/* Thống kê 2 cột Còn lại & Quá hạn */}
-        <View style={styles.statsRow}>
-          <View style={styles.statCol}>
-            <Text style={styles.statSubLabel}>Còn lại phải thu</Text>
-            <Text style={styles.statValueRemaining}>{formatVND(stats.remainingAmount)}</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statCol}>
-            <Text style={styles.statSubLabel}>Đợt quá hạn</Text>
-            <Text
-              style={[
-                styles.statValueOverdue,
-                stats.overdueCount > 0 ? styles.statOverdueWarning : null,
-              ]}
-            >
-              {stats.overdueCount > 0 ? `${stats.overdueCount} đợt trễ hạn` : 'Đúng hạn'}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* 3. Danh sách các đợt thanh toán (Milestones list) */}
+      {/* 2. Danh sách các đợt thanh toán (Milestones list) */}
       {isLoading ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator size="small" color="#F38820" />
@@ -251,7 +179,7 @@ export const MilestoneTrackerTab: React.FC<MilestoneTrackerTabProps> = ({
           <View style={styles.emptyIconCircle}>
             <MaterialCommunityIcons name="calendar-clock" size={32} color="#CBD5E1" />
           </View>
-          <Text style={styles.emptyTitle}>Chưa có đợt thanh toán nào</Text>
+          <Text style={styles.emptyTitle}>Chưa có lộ trình thanh toán</Text>
           <Text style={styles.emptyDesc}>
             Phân bổ giá trị hợp đồng thành từng đợt để theo dõi dòng tiền và xuất biên bản nghiệm thu.
           </Text>
@@ -262,29 +190,43 @@ export const MilestoneTrackerTab: React.FC<MilestoneTrackerTabProps> = ({
               activeOpacity={0.8}
             >
               <Feather name="plus-circle" size={16} color="#FFFFFF" />
-              <Text style={styles.emptyAddBtnText}>Thiết lập đợt thanh toán ngay</Text>
+              <Text style={styles.emptyAddBtnText}>Tạo lộ trình ngay</Text>
             </TouchableOpacity>
           )}
         </View>
       ) : (
         <View style={styles.milestonesList}>
           {milestones.map((ms, index) => {
-            const isPaid =
-              ms.status === PaymentMilestoneStatus.PAID || ms.status === 'COMPLETED';
-            const isUpdating = updatingMilestoneId === ms.id;
-            const statusConfig =
-              PAYMENT_MILESTONE_STATUS_CONFIG[ms.status] ||
-              PAYMENT_MILESTONE_STATUS_CONFIG.PENDING;
-            const statusLabel =
-              PAYMENT_MILESTONE_STATUS_LABELS[ms.status] ||
-              (isPaid ? 'Đã thanh toán' : 'Chờ thanh toán');
+            const debt = debts.find((d) => d.milestoneId === ms.id || d.milestone?.id === ms.id);
+            let paidAmount = 0;
+            if (debt) {
+              const payments = debt.payments?.map((p) => Number(p.amount || 0)) || [];
+              paidAmount = payments.reduce((sum, p) => sum + p, 0);
+            } else if (ms.status === PaymentMilestoneStatus.PAID || ms.status === 'COMPLETED') {
+              paidAmount = Number(ms.amount || 0);
+            }
+            const msAmount = Number(ms.amount || 0);
+            const remaining = Math.max(0, msAmount - paidAmount);
+            const isCompleted = (debt && paidAmount >= msAmount) || ms.status === PaymentMilestoneStatus.PAID || ms.status === 'COMPLETED';
+            const isPaid = isCompleted;
+            const progress = msAmount > 0 ? Math.min(100, Math.round((paidAmount / msAmount) * 100)) : 0;
 
-            // Kiểm tra cảnh báo quá hạn
             const isOverdue =
               !isPaid &&
               ms.dueDate &&
               new Date(ms.dueDate) < new Date() &&
               ms.status !== PaymentMilestoneStatus.CANCELLED;
+
+            const statusConfig = isCompleted
+              ? { bg: '#DCFCE7', border: '#BBF7D0', color: '#16A34A' }
+              : debt
+              ? { bg: '#EFF6FF', border: '#BFDBFE', color: '#2563EB' }
+              : (PAYMENT_MILESTONE_STATUS_CONFIG[ms.status] || PAYMENT_MILESTONE_STATUS_CONFIG.PENDING);
+            const statusLabel = isCompleted
+              ? 'Đã hoàn tất'
+              : debt
+              ? 'Đang thu nợ'
+              : (PAYMENT_MILESTONE_STATUS_LABELS[ms.status] || 'Đang chờ');
 
             return (
               <View
@@ -295,143 +237,124 @@ export const MilestoneTrackerTab: React.FC<MilestoneTrackerTabProps> = ({
                   isOverdue && styles.milestoneCardOverdue,
                 ]}
               >
-                {/* Header card: Số thứ tự, Tên mốc, Badge trạng thái */}
+                {/* Header card: Tên đợt, Badge trạng thái & Sub-meta */}
                 <View style={styles.cardHeader}>
-                  <View style={styles.cardHeaderLeft}>
-                    <View
-                      style={[
-                        styles.indexCircle,
-                        isPaid && styles.indexCirclePaid,
-                        isOverdue && styles.indexCircleOverdue,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.indexText,
-                          isPaid && styles.indexTextPaid,
-                          isOverdue && styles.indexTextOverdue,
-                        ]}
-                      >
-                        {index + 1}
-                      </Text>
-                    </View>
-                    <View style={styles.nameBlock}>
+                  <View style={styles.nameBlock}>
+                    <View style={styles.nameRow}>
                       <Text style={styles.milestoneName} numberOfLines={1}>
-                        {ms.name}
+                        {ms.name.toUpperCase()}
                       </Text>
-                      {ms.description ? (
-                        <Text style={styles.milestoneDesc} numberOfLines={2}>
-                          {ms.description}
-                        </Text>
-                      ) : null}
-                    </View>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      {
-                        backgroundColor: isOverdue ? '#FEE2E2' : statusConfig.bg,
-                        borderColor: isOverdue ? '#FECACA' : statusConfig.border,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.statusBadgeText,
-                        { color: isOverdue ? '#DC2626' : statusConfig.color },
-                      ]}
-                    >
-                      {isOverdue ? 'Quá hạn' : statusLabel}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Body card: Số tiền & % tỷ lệ */}
-                <View style={styles.cardBody}>
-                  <View>
-                    <Text style={styles.amountLabel}>Số tiền đợt này:</Text>
-                    <Text
-                      style={[
-                        styles.amountValue,
-                        isPaid && styles.amountValuePaid,
-                      ]}
-                    >
-                      {formatVND(ms.amount)}
-                    </Text>
-                  </View>
-
-                  <View style={styles.percentageBadge}>
-                    <Text style={styles.percentageText}>{Number(ms.percentage || 0)}%</Text>
-                  </View>
-                </View>
-
-                {/* Footer card: Ngày hạn, Ngày thanh toán & Nút hành động toggle */}
-                <View style={styles.cardFooter}>
-                  <View style={styles.footerDateCol}>
-                    {ms.dueDate ? (
-                      <View style={styles.dateRow}>
-                        <Feather
-                          name="clock"
-                          size={12}
-                          color={isOverdue ? '#DC2626' : '#64748B'}
-                        />
-                        <Text
+                      {isOverdue ? (
+                        <View style={[styles.statusBadge, styles.statusBadgeOverdue]}>
+                          <Text style={styles.statusBadgeTextOverdue}>Quá hạn nộp</Text>
+                        </View>
+                      ) : (
+                        <View
                           style={[
-                            styles.dateText,
-                            isOverdue && styles.dateTextOverdue,
+                            styles.statusBadge,
+                            {
+                              backgroundColor: statusConfig.bg,
+                              borderColor: statusConfig.border,
+                            },
                           ]}
                         >
-                          Hạn thu: {formatDateToDDMMYYYY(ms.dueDate)}
-                        </Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.dateTextMuted}>Chưa đặt hạn thu</Text>
-                    )}
-
-                    {isPaid && ms.paidDate ? (
-                      <View style={styles.paidDateRow}>
-                        <Feather name="check" size={12} color="#16A34A" />
-                        <Text style={styles.paidDateText}>
-                          Đã thu ngày: {formatDateToDDMMYYYY(ms.paidDate)}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-
-                  {/* Nút hành động nhanh Toggle trạng thái thanh toán */}
-                  {canManage && (
-                    <TouchableOpacity
-                      style={[
-                        styles.toggleBtn,
-                        isPaid ? styles.toggleBtnUnmark : styles.toggleBtnMark,
-                        isUpdating && styles.toggleBtnDisabled,
-                      ]}
-                      onPress={() => handleToggleStatus(ms)}
-                      disabled={isUpdating}
-                      activeOpacity={0.7}
-                    >
-                      {isUpdating ? (
-                        <ActivityIndicator size="small" color={isPaid ? '#64748B' : '#16A34A'} />
-                      ) : (
-                        <>
-                          <Feather
-                            name={isPaid ? 'rotate-ccw' : 'check-circle'}
-                            size={13}
-                            color={isPaid ? '#64748B' : '#16A34A'}
-                          />
                           <Text
                             style={[
-                              styles.toggleBtnText,
-                              isPaid ? styles.toggleBtnTextUnmark : styles.toggleBtnTextMark,
+                              styles.statusBadgeText,
+                              { color: statusConfig.color },
                             ]}
                           >
-                            {isPaid ? 'Hủy thu' : 'Đã thu'}
+                            {statusLabel}
                           </Text>
-                        </>
+                        </View>
                       )}
+                    </View>
+
+                    {/* Sub-meta: Hạn thanh toán • Giá trị đợt */}
+                    <View style={styles.subMetaRow}>
+                      <Feather
+                        name="clock"
+                        size={11}
+                        color={isOverdue ? '#DC2626' : '#64748B'}
+                      />
+                      <Text
+                        style={[
+                          styles.subMetaText,
+                          isOverdue && styles.subMetaTextOverdue,
+                        ]}
+                      >
+                        Hạn: {ms.dueDate ? formatDateToDDMMYYYY(ms.dueDate) : 'Chưa đặt hạn'}
+                      </Text>
+                      <Text style={styles.subMetaDot}>•</Text>
+                      <Text style={styles.subMetaValue}>
+                        Giá trị: {formatVND(msAmount)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Body card: ĐÃ THU, CÒN NỢ & Nút thao tác [ -> ] */}
+                <View style={styles.cardFinanceRow}>
+                  <View style={styles.financeColsGroup}>
+                    <View style={styles.financeCol}>
+                      <Text style={styles.financeLabel}>ĐÃ THU</Text>
+                      <Text style={[styles.financeValue, styles.financeValuePaid]}>
+                        {formatVND(paidAmount)}
+                      </Text>
+                    </View>
+                    <View style={styles.financeDivider} />
+                    <View style={styles.financeCol}>
+                      <Text style={styles.financeLabel}>CÒN NỢ</Text>
+                      <Text
+                        style={[
+                          styles.financeValue,
+                          remaining > 0 ? styles.financeValueDebt : styles.financeValuePaid,
+                        ]}
+                      >
+                        {formatVND(remaining)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Nút mũi tên mở modal thanh toán / chi tiết */}
+                  {canManage && (
+                    <TouchableOpacity
+                      style={styles.actionCircleBtn}
+                      onPress={() => handleOpenPaymentModal(ms)}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Feather name="arrow-right" size={16} color="#4F46E5" />
                     </TouchableOpacity>
                   )}
+                </View>
+
+                {/* Tiến độ thu tiền đợt này (luôn hiển thị cho mọi đợt) */}
+                <View style={styles.milestoneProgressWrapper}>
+                  <View style={styles.milestoneProgressHeader}>
+                    <Text style={styles.milestoneProgressLabel}>
+                      TIẾN ĐỘ THU TIỀN ĐỢT NÀY
+                    </Text>
+                    <Text
+                      style={[
+                        styles.milestoneProgressPct,
+                        isCompleted ? styles.pctSuccess : styles.pctActive,
+                      ]}
+                    >
+                      {progress}%
+                    </Text>
+                  </View>
+                  <View style={styles.milestoneProgressTrack}>
+                    <View
+                      style={[
+                        styles.milestoneProgressFill,
+                        {
+                          width: `${progress}%`,
+                          backgroundColor: isCompleted ? '#16A34A' : '#4F46E5',
+                        },
+                      ]}
+                    />
+                  </View>
                 </View>
               </View>
             );
@@ -449,6 +372,25 @@ export const MilestoneTrackerTab: React.FC<MilestoneTrackerTabProps> = ({
         isReadOnly={!canManage}
         onSuccess={handleModalSuccess}
       />
+
+      {/* 5. Modal ghi nhận thanh toán (DebtDetailsModal equivalent) */}
+      {paymentModalMilestone && (
+        <PaymentRecordModal
+          visible={Boolean(paymentModalMilestone)}
+          debt={debts.find((d) => d.milestoneId === paymentModalMilestone.id || d.milestone?.id === paymentModalMilestone.id) || null}
+          contractId={contractId}
+          milestoneId={paymentModalMilestone.id}
+          milestoneName={paymentModalMilestone.name}
+          milestoneAmount={Number(paymentModalMilestone.amount)}
+          onClose={() => setPaymentModalMilestone(null)}
+          onSuccess={() => {
+            refetch();
+            refetchDebts();
+            onRefresh?.();
+            setPaymentModalMilestone(null);
+          }}
+        />
+      )}
     </View>
   );
 };
@@ -466,6 +408,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
     marginBottom: 16,
+    overflow: 'hidden',
   },
   headerRow: {
     flexDirection: 'row',
@@ -475,19 +418,26 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#F8FAFC',
+    gap: 8,
   },
   headerTitleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
   },
   headerIconWrapper: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: '#FEF3C7',
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    backgroundColor: '#FFF7ED',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerTextCol: {
+    flex: 1,
+    minWidth: 0,
   },
   headerTitle: {
     fontSize: 14,
@@ -502,109 +452,19 @@ const styles = StyleSheet.create({
   manageBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     backgroundColor: '#FFF7ED',
     borderWidth: 1,
     borderColor: '#FED7AA',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
     borderRadius: 8,
+    flexShrink: 0,
   },
   manageBtnText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: '#EA580C',
-  },
-  progressCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 14,
-  },
-  progressRowTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  progressLabel: {
-    fontSize: 11,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-  progressAmountPaid: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0F172A',
-    marginTop: 2,
-  },
-  progressAmountTotal: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#94A3B8',
-  },
-  percentBadge: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-  },
-  percentText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#D97706',
-  },
-  progressBarTrack: {
-    height: 8,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginVertical: 4,
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-  },
-  statCol: {
-    flex: 1,
-  },
-  statDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: '#E2E8F0',
-    marginHorizontal: 12,
-  },
-  statSubLabel: {
-    fontSize: 11,
-    color: '#64748B',
-  },
-  statValueRemaining: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#334155',
-    marginTop: 1,
-  },
-  statValueOverdue: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#10B981',
-    marginTop: 1,
-  },
-  statOverdueWarning: {
-    color: '#DC2626',
   },
   loadingBox: {
     paddingVertical: 24,
@@ -651,7 +511,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#F38820',
+    backgroundColor: '#4F46E5',
     paddingHorizontal: 16,
     paddingVertical: 9,
     borderRadius: 8,
@@ -662,14 +522,19 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   milestonesList: {
-    gap: 10,
+    gap: 12,
   },
   milestoneCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
   milestoneCardPaid: {
     backgroundColor: '#F0FDF4',
@@ -680,165 +545,162 @@ const styles = StyleSheet.create({
     borderColor: '#FECACA',
   },
   cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  cardHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-    marginRight: 8,
-  },
-  indexCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 7,
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  indexCirclePaid: {
-    backgroundColor: '#DCFCE7',
-  },
-  indexCircleOverdue: {
-    backgroundColor: '#FEE2E2',
-  },
-  indexText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#2563EB',
-  },
-  indexTextPaid: {
-    color: '#16A34A',
-  },
-  indexTextOverdue: {
-    color: '#DC2626',
+    marginBottom: 8,
   },
   nameBlock: {
-    flex: 1,
+    gap: 4,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   milestoneName: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#0F172A',
-  },
-  milestoneDesc: {
-    fontSize: 11,
-    color: '#64748B',
-    marginTop: 2,
+    flex: 1,
+    letterSpacing: 0.3,
   },
   statusBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
     borderRadius: 6,
     borderWidth: 1,
   },
   statusBadgeText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
-  cardBody: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    marginBottom: 10,
+  statusBadgeOverdue: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FECACA',
   },
-  amountLabel: {
-    fontSize: 11,
-    color: '#64748B',
-  },
-  amountValue: {
-    fontSize: 15,
+  statusBadgeTextOverdue: {
+    color: '#DC2626',
+    fontSize: 10,
     fontWeight: '800',
-    color: '#0F172A',
-    marginTop: 1,
+    textTransform: 'uppercase',
   },
-  amountValuePaid: {
-    color: '#15803D',
-  },
-  percentageBadge: {
-    backgroundColor: '#E2E8F0',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  percentageText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#334155',
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-  },
-  footerDateCol: {
-    flex: 1,
-    gap: 2,
-  },
-  dateRow: {
+  subMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    flexWrap: 'wrap',
   },
-  dateText: {
+  subMetaText: {
     fontSize: 11,
     color: '#64748B',
+    fontWeight: '500',
   },
-  dateTextOverdue: {
+  subMetaTextOverdue: {
     color: '#DC2626',
     fontWeight: '600',
   },
-  dateTextMuted: {
+  subMetaDot: {
     fontSize: 11,
-    color: '#94A3B8',
-    fontStyle: 'italic',
+    color: '#CBD5E1',
+    marginHorizontal: 2,
   },
-  paidDateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-  },
-  paidDateText: {
+  subMetaValue: {
     fontSize: 11,
-    color: '#16A34A',
-    fontWeight: '600',
-  },
-  toggleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  toggleBtnMark: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#BBF7D0',
-  },
-  toggleBtnUnmark: {
-    backgroundColor: '#F8FAFC',
-    borderColor: '#CBD5E1',
-  },
-  toggleBtnDisabled: {
-    opacity: 0.6,
-  },
-  toggleBtnText: {
-    fontSize: 11,
+    color: '#334155',
     fontWeight: '700',
   },
-  toggleBtnTextMark: {
+  cardFinanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  financeColsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    flex: 1,
+  },
+  financeCol: {
+    gap: 2,
+  },
+  financeDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: '#E2E8F0',
+  },
+  financeLabel: {
+    fontSize: 9,
+    color: '#94A3B8',
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  financeValue: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  financeValuePaid: {
     color: '#16A34A',
   },
-  toggleBtnTextUnmark: {
-    color: '#64748B',
+  financeValueDebt: {
+    color: '#DC2626',
+  },
+  actionCircleBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#4F46E5',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  milestoneProgressWrapper: {
+    marginTop: 2,
+    gap: 4,
+  },
+  milestoneProgressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  milestoneProgressLabel: {
+    fontSize: 9,
+    color: '#94A3B8',
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  milestoneProgressPct: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  pctSuccess: {
+    color: '#16A34A',
+  },
+  pctActive: {
+    color: '#4F46E5',
+  },
+  milestoneProgressTrack: {
+    height: 6,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  milestoneProgressFill: {
+    height: '100%',
+    borderRadius: 3,
   },
 });

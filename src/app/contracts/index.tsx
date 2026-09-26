@@ -88,7 +88,7 @@ export default function ContractsScreen() {
     const code = item.contractCode || (item as any).contract_code || '—';
     const customerName = item.customer?.name || 'Khách hàng chưa cập nhật';
     const oppName = item.opportunity?.name || '';
-    const sellingPrice = Number(item.sellingPrice || (item as any).selling_price || 0);
+    const sellingPrice = Number(item.totalWithVat || (item as any).totalWithVat || 0);
 
     return (
       <TouchableOpacity

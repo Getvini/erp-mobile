@@ -43,6 +43,8 @@ import {
   OpportunityQuotationsTab,
 } from '@/components/opportunities';
 import { formatVNDFull, formatNumber } from '@/utils/formatters';
+import { DocumentCard } from '@/components/common/DocumentCard';
+import { DocumentPreviewModal } from '@/components/common/DocumentPreviewModal';
 import {
   useOpportunityDetailQuery,
   useApproveOpportunityMutation,
@@ -148,6 +150,17 @@ export default function OpportunityDetailScreen() {
 
   // Customer Assign Modal State
   const [isCustomerModalVisible, setIsCustomerModalVisible] = useState(false);
+
+  // Document Preview Modal State
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [previewFileName, setPreviewFileName] = useState('');
+  const [isPreviewVisible, setIsPreviewVisible] = useState(false);
+
+  const handleOpenPreview = (url: string, fileName?: string) => {
+    setPreviewUrl(url);
+    setPreviewFileName(fileName || '');
+    setIsPreviewVisible(true);
+  };
 
   const handlePromptCreateContract = () => {
     if (!opportunity) return;
@@ -812,6 +825,32 @@ export default function OpportunityDetailScreen() {
 
             <OpportunityEvaluationTab opportunity={opportunity} />
 
+            {/* Tài liệu đính kèm */}
+            {attachments.length > 0 && (
+              <View className="bg-white rounded-[18px] p-4 border border-slate-200 shadow-sm">
+                <View className="flex-row items-center gap-2 mb-3.5">
+                  <View className="w-7 h-7 rounded-lg justify-center items-center bg-violet-50">
+                    <Feather name="paperclip" size={16} color="#7C3AED" />
+                  </View>
+                  <Text className="text-[15px] font-extrabold text-slate-900">Tài liệu đính kèm</Text>
+                  <View className="ml-auto bg-violet-100 px-2 py-0.5 rounded-full">
+                    <Text className="text-[11px] font-bold text-violet-700">{attachments.length}</Text>
+                  </View>
+                </View>
+
+                <View className="gap-2">
+                  {attachments.map((att: any, idx: number) => (
+                    <DocumentCard
+                      key={att.id || idx}
+                      url={att.url || att.fileUrl || att.link}
+                      fileName={att.name || att.fileName}
+                      onPreview={handleOpenPreview}
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
+
             {/* Thông tin bổ sung */}
             <View className="bg-white rounded-[18px] p-4 border border-slate-200 shadow-sm">
               <View className="flex-row items-center gap-2 mb-3.5">
@@ -1002,6 +1041,14 @@ export default function OpportunityDetailScreen() {
           leadTaxId: opportunity.leadTaxId,
           referralPartnerId: opportunity.referralPartnerId || opportunity.referralPartner?.id,
         }}
+      />
+
+      {/* Document Preview Modal */}
+      <DocumentPreviewModal
+        visible={isPreviewVisible}
+        url={previewUrl}
+        fileName={previewFileName}
+        onClose={() => setIsPreviewVisible(false)}
       />
 
       {/* 12. STICKY BOTTOM BAR: NÚT DUYỆT CƠ HỘI CHO BOD / ADMIN */}

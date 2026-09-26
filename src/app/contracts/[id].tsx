@@ -36,6 +36,8 @@ import {
 '@/services/contractService';
 import { formatVNDFull, formatNumber } from '@/utils/formatters';
 import { isValidUrl, normalizeUrl } from '@/utils/validators';
+import { DocumentCard } from '@/components/common/DocumentCard';
+import { DocumentPreviewModal } from '@/components/common/DocumentPreviewModal';
 import {
   ProjectItem,
   UserPMItem,
@@ -50,6 +52,8 @@ import {
 import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { safeGoBack } from '@/utils/navigation';
 import { MilestoneTrackerTab } from '@/components/finance/MilestoneTrackerTab';
+import { useDebtsByContractQuery } from '@/hooks/queries/useDebts';
+import { usePaymentMilestonesByContractQuery } from '@/hooks/queries/useMilestones';
 
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '—';
@@ -76,6 +80,10 @@ export default function ContractDetailScreen() {
   const { data: contractData, isLoading: isContractLoading, isFetching, refetch } = useContractDetailQuery(contractId);
   const contract: ContractItem | null = contractData || null;
 
+  // TanStack Query for Debts & Milestones (chuẩn 100% Web FinancialInfo.jsx)
+  const { data: debts = [], refetch: refetchDebts } = useDebtsByContractQuery(contractId);
+  const { data: milestonesData = [], refetch: refetchMilestones } = usePaymentMilestonesByContractQuery(contractId);
+
   // TanStack Mutations
   const approveProposalMutation = useApproveProposalMutation();
   const rejectProposalMutation = useRejectProposalMutation();
@@ -94,6 +102,17 @@ export default function ContractDetailScreen() {
   // Reject Proposal Modal
   const [isRejectModalVisible, setIsRejectModalVisible] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+
+  // Document Preview Modal
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [previewFileName, setPreviewFileName] = useState('');
+  const [isPreviewVisible, setIsPreviewVisible] = useState(false);
+
+  const handleOpenPreview = (url: string, fileName?: string) => {
+    setPreviewUrl(url);
+    setPreviewFileName(fileName || '');
+    setIsPreviewVisible(true);
+  };
 
   // Upload Proposal Modal State (Chuẩn 100% Web ProposalManagement.jsx)
   const [isUploadProposalModalVisible, setIsUploadProposalModalVisible] = useState(false);
@@ -135,6 +154,8 @@ export default function ContractDetailScreen() {
 
   const handleRefresh = () => {
     refetch();
+    refetchDebts();
+    refetchMilestones();
   };
 
   const handleAssignPmSubmit = async (pmId: string) => {
@@ -452,26 +473,25 @@ export default function ContractDetailScreen() {
     border: '#E2E8F0'
   };
 
-  // Financial Calculations (100% chuẩn Web ERP FinancialInfo.jsx)
-  const sellingPrice = Number(contract.sellingPrice || (contract as any).selling_price || 0);
+  const sellingPrice = Number(contract.totalWithVat || (contract as any).totalWithVat || 0);
   const costPrice = Number(contract.cost || 0);
 
-  const rawMilestones = contract.milestones || [];
-  const rawDebts = (contract as any).debts || [];
+  const rawMilestones = (milestonesData && milestonesData.length > 0) ? milestonesData : (contract.milestones || []);
+  const rawDebts = (debts && debts.length > 0) ? debts : ((contract as any).debts || []);
 
-  const processedMilestones = rawMilestones.map((m) => {
+  const processedMilestones = rawMilestones.map((m: any) => {
     const debt = rawDebts.find((d: any) => d.milestone?.id === m.id || d.milestoneId === m.id);
     let paidAmount = 0;
     if (debt) {
       const payments = debt.payments?.map((p: any) => ({ ...p, amount: Number(p.amount || 0) })) || [];
       paidAmount = payments.reduce((sum: number, p: any) => sum + p.amount, 0);
-    } else if (m.status === 'COMPLETED') {
+    } else if (m.status === 'COMPLETED' || m.status === 'PAID') {
       paidAmount = Number(m.amount || 0);
     }
 
     const amount = Number(m.amount || 0);
     const remaining = Math.max(0, amount - paidAmount);
-    const isActive = !!debt || m.status === 'COMPLETED' || m.status === 'ACTIVE';
+    const isActive = !!debt || m.status === 'COMPLETED' || m.status === 'ACTIVE' || m.status === 'PAID';
 
     return {
       paidAmount,
@@ -1044,7 +1064,7 @@ export default function ContractDetailScreen() {
           contractId={contract.id}
           contractCode={contract.contractCode}
           sellingPrice={sellingPrice}
-          onRefresh={refetch}
+          onRefresh={handleRefresh}
         />
 
         {/* 7. CARD QUẢN LÝ HỢP ĐỒNG (PROPOSAL & SIGNED FILES - CHUẨN 100% WEB ProposalManagement.jsx) */}
@@ -1061,100 +1081,105 @@ export default function ContractDetailScreen() {
           <View className="gap-[12px]">
             {/* Box 1: Hợp đồng dự thảo (Proposal) */}
             <View className="bg-white border border-slate-200 rounded-[12px] p-[14px]">
-              <View className="flex-row items-start justify-between">
-                <View style={{ flex: 1, paddingRight: 8 }}>
-                  <Text className="text-[14px] font-bold text-slate-900">
-                    Hợp đồng{' '}
-                    <Text className="text-[12px] font-normal text-slate-400">(.docx, Excel hoặc link)</Text>
-                  </Text>
-                  <Text className="text-[12px] text-slate-500 mt-[4px]">
-                    {contract.proposal_contract ? 'Đã upload' : 'Chưa có file'}
-                  </Text>
+              {/* Title row */}
+              <View className="flex-row items-center gap-[10px] mb-[12px]">
+                <View style={{ backgroundColor: '#F3E8FF' }} className="w-[36px] h-[36px] rounded-[9px] items-center justify-center">
+                  <Feather name="file-text" size={18} color="#9333EA" />
                 </View>
-
-                {/* Proposal Action Buttons */}
-                <View className="flex-row items-center gap-[8px]">
-                  {contract.proposal_contract ?
-                  <>
-                      <TouchableOpacity
-
-                      onPress={() => handleOpenLink(contract.proposal_contract)}
-                      activeOpacity={0.7} className="flex-row items-center gap-[5px] px-[12px] py-[7px] bg-slate-100 rounded-[8px] border border-slate-200">
-                      
-                        <Feather name="file-text" size={13} color="#334155" />
-                        <Text className="text-[12px] font-semibold text-slate-700">Xem</Text>
-                      </TouchableOpacity>
-
-                      {contract.status === ContractStatus.PROPOSAL_UPLOADED && isAdminOrBod &&
-                    <View className="flex-row items-center gap-[6px]">
-                          <TouchableOpacity
-
-                        onPress={handleApproveProposal}
-                        disabled={actionLoading || isUploadingProposal || isUploadingSigned}
-                        activeOpacity={0.7} className="flex-row items-center gap-[5px] px-[12px] py-[7px] bg-[#16A34A] rounded-[8px]">
-                        
-                            <Feather name="check-circle" size={13} color="#FFFFFF" />
-                            <Text className="text-[12px] font-bold text-white">Duyệt</Text>
-                          </TouchableOpacity>
-
-                          <TouchableOpacity
-
-                        onPress={() => setIsRejectModalVisible(true)}
-                        disabled={actionLoading || isUploadingProposal || isUploadingSigned}
-                        activeOpacity={0.7} className="flex-row items-center gap-[4px] px-[10px] py-[7px] bg-red-50 border border-red-200 rounded-[8px]">
-                        
-                            <Feather name="x" size={13} color="#DC2626" />
-                            <Text className="text-[12px] font-bold text-red-600">Từ chối</Text>
-                          </TouchableOpacity>
-                        </View>
-                    }
-
-                      {contract.status === ContractStatus.PROPOSAL_REJECTED &&
-                    <TouchableOpacity
-
-                      onPress={openProposalEditor}
-                      disabled={isUploadingProposal || isUploadingSigned}
-                      activeOpacity={0.7} className="flex-row items-center gap-[5px] px-[12px] py-[7px] bg-blue-600 rounded-[8px]">
-                      
-                          {isUploadingProposal ?
-                      <ActivityIndicator size="small" color="#FFFFFF" /> :
-
-                      <Feather name="upload" size={13} color="#FFFFFF" />
-                      }
-                          <Text className="text-[12px] font-bold text-white">Upload bản mới</Text>
-                        </TouchableOpacity>
-                    }
-                    </> :
-
-                  <TouchableOpacity
-
-                    onPress={openProposalEditor}
-                    disabled={isUploadingProposal || isUploadingSigned}
-                    activeOpacity={0.7} className="flex-row items-center gap-[5px] px-[14px] py-[7px] bg-blue-600 rounded-[8px]">
-                    
-                      {isUploadingProposal ?
-                    <ActivityIndicator size="small" color="#FFFFFF" /> :
-
-                    <Feather name="upload" size={13} color="#FFFFFF" />
-                    }
-                      <Text className="text-[12px] font-bold text-white">Upload</Text>
-                    </TouchableOpacity>
-                  }
+                <View style={{ flex: 1 }}>
+                  <Text className="text-[14px] font-bold text-slate-900">
+                    Hợp đồng dự thảo
+                  </Text>
+                  <Text className="text-[12px] text-slate-500 mt-[2px]">
+                    {contract.proposal_contract
+                      ? '✓ Đã upload · .docx / Excel / link'
+                      : 'Chưa có file · .docx, Excel hoặc link'}
+                  </Text>
                 </View>
               </View>
 
-              {/* Quotation link if exists */}
-              {contract.quotation_link ?
-              <TouchableOpacity
+              {/* Action buttons row */}
+              <View className="flex-row gap-[8px]">
+                {contract.proposal_contract ? (
+                  <>
+                    {/* Nút Xem */}
+                    <TouchableOpacity
+                      onPress={() => handleOpenPreview(contract.proposal_contract!, 'Hợp đồng dự thảo')}
+                      activeOpacity={0.7}
+                      className="flex-1 flex-row items-center justify-center gap-[5px] py-[9px] bg-slate-100 rounded-[8px] border border-slate-200"
+                    >
+                      <Feather name="eye" size={14} color="#334155" />
+                      <Text className="text-[12px] font-bold text-slate-700">Xem</Text>
+                    </TouchableOpacity>
 
-                onPress={() => handleOpenLink(contract.quotation_link)}
-                activeOpacity={0.7} className="flex-row items-center gap-[6px] mt-[10px] pt-[8px] border-t border-t-slate-100">
-                
-                  <Feather name="file-text" size={14} color="#2563EB" />
-                  <Text className="text-[12px] font-semibold text-blue-600">Xem link báo giá</Text>
-                  <Feather name="external-link" size={12} color="#2563EB" />
-                </TouchableOpacity> :
-              null}
+                    {/* Nút Duyệt + Từ chối (chỉ hiện khi PROPOSAL_UPLOADED và là BOD/Admin) */}
+                    {contract.status === ContractStatus.PROPOSAL_UPLOADED && isAdminOrBod && (
+                      <>
+                        <TouchableOpacity
+                          onPress={handleApproveProposal}
+                          disabled={actionLoading || isUploadingProposal || isUploadingSigned}
+                          activeOpacity={0.7}
+                          className="flex-1 flex-row items-center justify-center gap-[5px] py-[9px] bg-[#16A34A] rounded-[8px]"
+                        >
+                          <Feather name="check-circle" size={14} color="#FFFFFF" />
+                          <Text className="text-[12px] font-bold text-white">Duyệt</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          onPress={() => setIsRejectModalVisible(true)}
+                          disabled={actionLoading || isUploadingProposal || isUploadingSigned}
+                          activeOpacity={0.7}
+                          className="flex-1 flex-row items-center justify-center gap-[4px] py-[9px] bg-red-50 border border-red-200 rounded-[8px]"
+                        >
+                          <Feather name="x" size={14} color="#DC2626" />
+                          <Text className="text-[12px] font-bold text-red-600">Từ chối</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+
+                    {/* Nút Upload bản mới khi bị từ chối */}
+                    {contract.status === ContractStatus.PROPOSAL_REJECTED && (
+                      <TouchableOpacity
+                        onPress={openProposalEditor}
+                        disabled={isUploadingProposal || isUploadingSigned}
+                        activeOpacity={0.7}
+                        className="flex-1 flex-row items-center justify-center gap-[5px] py-[9px] bg-blue-600 rounded-[8px]"
+                      >
+                        {isUploadingProposal
+                          ? <ActivityIndicator size="small" color="#FFFFFF" />
+                          : <Feather name="upload" size={14} color="#FFFFFF" />
+                        }
+                        <Text className="text-[12px] font-bold text-white">Upload mới</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                ) : (
+                  /* Chưa có file → chỉ nút Upload */
+                  <TouchableOpacity
+                    onPress={openProposalEditor}
+                    disabled={isUploadingProposal || isUploadingSigned}
+                    activeOpacity={0.7}
+                    className="flex-1 flex-row items-center justify-center gap-[5px] py-[9px] bg-blue-600 rounded-[8px]"
+                  >
+                    {isUploadingProposal
+                      ? <ActivityIndicator size="small" color="#FFFFFF" />
+                      : <Feather name="upload" size={14} color="#FFFFFF" />
+                    }
+                    <Text className="text-[12px] font-bold text-white">Upload hợp đồng</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Quotation link if exists */}
+              {contract.quotation_link ? (
+                <View className="mt-[10px] pt-[8px] border-t border-t-slate-100">
+                  <DocumentCard
+                    url={contract.quotation_link}
+                    fileName="Báo giá hợp đồng"
+                    onPreview={handleOpenPreview}
+                  />
+                </View>
+              ) : null}
 
               {/* Rejection callout box if PROPOSAL_REJECTED */}
               {contract.status === ContractStatus.PROPOSAL_REJECTED && (
@@ -1200,11 +1225,11 @@ export default function ContractDetailScreen() {
                   {contract.signed_contract ?
                   <TouchableOpacity
 
-                    onPress={() => handleOpenLink(contract.signed_contract)}
-                    activeOpacity={0.7} className="flex-row items-center gap-[5px] px-[12px] py-[7px] bg-slate-100 rounded-[8px] border border-slate-200">
+                    onPress={() => handleOpenPreview(contract.signed_contract!, 'Hợp đồng đã ký')}
+                    activeOpacity={0.7} className="flex-row items-center gap-[5px] px-[12px] py-[7px] bg-emerald-50 rounded-[8px] border border-emerald-200">
                     
-                      <Feather name="check-circle" size={13} color="#16A34A" />
-                      <Text style={{ color: '#16A34A' }} className="text-[12px] font-semibold text-slate-700">Xem</Text>
+                      <Feather name="eye" size={13} color="#16A34A" />
+                      <Text style={{ color: '#16A34A' }} className="text-[12px] font-semibold">Xem</Text>
                     </TouchableOpacity> :
 
                   <TouchableOpacity
@@ -1247,6 +1272,14 @@ export default function ContractDetailScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Document Preview Modal */}
+      <DocumentPreviewModal
+        visible={isPreviewVisible}
+        url={previewUrl}
+        fileName={previewFileName}
+        onClose={() => setIsPreviewVisible(false)}
+      />
 
       {/* 8. BOD / ADMIN ACTION BAR CHO PROPOSAL NẾU ĐANG CHỜ DUYỆT */}
       {isAdminOrBod && isProposalAwaiting &&
@@ -1426,12 +1459,12 @@ export default function ContractDetailScreen() {
                 <View className="flex-row items-center justify-between bg-blue-50 border border-blue-200 rounded-[8px] p-[10px]">
                       <View style={{ flex: 1, paddingRight: 8 }}>
                         <Text numberOfLines={1} className="text-[12px] font-bold text-[#1E40AF]">
-                          {proposalFile.name}
+                          {proposalFile!.name}
                         </Text>
                         <Text className="text-[11px] text-[#3B82F6] mt-[2px]">
-                          {proposalFile.size ?
-                      `${(proposalFile.size / 1024).toFixed(1)} KB` :
-                      'Đã sẵn sàng tải lên'}
+                          {proposalFile?.size
+                      ? `${(proposalFile.size / 1024).toFixed(1)} KB`
+                      : 'Đã sẵn sàng tải lên'}
                         </Text>
                       </View>
                       <TouchableOpacity
@@ -1550,12 +1583,12 @@ export default function ContractDetailScreen() {
                 <View className="flex-row items-center justify-between bg-blue-50 border border-blue-200 rounded-[8px] p-[10px]">
                       <View style={{ flex: 1, paddingRight: 8 }}>
                         <Text numberOfLines={1} className="text-[12px] font-bold text-[#1E40AF]">
-                          {quotationFile.name}
+                          {quotationFile!.name}
                         </Text>
                         <Text className="text-[11px] text-[#3B82F6] mt-[2px]">
-                          {quotationFile.size ?
-                      `${(quotationFile.size / 1024).toFixed(1)} KB` :
-                      'Đã sẵn sàng tải lên'}
+                          {quotationFile?.size
+                      ? `${(quotationFile.size / 1024).toFixed(1)} KB`
+                      : 'Đã sẵn sàng tải lên'}
                         </Text>
                       </View>
                       <TouchableOpacity
