@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
+  Pressable,
   TouchableOpacity,
   ScrollView,
   TextInput,
@@ -586,7 +587,11 @@ export default function QuotationCreateEditScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={['top', 'left', 'right']}>
+    <SafeAreaView
+      testID="quotationCreateScreen"
+      className="flex-1 bg-slate-50"
+      edges={['top', 'left', 'right']}
+    >
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -622,12 +627,24 @@ export default function QuotationCreateEditScreen() {
           <View className="mb-4">
             <Text className="mb-2 text-[13px] font-bold text-slate-700">Lựa chọn mức giá áp dụng:</Text>
             <View className="flex-row gap-1 rounded-xl bg-slate-200 p-1">
-              <TouchableOpacity
-                className={`flex-1 items-center justify-center rounded-lg py-2 ${
-                  priceType === 'minimum' ? 'bg-white shadow-sm' : ''
-                }`}
+              <Pressable
+                testID="quotationPriceMinimumTab"
+                accessibilityRole="tab"
+                accessibilityState={{ selected: priceType === 'minimum' }}
+                className="flex-1 items-center justify-center rounded-lg py-2"
+                style={
+                  priceType === 'minimum'
+                    ? {
+                        backgroundColor: '#FFFFFF',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: 0.08,
+                        shadowRadius: 2,
+                        elevation: 2,
+                      }
+                    : undefined
+                }
                 onPress={() => handlePriceTypeChange('minimum')}
-                activeOpacity={0.8}
               >
                 <Text
                   className={`text-[13px] font-semibold ${priceType === 'minimum' ? 'font-bold text-emerald-600' : 'text-slate-500'}`}
@@ -635,14 +652,26 @@ export default function QuotationCreateEditScreen() {
                   Giá tối thiểu
                 </Text>
                 <Text className="mt-0.5 text-[10px] text-slate-400">Cost / 0.8</Text>
-              </TouchableOpacity>
+              </Pressable>
 
-              <TouchableOpacity
-                className={`flex-1 items-center justify-center rounded-lg py-2 ${
-                  priceType === 'recommended' ? 'bg-white shadow-sm' : ''
-                }`}
+              <Pressable
+                testID="quotationPriceRecommendedTab"
+                accessibilityRole="tab"
+                accessibilityState={{ selected: priceType === 'recommended' }}
+                className="flex-1 items-center justify-center rounded-lg py-2"
+                style={
+                  priceType === 'recommended'
+                    ? {
+                        backgroundColor: '#FFFFFF',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: 0.08,
+                        shadowRadius: 2,
+                        elevation: 2,
+                      }
+                    : undefined
+                }
                 onPress={() => handlePriceTypeChange('recommended')}
-                activeOpacity={0.8}
               >
                 <Text
                   className={`text-[13px] font-semibold ${priceType === 'recommended' ? 'font-bold text-emerald-600' : 'text-slate-500'}`}
@@ -650,14 +679,26 @@ export default function QuotationCreateEditScreen() {
                   Giá đề xuất
                 </Text>
                 <Text className="mt-0.5 text-[10px] text-slate-400">Cost / 0.6</Text>
-              </TouchableOpacity>
+              </Pressable>
 
-              <TouchableOpacity
-                className={`flex-1 items-center justify-center rounded-lg py-2 ${
-                  priceType === 'custom' ? 'bg-white shadow-sm' : ''
-                }`}
+              <Pressable
+                testID="quotationPriceCustomTab"
+                accessibilityRole="tab"
+                accessibilityState={{ selected: priceType === 'custom' }}
+                className="flex-1 items-center justify-center rounded-lg py-2"
+                style={
+                  priceType === 'custom'
+                    ? {
+                        backgroundColor: '#FFFFFF',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: 0.08,
+                        shadowRadius: 2,
+                        elevation: 2,
+                      }
+                    : undefined
+                }
                 onPress={() => handlePriceTypeChange('custom')}
-                activeOpacity={0.8}
               >
                 <Text
                   className={`text-[13px] font-semibold ${priceType === 'custom' ? 'font-bold text-emerald-600' : 'text-slate-500'}`}
@@ -665,7 +706,7 @@ export default function QuotationCreateEditScreen() {
                   Tùy chỉnh
                 </Text>
                 <Text className="mt-0.5 text-[10px] text-slate-400">Nhập tay</Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           </View>
 

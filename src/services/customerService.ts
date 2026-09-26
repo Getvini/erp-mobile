@@ -24,6 +24,7 @@ export interface CustomerItem {
 
 export interface CustomerListFilters {
   search?: string;
+  source?: string;
   page?: number;
   limit?: number;
 }
@@ -32,6 +33,7 @@ class CustomerService {
   async getCustomers(filters?: CustomerListFilters): Promise<{ data?: CustomerItem[]; error?: string }> {
     const searchParams = new URLSearchParams();
     if (filters?.search) searchParams.append('search', filters.search);
+    if (filters?.source) searchParams.append('source', filters.source);
     if (filters?.page) searchParams.append('page', String(filters.page));
     if (filters?.limit) searchParams.append('limit', String(filters.limit));
     const query = searchParams.toString();

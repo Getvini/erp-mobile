@@ -695,11 +695,21 @@ export default function OpportunityDetailScreen() {
         </View>
 
         {/* SEGMENTED TAB SELECTOR */}
-        <View className="flex-row bg-slate-200/80 p-1 rounded-xl mb-3.5 border border-slate-200">
+        <View className="flex-row bg-slate-200 p-1 rounded-xl mb-3.5 border border-slate-200">
           <TouchableOpacity
-            className={`flex-1 py-2 items-center rounded-lg ${
-              activeTab === 'EVALUATION' ? 'bg-white shadow-sm' : ''
-            }`}
+            className="flex-1 py-2 items-center rounded-lg"
+            style={
+              activeTab === 'EVALUATION'
+                ? {
+                    backgroundColor: '#FFFFFF',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.08,
+                    shadowRadius: 2,
+                    elevation: 2,
+                  }
+                : undefined
+            }
             onPress={() => setActiveTab('EVALUATION')}
             activeOpacity={0.7}
           >
@@ -713,9 +723,19 @@ export default function OpportunityDetailScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            className={`flex-1 py-2 items-center rounded-lg ${
-              activeTab === 'FINANCIAL' ? 'bg-white shadow-sm' : ''
-            }`}
+            className="flex-1 py-2 items-center rounded-lg"
+            style={
+              activeTab === 'FINANCIAL'
+                ? {
+                    backgroundColor: '#FFFFFF',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.08,
+                    shadowRadius: 2,
+                    elevation: 2,
+                  }
+                : undefined
+            }
             onPress={() => setActiveTab('FINANCIAL')}
             activeOpacity={0.7}
           >
@@ -729,9 +749,19 @@ export default function OpportunityDetailScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            className={`flex-1 py-2 items-center rounded-lg ${
-              activeTab === 'TIMELINE' ? 'bg-white shadow-sm' : ''
-            }`}
+            className="flex-1 py-2 items-center rounded-lg"
+            style={
+              activeTab === 'TIMELINE'
+                ? {
+                    backgroundColor: '#FFFFFF',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.08,
+                    shadowRadius: 2,
+                    elevation: 2,
+                  }
+                : undefined
+            }
             onPress={() => setActiveTab('TIMELINE')}
             activeOpacity={0.7}
           >
@@ -745,9 +775,19 @@ export default function OpportunityDetailScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            className={`flex-1 py-2 items-center rounded-lg ${
-              activeTab === 'QUOTATIONS' ? 'bg-white shadow-sm' : ''
-            }`}
+            className="flex-1 py-2 items-center rounded-lg"
+            style={
+              activeTab === 'QUOTATIONS'
+                ? {
+                    backgroundColor: '#FFFFFF',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.08,
+                    shadowRadius: 2,
+                    elevation: 2,
+                  }
+                : undefined
+            }
             onPress={() => setActiveTab('QUOTATIONS')}
             activeOpacity={0.7}
           >

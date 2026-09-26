@@ -7,6 +7,7 @@ import {
   TextInput,
   ActivityIndicator,
   RefreshControl,
+  ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,9 +27,11 @@ import { formatVND } from '@/utils/formatters';
 
 const STATUS_TABS = [
   { key: 'ALL', label: 'Tất cả' },
-  { key: 'PENDING', label: 'Chờ duyệt' },
+  { key: 'PENDING_REVIEWER', label: 'Chờ Admin Sale' },
+  { key: 'PENDING_BOD', label: 'Chờ BOD' },
   { key: 'APPROVED', label: 'Đã duyệt' },
   { key: 'PAID', label: 'Đã chi' },
+  { key: 'REJECTED', label: 'Từ chối' },
 ];
 
 export default function PaymentRequestsIndexScreen() {
@@ -50,12 +53,10 @@ export default function PaymentRequestsIndexScreen() {
     if (search.trim()) filters.search = search.trim();
     if (filterValues.type !== 'ALL') filters.type = filterValues.type;
 
-    if (activeTab === 'PENDING') {
-      filters.approvalStatus = 'PENDING_REVIEWER';
-    } else if (activeTab === 'APPROVED') {
-      filters.approvalStatus = 'APPROVED';
-    } else if (activeTab === 'PAID') {
+    if (activeTab === 'PAID') {
       filters.paymentStatus = 'PAID';
+    } else if (activeTab !== 'ALL') {
+      filters.approvalStatus = activeTab;
     } else {
       if (filterValues.approvalStatus !== 'ALL') filters.approvalStatus = filterValues.approvalStatus;
       if (filterValues.paymentStatus !== 'ALL') filters.paymentStatus = filterValues.paymentStatus;
@@ -271,44 +272,40 @@ export default function PaymentRequestsIndexScreen() {
       </View>
 
       {/* Status Filter Tabs */}
-      <View
-        style={{
-          flexDirection: 'row',
-          backgroundColor: '#FFFFFF',
-          paddingHorizontal: 16,
-          paddingVertical: 8,
-          borderBottomWidth: 1,
-          borderBottomColor: '#E2E8F0',
-          gap: 6,
-        }}
-      >
-        {STATUS_TABS.map((tab) => {
-          const active = activeTab === tab.key;
-          return (
-            <TouchableOpacity
-              key={tab.key}
-              onPress={() => handleTabChange(tab.key)}
-              style={{
-                flex: 1,
-                paddingVertical: 6,
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 6,
-                backgroundColor: active ? '#F38820' : '#F1F5F9',
-              }}
-            >
-              <Text
+      <View style={{ backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0', paddingVertical: 8 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
+        >
+          {STATUS_TABS.map((tab) => {
+            const active = activeTab === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                onPress={() => handleTabChange(tab.key)}
                 style={{
-                  fontSize: 12,
-                  fontWeight: active ? '700' : '500',
-                  color: active ? '#FFFFFF' : '#475569',
+                  paddingHorizontal: 14,
+                  paddingVertical: 6,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 16,
+                  backgroundColor: active ? '#F38820' : '#F1F5F9',
                 }}
               >
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: active ? '700' : '500',
+                    color: active ? '#FFFFFF' : '#475569',
+                  }}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* Main List Body */}

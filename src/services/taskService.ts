@@ -2,6 +2,7 @@ import { apiService } from './api';
 import { TaskItem } from './dashboardService';
 
 export const TASK_STATUS_LABELS: Record<string, string> = {
+  NOT_STARTED: 'Chưa thực hiện',
   PENDING: 'Chờ phân công',
   DOING: 'Đang thực hiện',
   DONE: 'Hoàn thành',
@@ -18,12 +19,14 @@ export const TASK_STATUS_LABELS: Record<string, string> = {
   INTERNAL_COMPLETED: 'Hoàn thành nội bộ',
   ACCEPTED: 'Đã nghiệm thu',
   SUPPORT_AWAITING_RETURN: 'Chờ xác nhận hoàn thành',
+  ON_HOLD: 'Tạm dừng',
 };
 
 export const TASK_STATUS_CONFIG: Record<
   string,
   { text: string; color: string; bg: string }
 > = {
+  NOT_STARTED: { text: 'Chưa thực hiện', color: '#64748B', bg: '#F1F5F9' },
   PENDING: { text: 'Chờ phân công', color: '#D97706', bg: '#FFFBEB' },
   DOING: { text: 'Đang thực hiện', color: '#2563EB', bg: '#EFF6FF' },
   DONE: { text: 'Hoàn thành', color: '#059669', bg: '#ECFDF5' },
@@ -40,6 +43,7 @@ export const TASK_STATUS_CONFIG: Record<
   INTERNAL_COMPLETED: { text: 'HT nội bộ', color: '#7C3AED', bg: '#F3E8FF' },
   ACCEPTED: { text: 'Đã nghiệm thu', color: '#059669', bg: '#ECFDF5' },
   SUPPORT_AWAITING_RETURN: { text: 'Chờ xác nhận hoàn thành', color: '#2563EB', bg: '#EFF6FF' },
+  ON_HOLD: { text: 'Tạm dừng', color: '#B45309', bg: '#FFFBEB' },
 };
 
 export interface TaskDetail extends TaskItem {

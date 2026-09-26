@@ -51,6 +51,7 @@ const PAYMENT_OPTIONS = [
   { value: 'DUE_SOON', label: PAYMENT_STATUS_LABELS.DUE_SOON },
   { value: 'OVERDUE', label: PAYMENT_STATUS_LABELS.OVERDUE },
   { value: 'PAID', label: PAYMENT_STATUS_LABELS.PAID },
+  { value: 'NOT_APPLICABLE', label: PAYMENT_STATUS_LABELS.NOT_APPLICABLE },
 ];
 
 export const PaymentRequestFilterModal: React.FC<PaymentRequestFilterModalProps> = ({

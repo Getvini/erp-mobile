@@ -27,9 +27,11 @@ import { useSSERefresh } from '@/hooks/useSSERefresh';
 
 const CONTRACT_TABS = [
   { key: 'ALL', label: 'Tất cả' },
-  { key: 'ACTIVE', label: 'Đang thực hiện' },
+  { key: 'DRAFT', label: 'Mới' },
+  { key: 'PROPOSAL_UPLOADED', label: 'Đã tải lên HĐ' },
+  { key: 'PROPOSAL_APPROVED', label: 'Đã duyệt HĐ' },
+  { key: 'PROPOSAL_REJECTED', label: 'Bị từ chối HĐ' },
   { key: 'SIGNED', label: 'Đã ký' },
-  { key: 'PROPOSAL_APPROVED', label: 'Đã duyệt' },
   { key: 'COMPLETED', label: 'Hoàn thành' },
   { key: 'CANCELLED', label: 'Đã hủy' },
 ];

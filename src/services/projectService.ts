@@ -2,9 +2,9 @@ import { apiService } from './api';
 
 export const PROJECT_STATUS_LABELS: Record<string, string> = {
   PENDING_CONFIRMATION: 'Chờ xác nhận',
-  PLANNING: 'Lập kế hoạch',
   CONFIRMED: 'Đã xác nhận',
   IN_PROGRESS: 'Đang thực hiện',
+  PENDING_PAUSE_APPROVAL: 'Chờ duyệt tạm dừng',
   ON_HOLD: 'Tạm dừng',
   COMPLETED: 'Hoàn thành',
   CANCELLED: 'Đã hủy',
@@ -20,12 +20,6 @@ export const PROJECT_STATUS_CONFIG: Record<
     bg: '#FFF7ED',
     border: '#FFEDD5',
   },
-  PLANNING: {
-    text: 'Lập kế hoạch',
-    color: '#1D4ED8',
-    bg: '#EFF6FF',
-    border: '#BFDBFE',
-  },
   CONFIRMED: {
     text: 'Đã xác nhận',
     color: '#1D4ED8',
@@ -37,6 +31,12 @@ export const PROJECT_STATUS_CONFIG: Record<
     color: '#047857',
     bg: '#ECFDF5',
     border: '#A7F3D0',
+  },
+  PENDING_PAUSE_APPROVAL: {
+    text: 'Chờ duyệt tạm dừng',
+    color: '#B45309',
+    bg: '#FEF9C3',
+    border: '#FEF08A',
   },
   ON_HOLD: {
     text: 'Tạm dừng',
