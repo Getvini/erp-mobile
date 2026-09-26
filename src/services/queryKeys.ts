@@ -12,7 +12,7 @@ export const queryKeys = {
   // Dashboard & Home Metrics
   dashboard: {
     all: ['dashboard'] as const,
-    summary: (params?: { month?: number; year?: number }) => [...queryKeys.dashboard.all, params || {}] as const,
+    summary: (params?: Record<string, any>) => [...queryKeys.dashboard.all, 'summary', params || {}] as const,
   },
 
   // Opportunities / Cơ hội kinh doanh
@@ -139,5 +139,17 @@ export const queryKeys = {
     byContract: (contractId: string) => [...queryKeys.debts.all, 'contract', contractId] as const,
     details: () => [...queryKeys.debts.all, 'detail'] as const,
     detail: (id: string) => [...queryKeys.debts.details(), id] as const,
+  },
+
+  // Payment Dashboard / Bảng điều khiển tài chính & dòng tiền
+  paymentDashboard: {
+    all: ['paymentDashboard'] as const,
+    overview: (params?: Record<string, any>) => [...queryKeys.paymentDashboard.all, 'overview', params || {}] as const,
+  },
+
+  // Finance Documents / Biên bản nghiệm thu & Hóa đơn VAT
+  financeDocuments: {
+    all: ['financeDocuments'] as const,
+    byContract: (contractId: string) => [...queryKeys.financeDocuments.all, 'contract', contractId] as const,
   },
 };

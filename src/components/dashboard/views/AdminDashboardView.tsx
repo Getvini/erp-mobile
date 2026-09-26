@@ -49,6 +49,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
           icon="dollar-sign"
           color={BrandColors.primary}
           bgColor="#FFF7ED"
+          onPress={() => router.push('/finance' as any)}
         />
         <StatCard
           title="Dự án đang chạy"
@@ -75,6 +76,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
           icon="alert-circle"
           color="#F59E0B"
           bgColor="#FFFBEB"
+          onPress={() => router.push('/finance' as any)}
         />
       </View>
 

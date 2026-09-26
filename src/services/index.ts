@@ -13,6 +13,7 @@ export * from './projectService';
 export * from './taskService';
 export * from './acceptanceService';
 export * from './dashboardService';
+export * from './paymentDashboardService';
 export * from './notificationService';
 export * from './teamService';
 export * from './taskResultChecksService';

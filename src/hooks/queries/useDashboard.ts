@@ -1,54 +1,148 @@
-import { useQuery } from '@tanstack/react-query';
-import { apiService } from '@/services/api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  dashboardService,
+  DashboardParams,
+  DashboardResponse,
+  TaskItem,
+} from '@/services/dashboardService';
+import {
+  paymentDashboardService,
+  PaymentDashboardParams,
+  PaymentDashboardOverview,
+  FinanceDocumentsResponse,
+  CreateAcceptanceMinutePayload,
+  CreateVatInvoicePayload,
+} from '@/services/paymentDashboardService';
 import { queryKeys } from '@/services/queryKeys';
 
-export interface DashboardParams {
-  month?: number;
-  year?: number;
-}
+export type { DashboardParams };
 
 /**
- * Custom TanStack Query Hook to fetch Dashboard & Home metrics
+ * Custom TanStack Query Hook lấy tổng hợp dữ liệu Bảng điều khiển kinh doanh & vận hành
  */
 export function useDashboardQuery(params: DashboardParams = {}) {
-  const now = new Date();
-  const month = params.month ?? now.getMonth() + 1;
-  const year = params.year ?? now.getFullYear();
-
-  return useQuery({
-    queryKey: queryKeys.dashboard.summary({ month, year }),
+  return useQuery<DashboardResponse>({
+    queryKey: queryKeys.dashboard.summary(params),
     queryFn: async () => {
-      const endpoint = `/dashboard?month=${month}&year=${year}`;
-      const res = await apiService.request<any>(endpoint);
-      return res.data;
+      const res = await dashboardService.getDashboardData(params);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data || {};
     },
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60 * 3, // 3 minutes
   });
 }
 
 /**
- * Hook to fetch current user's assigned tasks
+ * Hook lấy dữ liệu Bảng điều khiển tài chính & thanh toán (cho Admin / Kế toán / Ban Giám đốc)
  */
-export function useMyTasksQuery() {
-  return useQuery({
-    queryKey: queryKeys.tasks.list({ type: 'my-tasks' }),
+export function usePaymentDashboardQuery(params: PaymentDashboardParams = {}) {
+  return useQuery<PaymentDashboardOverview>({
+    queryKey: queryKeys.paymentDashboard.overview(params),
     queryFn: async () => {
-      const res = await apiService.request<any>('/tasks');
-      return Array.isArray(res.data) ? res.data : [];
+      const res = await paymentDashboardService.getPaymentDashboard(params);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data || {};
     },
     staleTime: 1000 * 60 * 3,
   });
 }
 
 /**
- * Hook to fetch tasks awaiting review (for Leads/Admins)
+ * Hook lấy hồ sơ tài chính (Biên bản nghiệm thu & Hóa đơn VAT) theo Hợp đồng
+ */
+export function useFinanceDocumentsQuery(contractId?: string) {
+  return useQuery<FinanceDocumentsResponse>({
+    queryKey: queryKeys.financeDocuments.byContract(contractId || ''),
+    queryFn: async () => {
+      if (!contractId) return {};
+      const res = await paymentDashboardService.getFinanceDocuments(contractId);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data || {};
+    },
+    enabled: !!contractId,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+/**
+ * Mutation lập biên bản nghiệm thu
+ */
+export function useCreateAcceptanceMinuteMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: CreateAcceptanceMinutePayload) => {
+      const res = await paymentDashboardService.createAcceptanceMinute(payload);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.financeDocuments.byContract(variables.contractId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.paymentDashboard.all,
+      });
+    },
+  });
+}
+
+/**
+ * Mutation xuất hóa đơn VAT
+ */
+export function useCreateVatInvoiceMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: CreateVatInvoicePayload) => {
+      const res = await paymentDashboardService.createVatInvoice(payload);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.financeDocuments.byContract(variables.contractId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.paymentDashboard.all,
+      });
+    },
+  });
+}
+
+/**
+ * Hook lấy danh sách công việc cá nhân của người dùng hiện tại
+ */
+export function useMyTasksQuery() {
+  return useQuery<TaskItem[]>({
+    queryKey: queryKeys.tasks.list({ type: 'my-tasks' }),
+    queryFn: async () => {
+      const res = await dashboardService.getMyTasks();
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data || [];
+    },
+    staleTime: 1000 * 60 * 3,
+  });
+}
+
+/**
+ * Hook lấy danh sách công việc chờ duyệt (cho Lead / PM / Quản lý)
  */
 export function useAwaitingReviewTasksQuery(enabled = true) {
-  return useQuery({
+  return useQuery<TaskItem[]>({
     queryKey: queryKeys.tasks.list({ type: 'awaiting-review' }),
     queryFn: async () => {
-      const res = await apiService.request<any>('/tasks/review-queue');
-      return Array.isArray(res.data) ? res.data : [];
+      const res = await dashboardService.getAwaitingReviewTasks();
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data || [];
     },
     enabled,
     staleTime: 1000 * 60 * 3,

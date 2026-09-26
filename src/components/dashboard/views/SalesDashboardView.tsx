@@ -5,15 +5,10 @@ import { StatCard } from '../StatCard';
 import { HotProjectsWidget } from '../HotProjectsWidget';
 import { BrandColors } from '@/constants/colors';
 import { formatVND } from '@/utils/formatters';
+import { SalesMetrics } from '@/services/dashboardService';
 
 interface SalesDashboardViewProps {
-  saleMetrics?: {
-    totalCustomers?: number;
-    totalOpportunities?: number;
-    totalRevenue?: number;
-    totalDebt?: number;
-    projects?: any[];
-  };
+  saleMetrics?: SalesMetrics;
 }
 
 export const SalesDashboardView: React.FC<SalesDashboardViewProps> = ({ saleMetrics }) => {
@@ -57,6 +52,7 @@ export const SalesDashboardView: React.FC<SalesDashboardViewProps> = ({ saleMetr
           icon="dollar-sign"
           color="#10B981"
           bgColor="#ECFDF5"
+          onPress={() => router.push('/finance' as any)}
         />
         <StatCard
           title="Công nợ theo dõi"
@@ -65,6 +61,7 @@ export const SalesDashboardView: React.FC<SalesDashboardViewProps> = ({ saleMetr
           icon="alert-circle"
           color="#F59E0B"
           bgColor="#FFFBEB"
+          onPress={() => router.push('/finance' as any)}
         />
       </View>
 
