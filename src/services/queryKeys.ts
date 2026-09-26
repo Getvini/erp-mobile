@@ -110,6 +110,17 @@ export const queryKeys = {
     contractDebts: () => [...queryKeys.finance.all, 'contract-debts'] as const,
   },
 
+  // Payment Milestones / Đợt thanh toán
+  paymentMilestones: {
+    all: ['paymentMilestones'] as const,
+    lists: () => [...queryKeys.paymentMilestones.all, 'list'] as const,
+    list: (params?: Record<string, any>) => [...queryKeys.paymentMilestones.lists(), params || {}] as const,
+    byContract: (contractId: string) => [...queryKeys.paymentMilestones.all, 'contract', contractId] as const,
+    byProject: (projectId: string) => [...queryKeys.paymentMilestones.all, 'project', projectId] as const,
+    details: () => [...queryKeys.paymentMilestones.all, 'detail'] as const,
+    detail: (id: string) => [...queryKeys.paymentMilestones.details(), id] as const,
+  },
+
   // Payment Requests / Đề xuất thanh toán & tạm ứng
   paymentRequests: {
     all: ['paymentRequests'] as const,

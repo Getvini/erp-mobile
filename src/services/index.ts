@@ -2,6 +2,7 @@ export * from './api';
 export * from './authService';
 export * from './secureStorage';
 export * from './queryKeys';
+export * from './paymentMilestoneService';
 export * from './paymentRequestService';
 export * from './financeService';
 export * from './contractService';
