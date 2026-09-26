@@ -49,6 +49,7 @@ import {
 '@/hooks/queries/useProjects';
 import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { safeGoBack } from '@/utils/navigation';
+import { MilestoneTrackerTab } from '@/components/finance/MilestoneTrackerTab';
 
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '—';
@@ -1038,83 +1039,13 @@ export default function ContractDetailScreen() {
           }
         </View>
 
-        {/* 6. CARD KẾ HOẠCH THANH TOÁN (PAYMENT MILESTONES) */}
-        <View className="bg-white rounded-[14px] p-[16px] border border-slate-100 shadow-sm">
-          <View className="flex-row items-center justify-between mb-[12px] border-b border-b-slate-50 pb-[8px]">
-            <View className="flex-row items-center gap-[8px]">
-              <View style={{ backgroundColor: '#FEF3C7' }} className="w-[28px] h-[28px] rounded-[7px] items-center justify-center">
-                <Feather name="calendar" size={16} color="#D97706" />
-              </View>
-              <Text className="text-[14px] font-bold text-slate-800">
-                Đợt thanh toán ({contract.milestones?.length || 0})
-              </Text>
-            </View>
-          </View>
-
-          {contract.milestones && contract.milestones.length > 0 ?
-          contract.milestones.map((ms, idx) => {
-            const isPaid = ms.status === MilestoneStatus.COMPLETED;
-            return (
-              <View key={ms.id || idx} className="bg-slate-50 rounded-[10px] p-[12px] border border-slate-200 mb-[8px]">
-                  <View className="flex-row justify-between items-center mb-[8px]">
-                    <View className="flex-row items-center gap-[6px]">
-                      <View
-                      style={
-
-                      { backgroundColor: isPaid ? '#ECFDF5' : '#EFF6FF' }} className="w-[22px] h-[22px] rounded-[6px] items-center justify-center">
-
-                      
-                        <Text
-                        style={
-
-                        { color: isPaid ? '#059669' : '#2563EB' }} className="text-[11px] font-extrabold">
-
-                        
-                          {idx + 1}
-                        </Text>
-                      </View>
-                      <Text className="text-[13px] font-bold text-slate-800">{ms.name}</Text>
-                    </View>
-
-                    <View
-                    style={
-
-                    { backgroundColor: isPaid ? '#ECFDF5' : '#FFFBEB' }} className="px-[8px] py-[2px] rounded-[6px]">
-
-                    
-                      <Text
-                      style={
-
-                      { color: isPaid ? '#059669' : '#D97706' }} className="text-[11px] font-bold">
-
-                      
-                        {isPaid ? 'Đã thu tiền' : 'Chờ thanh toán'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View className="flex-row justify-between items-end">
-                    <View>
-                      <Text className="text-[11px] text-slate-500">Số tiền đợt này:</Text>
-                      <Text className="text-[14px] font-extrabold text-slate-900 mt-[1px]">{formatVNDFull(ms.amount)}</Text>
-                    </View>
-                    <View className="bg-slate-200 px-[8px] py-[3px] rounded-[6px]">
-                      <Text className="text-[12px] font-extrabold text-slate-700">{Number(ms.percentage || 0)}%</Text>
-                    </View>
-                  </View>
-
-                  {ms.dueDate &&
-                <Text className="text-[11px] text-slate-400 mt-[6px]">
-                      Hạn thanh toán: {new Date(ms.dueDate).toLocaleDateString('vi-VN')}
-                    </Text>
-                }
-                </View>);
-
-          }) :
-
-          <Text className="text-[12px] text-slate-400 text-center py-[12px]">Chưa có kế hoạch thanh toán nào</Text>
-          }
-        </View>
+        {/* 6. QUẢN LÝ ĐỢT THANH TOÁN (PAYMENT MILESTONES TRACKER & MODAL) */}
+        <MilestoneTrackerTab
+          contractId={contract.id}
+          contractCode={contract.contractCode}
+          sellingPrice={sellingPrice}
+          onRefresh={refetch}
+        />
 
         {/* 7. CARD QUẢN LÝ HỢP ĐỒNG (PROPOSAL & SIGNED FILES - CHUẨN 100% WEB ProposalManagement.jsx) */}
         <View className="bg-white rounded-[14px] p-[16px] border border-slate-100 shadow-sm">
