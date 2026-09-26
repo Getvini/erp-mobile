@@ -11,6 +11,7 @@
     "expo": "~57.0.25",
     "expo-build-properties": "~57.0.22",
     "expo-constants": "~57.0.19",
+    "expo-dev-client": "~57.0.19",
     "expo-device": "~57.0.1",
     "expo-document-picker": "~57.0.1",
     "expo-font": "~57.0.3",
@@ -64,12 +65,14 @@
   },
   "scripts": {
     "start": "expo start",
+    "dev": "expo start --dev-client",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "jest",
+    "doctor": "npx expo-doctor",
     "maestro:test": "C:\\Users\\my\\.maestro\\maestro\\bin\\maestro.bat test .maestro/flows"
   },
   "private": true

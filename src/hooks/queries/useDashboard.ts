@@ -14,6 +14,7 @@ import {
   CreateVatInvoicePayload,
 } from '@/services/paymentDashboardService';
 import { queryKeys } from '@/services/queryKeys';
+import { normalizeTaskListResponse } from '@/services/responseAdapters';
 
 export type { DashboardParams };
 
@@ -118,7 +119,7 @@ export function useCreateVatInvoiceMutation() {
  * Hook lấy danh sách công việc cá nhân của người dùng hiện tại
  */
 export function useMyTasksQuery() {
-  return useQuery<TaskItem[]>({
+  return useQuery<unknown, Error, TaskItem[]>({
     queryKey: queryKeys.tasks.list({ type: 'my-tasks' }),
     queryFn: async () => {
       const res = await dashboardService.getMyTasks();
@@ -127,6 +128,7 @@ export function useMyTasksQuery() {
       }
       return res.data || [];
     },
+    select: normalizeTaskListResponse,
     staleTime: 1000 * 60 * 3,
   });
 }
@@ -135,7 +137,7 @@ export function useMyTasksQuery() {
  * Hook lấy danh sách công việc chờ duyệt (cho Lead / PM / Quản lý)
  */
 export function useAwaitingReviewTasksQuery(enabled = true) {
-  return useQuery<TaskItem[]>({
+  return useQuery<unknown, Error, TaskItem[]>({
     queryKey: queryKeys.tasks.list({ type: 'awaiting-review' }),
     queryFn: async () => {
       const res = await dashboardService.getAwaitingReviewTasks();
@@ -144,6 +146,7 @@ export function useAwaitingReviewTasksQuery(enabled = true) {
       }
       return res.data || [];
     },
+    select: normalizeTaskListResponse,
     enabled,
     staleTime: 1000 * 60 * 3,
   });

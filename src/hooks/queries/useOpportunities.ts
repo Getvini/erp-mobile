@@ -170,7 +170,10 @@ export function useAvailableServicesQuery() {
     queryKey: ['services', 'available'],
     queryFn: async () => {
       const res = await opportunityService.getAvailableServices();
-      return res.data;
+      const raw = res?.data;
+      if (Array.isArray(raw)) return raw;
+      if (raw && Array.isArray((raw as any).data)) return (raw as any).data;
+      return [];
     },
     staleTime: 1000 * 60 * 10,
   });
@@ -184,7 +187,10 @@ export function useServicePackagesQuery() {
     queryKey: ['service-packages'],
     queryFn: async () => {
       const res = await opportunityService.getServicePackages();
-      return res.data;
+      const raw = res?.data;
+      if (Array.isArray(raw)) return raw;
+      if (raw && Array.isArray((raw as any).data)) return (raw as any).data;
+      return [];
     },
     staleTime: 1000 * 60 * 10,
   });
@@ -198,7 +204,10 @@ export function useReferralPartnersQuery() {
     queryKey: ['referral-partners'],
     queryFn: async () => {
       const res = await opportunityService.getReferralPartners();
-      return res.data;
+      const raw = res?.data;
+      if (Array.isArray(raw)) return raw;
+      if (raw && Array.isArray((raw as any).data)) return (raw as any).data;
+      return [];
     },
     staleTime: 1000 * 60 * 10,
   });

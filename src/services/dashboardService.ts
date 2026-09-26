@@ -1,4 +1,5 @@
 import { apiService } from './api';
+import { normalizeTaskListResponse } from './responseAdapters';
 
 export interface DashboardParams {
   userId?: string | null;
@@ -182,18 +183,18 @@ class DashboardService {
    * Danh sách công việc chờ duyệt dành cho Lead / Quản lý
    */
   async getAwaitingReviewTasks(): Promise<{ data?: TaskItem[]; error?: string }> {
-    const res = await apiService.get<TaskItem[]>('/tasks', {
+    const res = await apiService.get<unknown>('/tasks', {
       status: 'AWAITING_REVIEW',
     });
-    return { data: res.data, error: res.error };
+    return { data: normalizeTaskListResponse(res.data), error: res.error };
   }
 
   /**
    * Danh sách công việc cá nhân của người dùng hiện tại
    */
   async getMyTasks(): Promise<{ data?: TaskItem[]; error?: string }> {
-    const res = await apiService.get<TaskItem[]>('/tasks');
-    return { data: res.data, error: res.error };
+    const res = await apiService.get<unknown>('/tasks');
+    return { data: normalizeTaskListResponse(res.data), error: res.error };
   }
 }
 
