@@ -17,12 +17,14 @@ import { useAuthStore } from '@/stores/useAuthStore';
 export interface OpportunityQuotationsTabProps {
   opportunityId: string;
   opportunityName?: string;
+  opportunityDescription?: string;
   onContractCreated?: (contractId: string) => void;
 }
 
 export const OpportunityQuotationsTab: React.FC<OpportunityQuotationsTabProps> = ({
   opportunityId,
   opportunityName,
+  opportunityDescription,
   onContractCreated,
 }) => {
   const user = useAuthStore((state) => state.user);
@@ -57,14 +59,18 @@ export const OpportunityQuotationsTab: React.FC<OpportunityQuotationsTabProps> =
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'DRAFT':
+        return { text: 'Đang đợi duyệt', bg: '#F1F5F9', color: '#64748B', border: '#E2E8F0' };
+      case 'SENT':
+        return { text: 'Đã gửi', bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE' };
       case 'APPROVED':
         return { text: 'Đã duyệt', bg: '#DCFCE7', color: '#16A34A', border: '#BBF7D0' };
-      case 'PENDING_APPROVAL':
-        return { text: 'Chờ duyệt', bg: '#FEF3C7', color: '#D97706', border: '#FDE68A' };
       case 'REJECTED':
-        return { text: 'Bị từ chối', bg: '#FEE2E2', color: '#DC2626', border: '#FECACA' };
+        return { text: 'Từ chối', bg: '#FEE2E2', color: '#DC2626', border: '#FECACA' };
+      case 'PENDING_APPROVAL':
+        return { text: 'Đang đợi duyệt', bg: '#FEF3C7', color: '#D97706', border: '#FDE68A' };
       default:
-        return { text: 'Bản nháp', bg: '#F1F5F9', color: '#64748B', border: '#E2E8F0' };
+        return { text: 'Đang đợi duyệt', bg: '#F1F5F9', color: '#64748B', border: '#E2E8F0' };
     }
   };
 
@@ -76,11 +82,11 @@ export const OpportunityQuotationsTab: React.FC<OpportunityQuotationsTabProps> =
           <View style={styles.iconCircle}>
             <Feather name="file-text" size={16} color="#EA580C" />
           </View>
-          <View>
-            <Text style={styles.headerTitle}>
+          <View style={styles.titleTextContainer}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
               Danh sách báo giá ({quotations.length})
             </Text>
-            <Text style={styles.headerSubtitle}>
+            <Text style={styles.headerSubtitle} numberOfLines={2}>
               Quản lý các phiên bản báo giá gửi khách
             </Text>
           </View>
@@ -135,7 +141,7 @@ export const OpportunityQuotationsTab: React.FC<OpportunityQuotationsTabProps> =
               >
                 <View style={styles.cardTop}>
                   <View style={styles.versionCol}>
-                    <Text style={styles.versionText}>Phiên bản v{q.version || 1}</Text>
+                    <Text style={styles.versionText}>Báo giá lần {q.version || 1}</Text>
                     <Text style={styles.dateText}>
                       Ngày tạo: {q.createdAt ? formatDateToDDMMYYYY(q.createdAt) : '—'}
                     </Text>
@@ -152,6 +158,13 @@ export const OpportunityQuotationsTab: React.FC<OpportunityQuotationsTabProps> =
                     </Text>
                   </View>
                 </View>
+
+                {q.description && q.status === 'REJECTED' ? (
+                  <View style={styles.rejectReasonBox}>
+                    <Text style={styles.rejectReasonLabel}>Lý do từ chối:</Text>
+                    <Text style={styles.rejectReasonText}>{q.description}</Text>
+                  </View>
+                ) : null}
 
                 <View style={styles.cardDivider} />
 
@@ -189,6 +202,7 @@ export const OpportunityQuotationsTab: React.FC<OpportunityQuotationsTabProps> =
       <QuotationDetailModal
         visible={Boolean(selectedQuotationId)}
         quotationId={selectedQuotationId}
+        opportunityDescription={opportunityDescription}
         onClose={() => setSelectedQuotationId(null)}
         onEdit={handleEditFromDetail}
         onApprovedContract={(contractId) => {
@@ -219,7 +233,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flex: 1,
+    minWidth: 0,
     marginRight: 8,
+  },
+  titleTextContainer: {
+    flex: 1,
+    minWidth: 0,
   },
   iconCircle: {
     width: 32,
@@ -228,6 +247,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF7ED',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   headerTitle: {
     fontSize: 13,
@@ -238,15 +258,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748B',
     marginTop: 1,
+    lineHeight: 15,
   },
   createBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: '#F38820',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 8,
+    flexShrink: 0,
   },
   createBtnText: {
     fontSize: 12,
@@ -366,5 +388,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#EA580C',
+  },
+  rejectReasonBox: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    gap: 2,
+  },
+  rejectReasonLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#991B1B',
+  },
+  rejectReasonText: {
+    fontSize: 11,
+    color: '#DC2626',
+    lineHeight: 15,
   },
 });

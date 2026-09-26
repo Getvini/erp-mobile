@@ -36,10 +36,12 @@ export interface QuotationDetailItem {
   sellingPrice: number;
   costAtSale: number;
   name?: string;
+  description?: string;
   isPackageService?: boolean;
   service?: {
     id: string;
     name: string;
+    description?: string;
     unit?: string;
     costPrice?: number;
   };
@@ -52,6 +54,7 @@ export interface QuotationDetailResponse extends QuotationItem {
     id: string;
     opportunityCode?: string;
     name: string;
+    description?: string;
     packages?: Array<{
       id: string;
       name: string;
@@ -65,6 +68,7 @@ export interface QuotationDetailResponse extends QuotationItem {
         service?: {
           id: string;
           name: string;
+          description?: string;
           unit?: string;
           costPrice?: number;
         };

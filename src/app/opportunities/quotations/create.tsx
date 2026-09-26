@@ -777,18 +777,26 @@ export default function QuotationCreateEditScreen() {
                   </View>
                 </View>
 
-                {/* Total and Margin row */}
-                <View className="mt-1 flex-row items-center justify-between border-t border-slate-100 pt-2">
-                  <Text className="text-[13px] font-bold text-blue-600">
-                    Thành tiền: {formatNumber(pkg.selectedPrice * pkg.quantity)} ₫
-                  </Text>
-                  <Text
-                    className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
-                      pkg.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                    }`}
-                  >
-                    Margin: {pkg.profitMargin.toFixed(0)}%
-                  </Text>
+                {/* Total and Margin row - 2 hàng tránh tràn */}
+                <View className="mt-1 border-t border-slate-100 pt-2 gap-1.5">
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs text-slate-500">
+                      Giá vốn gói: <Text className="font-semibold text-slate-700">{formatNumber(pkg.costPrice)} ₫</Text>
+                    </Text>
+                    <Text
+                      className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
+                        pkg.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                      }`}
+                    >
+                      Margin: {pkg.profitMargin.toFixed(0)}%
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-[13px] font-bold text-slate-700">Thành tiền:</Text>
+                    <Text className="text-sm font-extrabold text-blue-600">
+                      {formatNumber(pkg.selectedPrice * pkg.quantity)} ₫
+                    </Text>
+                  </View>
                 </View>
 
                 {/* Toggle Accordion Sub-items */}
@@ -830,14 +838,16 @@ export default function QuotationCreateEditScreen() {
                           Định mức: {formatNumber(sub.norm)} {sub.unit || 'lần'} / gói | Số lượng tổng: {formatNumber(sub.quantity)}
                         </Text>
                         {priceType === 'custom' ? (
-                          <View className="mt-2 flex-row items-center justify-between border-t border-slate-100 pt-2">
-                            <Text className="text-[11px] text-slate-400">
-                              Giá vốn: {formatNumber(sub.costPrice)} ₫
-                            </Text>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                              <Text className="text-xs font-semibold text-slate-600">Đơn giá con:</Text>
+                          <View className="mt-2 border-t border-slate-100 pt-2 gap-1.5">
+                            <View className="flex-row items-center justify-between">
+                              <Text className="text-xs text-slate-500">
+                                Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(sub.costPrice)} ₫</Text>
+                              </Text>
+                            </View>
+                            <View className="flex-row items-center justify-between">
+                              <Text className="text-xs font-semibold text-slate-600">Đơn giá con (VNĐ):</Text>
                               <TextInput
-                                className="w-[140px] rounded-md border border-emerald-600 bg-slate-50 px-2 py-[5px] text-right text-[13px] font-bold text-slate-900"
+                                className="w-[140px] rounded-md border border-emerald-600 bg-slate-50 px-2 py-1 text-right text-[13px] font-bold text-slate-900"
                                 keyboardType="numeric"
                                 value={formatNumberInput(sub.customPrice)}
                                 onChangeText={(val) =>
@@ -849,11 +859,11 @@ export default function QuotationCreateEditScreen() {
                             </View>
                           </View>
                         ) : (
-                          <View className="mt-1 flex-row justify-between border-t border-slate-100 pt-1">
-                            <Text className="text-[11px] text-slate-400">
-                              Giá vốn: {formatNumber(sub.costPrice)} ₫
+                          <View className="mt-1.5 flex-row items-center justify-between border-t border-slate-100 pt-1.5">
+                            <Text className="text-xs text-slate-500">
+                              Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(sub.costPrice)} ₫</Text>
                             </Text>
-                            <Text className="text-[11px] font-bold text-slate-900">
+                            <Text className="text-xs font-bold text-slate-900">
                               Đơn giá con: {formatNumber(sub.selectedPrice)} ₫
                             </Text>
                           </View>
@@ -923,21 +933,29 @@ export default function QuotationCreateEditScreen() {
                 )}
               </View>
 
-              {/* Standalone Financial info */}
-              <View className="mt-1 flex-row items-center justify-between border-t border-slate-100 pt-2">
-                <Text className="text-[11px] text-slate-400">
-                  Giá vốn: {formatNumber(item.costPrice)} ₫
-                </Text>
-                <Text className="text-[13px] font-bold text-blue-600">
-                  Thành tiền: {formatNumber(item.selectedPrice * item.quantity)} ₫
-                </Text>
-                <Text
-                  className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
-                    item.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                  }`}
-                >
-                  Margin: {item.profitMargin.toFixed(0)}%
-                </Text>
+              {/* Standalone Financial info - 2 hàng tránh tràn */}
+              <View className="mt-1 border-t border-slate-100 pt-2 gap-1.5">
+                {/* Hàng 1: Giá vốn & Margin */}
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-xs text-slate-500">
+                    Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(item.costPrice)} ₫</Text>
+                  </Text>
+                  <Text
+                    className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
+                      item.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                    }`}
+                  >
+                    Margin: {item.profitMargin.toFixed(0)}%
+                  </Text>
+                </View>
+
+                {/* Hàng 2: Thành tiền */}
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-[13px] font-bold text-slate-700">Thành tiền:</Text>
+                  <Text className="text-sm font-extrabold text-blue-600">
+                    {formatNumber(item.selectedPrice * item.quantity)} ₫
+                  </Text>
+                </View>
               </View>
             </View>
           ))}

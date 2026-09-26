@@ -873,6 +873,7 @@ export default function OpportunityDetailScreen() {
             <OpportunityQuotationsTab
               opportunityId={id as string}
               opportunityName={opportunity.name}
+              opportunityDescription={opportunity.description}
               onContractCreated={(newContractId) => {
                 refetchAll();
                 router.push({

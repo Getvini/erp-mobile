@@ -521,6 +521,11 @@ export default function QuotationDetailScreen() {
                             <Text className="mt-0.5 text-[11px] text-slate-500">
                               Định mức: {formatNumber(item.norm)} {item.service?.unit || item.unit || 'lần'} / gói | Đơn giá: {formatMoney(item.sellingPrice)}
                             </Text>
+                            {Boolean(item.service?.description || item.description) && (
+                              <Text className="mt-1 text-[11px] italic text-slate-500 leading-4">
+                                {item.service?.description || item.description}
+                              </Text>
+                            )}
                           </View>
                           <Text className="ml-2 text-[13px] font-bold text-slate-700">
                             {formatMoney(item.revenue)}
@@ -554,6 +559,12 @@ export default function QuotationDetailScreen() {
                   <Text className="text-[15px] font-extrabold text-emerald-600">{formatMoney(item.revenue)}</Text>
                 </View>
 
+                {Boolean(item.service?.description || item.description) && (
+                  <Text className="mb-2 text-[11px] italic text-slate-500 leading-4">
+                    {item.service?.description || item.description}
+                  </Text>
+                )}
+
                 <View className="flex-row items-center justify-between border-t border-slate-100 pt-1.5">
                   <Text className="text-xs text-slate-500">
                     Số lượng: <Text className="font-bold text-slate-800">{formatNumber(item.quantity)} {item.service?.unit || item.unit || 'gói'}</Text>
@@ -571,6 +582,18 @@ export default function QuotationDetailScreen() {
             ))}
           </View>
         )}
+
+        {/* Brief / Mô tả cơ hội kinh doanh */}
+        <View className="mb-4 rounded-xl border border-slate-200 bg-white p-3.5">
+          <View className="mb-2 flex-row items-center gap-2">
+            <Feather name="briefcase" size={15} color="#2563EB" />
+            <Text className="text-sm font-bold text-slate-900">Brief</Text>
+          </View>
+          <Text className="text-[11px] text-slate-400 italic mb-1">Mô tả</Text>
+          <Text className="text-xs text-slate-600 leading-relaxed">
+            {quotation?.opportunity?.description || 'Không có mô tả'}
+          </Text>
+        </View>
 
         <View className="h-[60px]" />
       </ScrollView>

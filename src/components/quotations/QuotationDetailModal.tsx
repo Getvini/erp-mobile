@@ -25,6 +25,7 @@ import { useAuthStore } from '@/stores/useAuthStore';
 export interface QuotationDetailModalProps {
   visible: boolean;
   quotationId: string | null;
+  opportunityDescription?: string;
   onClose: () => void;
   onEdit?: (quotation: any) => void;
   onApprovedContract?: (contractId: string) => void;
@@ -33,6 +34,7 @@ export interface QuotationDetailModalProps {
 export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
   visible,
   quotationId,
+  opportunityDescription,
   onClose,
   onEdit,
   onApprovedContract,
@@ -55,6 +57,7 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
   const [isRejectingMode, setIsRejectingMode] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
+  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
 
   // Group items by Package / Standalone
   const { packageGroups, standaloneItems, subtotal, vatTotal, finalTotal } = useMemo(() => {
@@ -188,7 +191,7 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.title} numberOfLines={1}>
-                  Báo giá phiên bản v{quotation?.version || 1}
+                  Báo giá lần {quotation?.version || 1}
                 </Text>
                 <Text style={styles.subtitle} numberOfLines={1}>
                   {quotation?.opportunity?.name || 'Chi tiết báo giá'}
@@ -202,9 +205,9 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
                   styles.statusBadge,
                   isApproved
                     ? styles.statusApproved
-                    : isPending
-                    ? styles.statusPending
-                    : styles.statusDraft,
+                    : status === 'REJECTED'
+                    ? styles.statusRejected
+                    : styles.statusPending,
                 ]}
               >
                 <Text
@@ -212,18 +215,18 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
                     styles.statusText,
                     isApproved
                       ? styles.statusTextApproved
-                      : isPending
-                      ? styles.statusTextPending
-                      : styles.statusTextDraft,
+                      : status === 'REJECTED'
+                      ? styles.statusTextRejected
+                      : styles.statusTextPending,
                   ]}
                 >
                   {isApproved
                     ? 'Đã duyệt'
-                    : isPending
-                    ? 'Chờ duyệt'
                     : status === 'REJECTED'
-                    ? 'Bị từ chối'
-                    : 'Bản nháp'}
+                    ? 'Từ chối'
+                    : status === 'SENT'
+                    ? 'Đã gửi'
+                    : 'Đang đợi duyệt'}
                 </Text>
               </View>
 
@@ -293,20 +296,53 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
                   </View>
 
                   <View style={styles.itemsTable}>
-                    {pkg.items.map((it: any, itIdx: number) => (
-                      <View key={it.id || itIdx} style={styles.tableRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.rowName}>
-                            {it.service?.name || it.name || 'Dịch vụ'}
-                          </Text>
-                          <Text style={styles.rowQty}>
-                            SL: {it.quantity} {it.unit || ''} • Đơn giá:{' '}
-                            {formatVND(it.sellingPrice)}
-                          </Text>
+                    {pkg.items.map((it: any, itIdx: number) => {
+                      const desc = it.service?.description || it.description;
+                      const itemKey = `pkg-${pIdx}-${it.id || itIdx}`;
+                      const isExpanded = !!expandedItems[itemKey];
+
+                      return (
+                        <View key={it.id || itIdx} style={styles.tableRowContainer}>
+                          <TouchableOpacity
+                            style={styles.tableRow}
+                            activeOpacity={desc ? 0.7 : 1}
+                            onPress={() => {
+                              if (desc) {
+                                setExpandedItems((prev) => ({ ...prev, [itemKey]: !prev[itemKey] }));
+                              }
+                            }}
+                          >
+                            <View style={{ flex: 1 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                                {desc && (
+                                  <Feather
+                                    name={isExpanded ? 'chevron-down' : 'chevron-right'}
+                                    size={13}
+                                    color="#64748B"
+                                  />
+                                )}
+                                <Text style={styles.rowName}>
+                                  {it.service?.name || it.name || 'Dịch vụ'}
+                                </Text>
+                              </View>
+                              <Text style={styles.rowQty}>
+                                SL: {it.quantity} {it.unit || ''} • Đơn giá:{' '}
+                                {formatVND(it.sellingPrice)}
+                              </Text>
+                            </View>
+                            <Text style={styles.rowPrice}>{formatVND(it.lineTotal)}</Text>
+                          </TouchableOpacity>
+
+                          {Boolean(desc) && (
+                            <View style={styles.descBox}>
+                              <Text style={styles.descText} numberOfLines={isExpanded ? undefined : 2}>
+                                {desc}
+                              </Text>
+                            </View>
+                          )}
                         </View>
-                        <Text style={styles.rowPrice}>{formatVND(it.lineTotal)}</Text>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </View>
                 </View>
               ))}
@@ -320,20 +356,53 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
                   </View>
 
                   <View style={styles.itemsTable}>
-                    {standaloneItems.map((it: any, itIdx: number) => (
-                      <View key={it.id || itIdx} style={styles.tableRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.rowName}>
-                            {it.service?.name || it.name || 'Dịch vụ'}
-                          </Text>
-                          <Text style={styles.rowQty}>
-                            SL: {it.quantity} {it.unit || ''} • Đơn giá:{' '}
-                            {formatVND(it.sellingPrice)}
-                          </Text>
+                    {standaloneItems.map((it: any, itIdx: number) => {
+                      const desc = it.service?.description || it.description;
+                      const itemKey = `standalone-${it.id || itIdx}`;
+                      const isExpanded = !!expandedItems[itemKey];
+
+                      return (
+                        <View key={it.id || itIdx} style={styles.tableRowContainer}>
+                          <TouchableOpacity
+                            style={styles.tableRow}
+                            activeOpacity={desc ? 0.7 : 1}
+                            onPress={() => {
+                              if (desc) {
+                                setExpandedItems((prev) => ({ ...prev, [itemKey]: !prev[itemKey] }));
+                              }
+                            }}
+                          >
+                            <View style={{ flex: 1 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                                {desc && (
+                                  <Feather
+                                    name={isExpanded ? 'chevron-down' : 'chevron-right'}
+                                    size={13}
+                                    color="#64748B"
+                                  />
+                                )}
+                                <Text style={styles.rowName}>
+                                  {it.service?.name || it.name || 'Dịch vụ'}
+                                </Text>
+                              </View>
+                              <Text style={styles.rowQty}>
+                                SL: {it.quantity} {it.unit || ''} • Đơn giá:{' '}
+                                {formatVND(it.sellingPrice)}
+                              </Text>
+                            </View>
+                            <Text style={styles.rowPrice}>{formatVND(it.lineTotal)}</Text>
+                          </TouchableOpacity>
+
+                          {Boolean(desc) && (
+                            <View style={styles.descBox}>
+                              <Text style={styles.descText} numberOfLines={isExpanded ? undefined : 2}>
+                                {desc}
+                              </Text>
+                            </View>
+                          )}
                         </View>
-                        <Text style={styles.rowPrice}>{formatVND(it.lineTotal)}</Text>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </View>
                 </View>
               )}
@@ -354,7 +423,27 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
                 </View>
               </View>
 
-              {/* Ghi chú */}
+              {/* Lý do từ chối nếu có */}
+              {status === 'REJECTED' && quotation?.description && (
+                <View style={styles.rejectedBanner}>
+                  <Text style={styles.rejectedBannerLabel}>Lý do từ chối:</Text>
+                  <Text style={styles.rejectedBannerText}>"{quotation.description}"</Text>
+                </View>
+              )}
+
+              {/* Brief / Mô tả cơ hội kinh doanh */}
+              <View style={styles.briefCard}>
+                <View style={styles.briefHeader}>
+                  <Feather name="briefcase" size={15} color="#2563EB" />
+                  <Text style={styles.briefTitle}>Brief</Text>
+                </View>
+                <Text style={styles.briefLabel}>Mô tả</Text>
+                <Text style={styles.briefContent}>
+                  {quotation?.opportunity?.description || opportunityDescription || 'Không có mô tả'}
+                </Text>
+              </View>
+
+              {/* Ghi chú báo giá */}
               {quotation?.note ? (
                 <View style={styles.noteBox}>
                   <Text style={styles.noteLabel}>Ghi chú:</Text>
@@ -364,50 +453,67 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
             </ScrollView>
           )}
 
-          {/* Action Bar Footer */}
+          {/* Action Bar Footer - Khớp 100% FE Web: Chỉ 2 nút Duyệt báo giá & Từ chối khi chờ duyệt */}
           {!isLoading && (
             <View style={styles.footerBar}>
-              {!isApproved && onEdit && (
+              {/* Khi bị từ chối: Nút Sửa báo giá */}
+              {status === 'REJECTED' && onEdit && (
                 <TouchableOpacity
-                  style={styles.editBtn}
+                  style={styles.editFullBtn}
                   onPress={() => {
                     onClose();
                     onEdit(quotation);
                   }}
-                  activeOpacity={0.7}
-                >
-                  <Feather name="edit-2" size={15} color="#475569" />
-                  <Text style={styles.editBtnText}>Sửa</Text>
-                </TouchableOpacity>
-              )}
-
-              {canApprove && !isApproved && !isRejectingMode && (
-                <TouchableOpacity
-                  style={styles.rejectActionBtn}
-                  onPress={() => setIsRejectingMode(true)}
-                  activeOpacity={0.7}
-                >
-                  <Feather name="x-circle" size={15} color="#DC2626" />
-                  <Text style={styles.rejectActionBtnText}>Từ chối</Text>
-                </TouchableOpacity>
-              )}
-
-              {canApprove && !isApproved && (
-                <TouchableOpacity
-                  style={[styles.approveBtn, isSubmittingAction && styles.btnDisabled]}
-                  onPress={handleApprove}
-                  disabled={isSubmittingAction}
                   activeOpacity={0.8}
                 >
-                  {isSubmittingAction ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <>
-                      <Feather name="check" size={16} color="#FFFFFF" />
-                      <Text style={styles.approveBtnText}>Duyệt & Tạo Hợp Đồng</Text>
-                    </>
-                  )}
+                  <Feather name="edit-2" size={16} color="#FFFFFF" />
+                  <Text style={styles.editFullBtnText}>Sửa báo giá</Text>
                 </TouchableOpacity>
+              )}
+
+              {/* Khi chờ duyệt (DRAFT / PENDING_APPROVAL): Đúng 2 nút Duyệt báo giá & Từ chối */}
+              {(status === 'DRAFT' || status === 'PENDING_APPROVAL') && canApprove && (
+                <>
+                  {!isRejectingMode && (
+                    <TouchableOpacity
+                      style={[styles.approveBtn, isSubmittingAction && styles.btnDisabled]}
+                      onPress={handleApprove}
+                      disabled={isSubmittingAction}
+                      activeOpacity={0.85}
+                    >
+                      {isSubmittingAction ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <>
+                          <Feather name="check-circle" size={16} color="#FFFFFF" />
+                          <Text style={styles.approveBtnText}>Duyệt báo giá</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity
+                    style={[
+                      styles.rejectActionBtn,
+                      isRejectingMode && styles.rejectActionBtnFull,
+                      isSubmittingAction && styles.btnDisabled,
+                    ]}
+                    onPress={() => {
+                      if (!isRejectingMode) {
+                        setIsRejectingMode(true);
+                      } else {
+                        handleReject();
+                      }
+                    }}
+                    disabled={isSubmittingAction}
+                    activeOpacity={0.85}
+                  >
+                    <Feather name="x-circle" size={16} color="#FFFFFF" />
+                    <Text style={styles.rejectActionBtnText}>
+                      {isRejectingMode ? 'Xác nhận từ chối' : 'Từ chối'}
+                    </Text>
+                  </TouchableOpacity>
+                </>
               )}
             </View>
           )}
@@ -503,6 +609,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#DCFCE7',
     borderColor: '#BBF7D0',
   },
+  statusRejected: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FECACA',
+  },
   statusText: {
     fontSize: 11,
     fontWeight: '800',
@@ -515,6 +625,9 @@ const styles = StyleSheet.create({
   },
   statusTextApproved: {
     color: '#16A34A',
+  },
+  statusTextRejected: {
+    color: '#DC2626',
   },
   closeBtn: {
     padding: 6,
@@ -612,13 +725,30 @@ const styles = StyleSheet.create({
   itemsTable: {
     paddingHorizontal: 12,
   },
+  tableRowContainer: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingVertical: 8,
+  },
   tableRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+  },
+  descBox: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginTop: 4,
+    borderLeftWidth: 2,
+    borderLeftColor: '#94A3B8',
+  },
+  descText: {
+    fontSize: 11,
+    color: '#475569',
+    lineHeight: 16,
+    fontStyle: 'italic',
   },
   rowName: {
     fontSize: 12,
@@ -675,6 +805,54 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#EA580C',
   },
+  rejectedBanner: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    gap: 2,
+  },
+  rejectedBannerLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#991B1B',
+    textTransform: 'uppercase',
+  },
+  rejectedBannerText: {
+    fontSize: 12,
+    color: '#DC2626',
+    fontStyle: 'italic',
+  },
+  briefCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 4,
+  },
+  briefHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  briefTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  briefLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontStyle: 'italic',
+  },
+  briefContent: {
+    fontSize: 12,
+    color: '#334155',
+    lineHeight: 18,
+  },
   noteBox: {
     backgroundColor: '#FFFBEB',
     borderRadius: 8,
@@ -696,53 +874,54 @@ const styles = StyleSheet.create({
   footerBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     paddingHorizontal: 16,
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
   },
-  editBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  editBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#475569',
-  },
-  rejectActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-  },
-  rejectActionBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#DC2626',
-  },
-  approveBtn: {
+  editFullBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+    backgroundColor: '#7C3AED',
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  editFullBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  rejectActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#DC2626',
+  },
+  rejectActionBtnFull: {
+    flex: 1,
+  },
+  rejectActionBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  approveBtn: {
+    flex: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     backgroundColor: '#16A34A',
-    paddingVertical: 11,
-    borderRadius: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
   btnDisabled: {
     opacity: 0.6,
