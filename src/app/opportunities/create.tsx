@@ -27,7 +27,8 @@ import { CreateOpportunityPayload } from '@/services/opportunityService';
 import {
   useCreateOpportunityMutation,
   useAvailableServicesQuery,
-  useServicePackagesQuery } from
+  useServicePackagesQuery,
+  useOpportunityDetailQuery } from
 '@/hooks/queries/useOpportunities';
 
 import {
@@ -387,7 +388,7 @@ const formatMonthYear = (value: string, prevValue: string): string => {
 
 export default function CreateOpportunityScreen() {
   const router = useRouter();
-  const { mode } = useLocalSearchParams<{mode?: string;}>();
+  const { mode, cloneFromId } = useLocalSearchParams<{ mode?: string; cloneFromId?: string }>();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isSmallScreen = width < 380;
@@ -495,6 +496,8 @@ export default function CreateOpportunityScreen() {
 
   const isLoadingMeta = isLoadingServices || isLoadingPackages;
   const createOpportunityMutation = useCreateOpportunityMutation();
+  const { data: clonedOpp, isLoading: isCloningLoading } = useOpportunityDetailQuery(cloneFromId ? String(cloneFromId) : '');
+  const [hasAppliedClone, setHasAppliedClone] = useState(false);
 
   // UI Selection Modals State
   const [isFieldModalVisible, setIsFieldModalVisible] = useState(false);
@@ -570,10 +573,100 @@ export default function CreateOpportunityScreen() {
 
   // Reset form if opening clean (not in draft mode)
   useEffect(() => {
-    if (mode !== 'draft') {
+    if (mode !== 'draft' && !cloneFromId) {
       resetForm();
     }
-  }, [mode]);
+  }, [mode, cloneFromId]);
+
+  // Auto-fill from cloned opportunity if ?cloneFromId=...
+  useEffect(() => {
+    if (cloneFromId && clonedOpp && !hasAppliedClone) {
+      setHasAppliedClone(true);
+
+      const rawName = String(clonedOpp.name || '');
+      const rawNameParts = rawName.split('_');
+      let cust = '';
+      let brand = '';
+      let my = '';
+
+      if (rawNameParts.length >= 3) {
+        cust = rawNameParts[0].trim();
+        brand = rawNameParts.slice(1, -1).join('_').trim();
+        my = rawNameParts[rawNameParts.length - 1].trim();
+      } else if (rawNameParts.length === 2) {
+        cust = rawNameParts[0].trim();
+        my = rawNameParts[1].trim();
+      } else {
+        cust = rawName.trim();
+      }
+
+      if (clonedOpp.customer?.name) {
+        cust = clonedOpp.customer.name;
+      } else if (clonedOpp.leadName) {
+        cust = clonedOpp.leadName;
+      }
+
+      setNameParts({
+        customerName: cust,
+        brandName: brand,
+        monthYear: my,
+      });
+
+      // Standalone services (not belonging to any package)
+      const standaloneServices = (clonedOpp.services || [])
+        .filter((s: any) => !s.opportunityPackageId && !s.isPackageService)
+        .map((s: any) => ({
+          serviceId: s.serviceId || s.service?.id || s.id || '',
+          quantity: Number(s.quantity) || 1,
+        }));
+
+      // Packages
+      const mappedPackages = (clonedOpp.packages || []).map((pkg: any) => ({
+        servicePackageId:
+          pkg.servicePackageId ||
+          pkg.servicePackage?.id ||
+          pkg.package?.id ||
+          pkg.id ||
+          '',
+        name: pkg.name || pkg.servicePackage?.name || pkg.package?.name || '',
+        description: pkg.description || pkg.servicePackage?.description || '',
+        quantity: Number(pkg.quantity) || 1,
+        services: (pkg.services || pkg.items || []).map((s: any) => ({
+          serviceId: s.serviceId || s.service?.id || '',
+          quantity: Number(s.quantity) || 1,
+          sellingPrice: Number(s.sellingPrice ?? s.service?.costPrice ?? 0),
+        })),
+      }));
+
+      // Attachments / Links
+      const attachments = clonedOpp.attachments || [];
+      const links = attachments.filter((a: any) => a.type === 'LINK').map((a: any) => a.url);
+      const paddedLinks = links.length >= 3 ? links : [...links, ...Array(3 - links.length).fill('')];
+
+      const regionList = Array.isArray(clonedOpp.region)
+        ? clonedOpp.region
+        : typeof clonedOpp.region === 'string' && clonedOpp.region
+        ? [clonedOpp.region]
+        : [];
+
+      updateFormData({
+        description: clonedOpp.description || '',
+        field: clonedOpp.field || '',
+        expectedRevenue: Number(clonedOpp.expectedRevenue) || 0,
+        budget: Number(clonedOpp.budget) || 0,
+        startDate: clonedOpp.startDate ? toDisplayDate(clonedOpp.startDate) : '',
+        endDate: clonedOpp.endDate ? toDisplayDate(clonedOpp.endDate) : '',
+        durationMonths: Number(clonedOpp.durationMonths) || 1,
+        priority: clonedOpp.priority || 'Medium',
+        successChance: Number(clonedOpp.successChance) || 0,
+        selectedRegions: regionList,
+        customerRequirements: clonedOpp.customerRequirements || '',
+        services: standaloneServices.length > 0 ? standaloneServices : [{ serviceId: '', quantity: 1 }],
+        packages: mappedPackages.length > 0 ? mappedPackages : [{ servicePackageId: '', quantity: 1 }],
+        links: paddedLinks.length > 0 ? paddedLinks : ['', '', ''],
+      });
+    }
+  }, [cloneFromId, clonedOpp, hasAppliedClone]);
 
   // Auto-restore draft if opened in draft mode (?mode=draft)
   useEffect(() => {
@@ -936,7 +1029,7 @@ export default function CreateOpportunityScreen() {
 
           <View className="flex-1 ml-[12px]">
             <Text className="text-[17px] font-bold text-slate-900">
-              {mode === 'draft' ? 'Chỉnh Sửa Bản Nháp' : 'Tạo Cơ Hội Mới'}
+              {cloneFromId ? 'Sao Chép Cơ Hội' : mode === 'draft' ? 'Chỉnh Sửa Bản Nháp' : 'Tạo Cơ Hội Mới'}
             </Text>
             <View className="flex-row items-center mt-[2px]">
               {lastSavedTime ?
@@ -946,7 +1039,7 @@ export default function CreateOpportunityScreen() {
                 </View> :
 
               <Text className="text-[12px] text-slate-500 mt-[2px]">
-                  {mode === 'draft' ? 'Chỉnh sửa thông tin bản nháp' : 'Điền thông tin chi tiết của cơ hội'}
+                  {cloneFromId ? 'Tạo cơ hội tương tự từ hồ sơ sẵn có' : mode === 'draft' ? 'Chỉnh sửa thông tin bản nháp' : 'Điền thông tin chi tiết của cơ hội'}
                 </Text>
               }
             </View>
@@ -978,6 +1071,24 @@ export default function CreateOpportunityScreen() {
         extraScrollHeight={Platform.OS === 'ios' ? 70 : 100}
         extraHeight={100}>
         
+          {/* Banner trạng thái sao chép cơ hội */}
+          {cloneFromId && isCloningLoading && (
+            <View className="flex-row items-center gap-2.5 bg-blue-50 border border-blue-200 p-3.5 rounded-2xl mb-2">
+              <ActivityIndicator size="small" color="#2563EB" />
+              <Text className="text-xs text-blue-700 font-semibold flex-1">
+                Đang nạp dữ liệu từ cơ hội gốc...
+              </Text>
+            </View>
+          )}
+          {cloneFromId && !isCloningLoading && clonedOpp && (
+            <View className="flex-row items-center gap-2.5 bg-emerald-50 border border-emerald-200 p-3 rounded-2xl mb-1">
+              <Feather name="check-circle" size={16} color="#059669" />
+              <Text className="text-xs text-emerald-800 font-semibold flex-1">
+                Đã sao chép dữ liệu từ cơ hội "{clonedOpp.name}". Hãy kiểm tra lại và nhấn tạo mới.
+              </Text>
+            </View>
+          )}
+
           {/* 1. THÔNG TIN CƠ BẢN */}
           <View className="bg-white rounded-[14px] p-[16px] border border-slate-200">
             <View className="flex-row items-center mb-[16px] gap-[12px]">

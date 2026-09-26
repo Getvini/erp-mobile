@@ -357,6 +357,34 @@ export default function OpportunityDetailScreen() {
     ]);
   };
 
+  const handleCloneOpportunity = () => {
+    if (!opportunity) return;
+    if (opportunity.status === 'QUOTATION_DRAFTING') {
+      Alert.alert(
+        'Không thể sao chép',
+        'Không thể sao chép khi cơ hội đang trong giai đoạn làm báo giá.'
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Sao chép cơ hội',
+      `Tạo một cơ hội kinh doanh mới tương tự dựa trên thông tin của "${opportunity.name}"?`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Sao chép ngay',
+          onPress: () => {
+            router.push({
+              pathname: '/opportunities/create',
+              params: { cloneFromId: opportunity.id },
+            } as any);
+          },
+        },
+      ]
+    );
+  };
+
   const handleOpenLink = (url: string) => {
     if (!url) return;
     Linking.openURL(url).catch(() => {
@@ -472,13 +500,31 @@ export default function OpportunityDetailScreen() {
           <Text className="text-[11px] text-slate-500">Chi tiết hồ sơ kinh doanh</Text>
         </View>
 
-        <TouchableOpacity
-          className="w-[38px] h-[38px] rounded-xl bg-slate-100 justify-center items-center"
-          onPress={handleRefresh}
-          activeOpacity={0.7}
-        >
-          <Feather name="refresh-cw" size={18} color="#475569" />
-        </TouchableOpacity>
+        <View className="flex-row items-center gap-2">
+          <TouchableOpacity
+            className={`w-[38px] h-[38px] rounded-xl justify-center items-center ${
+              opportunity.status === 'QUOTATION_DRAFTING'
+                ? 'bg-slate-100 opacity-40'
+                : 'bg-blue-50 border border-blue-200'
+            }`}
+            onPress={handleCloneOpportunity}
+            activeOpacity={0.7}
+          >
+            <Feather
+              name="copy"
+              size={17}
+              color={opportunity.status === 'QUOTATION_DRAFTING' ? '#94A3B8' : '#2563EB'}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className="w-[38px] h-[38px] rounded-xl bg-slate-100 justify-center items-center"
+            onPress={handleRefresh}
+            activeOpacity={0.7}
+          >
+            <Feather name="refresh-cw" size={18} color="#475569" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
