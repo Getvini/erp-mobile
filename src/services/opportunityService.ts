@@ -209,8 +209,36 @@ export const opportunityService = {
     return apiService.patch<{ message: string }>(`/opportunities/${id}/approve`);
   },
 
+  async rejectOpportunity(id: string, reason?: string) {
+    return apiService.patch<{ message: string }>(`/opportunities/${id}/reject`, { reason });
+  },
+
+  async updateOpportunityStage(id: string, stage: string) {
+    return apiService.patch<{ message: string }>(`/opportunities/${id}/stage`, { stage });
+  },
+
   async deleteOpportunity(id: string) {
     return apiService.delete<{ message: string }>(`/opportunities/${id}`);
+  },
+
+  async getOpportunityServices(opportunityId: string) {
+    return apiService.get<any[]>(`/opportunity-services/opportunity/${opportunityId}`);
+  },
+
+  async getOpportunityService(id: string) {
+    return apiService.get<any>(`/opportunity-services/${id}`);
+  },
+
+  async createOpportunityService(data: any) {
+    return apiService.post<any>('/opportunity-services', data);
+  },
+
+  async updateOpportunityService(id: string, data: any) {
+    return apiService.patch<any>(`/opportunity-services/${id}`, data);
+  },
+
+  async deleteOpportunityService(id: string) {
+    return apiService.delete<{ message: string }>(`/opportunity-services/${id}`);
   },
 
   async getAvailableServices() {

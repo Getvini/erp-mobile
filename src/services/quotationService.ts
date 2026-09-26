@@ -127,6 +127,18 @@ export const quotationService = {
     });
   },
 
+  async getQuotations(params?: Record<string, any>) {
+    return apiService.get<any[]>('/quotations', params);
+  },
+
+  async deleteQuotation(id: string) {
+    return apiService.delete<{ message: string }>(`/quotations/${id}`);
+  },
+
+  async createAddendumQuotation(data: any) {
+    return apiService.post<any>('/quotations/addendum', data);
+  },
+
   async getOpportunityServices(opportunityId: string) {
     return apiService.get<any[]>(`/opportunity-services/opportunity/${opportunityId}`);
   },

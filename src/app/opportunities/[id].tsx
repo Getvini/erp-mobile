@@ -32,12 +32,16 @@ import {
   CONTRACT_STATUS_LABELS,
 } from '@/services/contractService';
 import { customerService } from '@/services/customerService';
-import { QuotationItemCard } from '@/components/opportunities/QuotationItemCard';
-import { CustomerInfoCard } from '@/components/opportunities/CustomerInfoCard';
 import {
+  CustomerInfoCard,
   CustomerAssignModal,
   CustomerAssignData,
-} from '@/components/opportunities/CustomerAssignModal';
+  QuotationItemCard,
+  OpportunityEvaluationTab,
+  OpportunityFinancialTab,
+  OpportunityTimeLocationTab,
+  OpportunityQuotationsTab,
+} from '@/components/opportunities';
 import { formatVNDFull, formatNumber } from '@/utils/formatters';
 import {
   useOpportunityDetailQuery,
@@ -138,6 +142,9 @@ export default function OpportunityDetailScreen() {
 
   const isApproving = approveOpportunityMutation.isPending;
   const isCreatingContract = createContractMutation.isPending;
+
+  // Tab Segment State
+  const [activeTab, setActiveTab] = useState<'EVALUATION' | 'FINANCIAL' | 'TIMELINE' | 'QUOTATIONS'>('EVALUATION');
 
   // Customer Assign Modal State
   const [isCustomerModalVisible, setIsCustomerModalVisible] = useState(false);
@@ -563,12 +570,7 @@ export default function OpportunityDetailScreen() {
                 <View className="relative flex-1 min-w-[125px]">
                   <TouchableOpacity
                     className="flex-row items-center justify-center gap-1.5 bg-slate-900 px-3.5 py-2 rounded-lg"
-                    onPress={() =>
-                      router.push({
-                        pathname: '/opportunities/quotations/list',
-                        params: { opportunityId: id, opportunityName: opportunity.name },
-                      })
-                    }
+                    onPress={() => setActiveTab('QUOTATIONS')}
                     activeOpacity={0.8}
                   >
                     <Feather name="file-text" size={14} color="#FFFFFF" />
@@ -646,457 +648,155 @@ export default function OpportunityDetailScreen() {
           )}
         </View>
 
-        {/* 3. KHỐI KHÁCH HÀNG & NGƯỜI LIÊN HỆ */}
-        <View className="mb-3.5">
-          <CustomerInfoCard
-            opportunity={opportunity}
-            onAddCustomer={() => setIsCustomerModalVisible(true)}
-            onSaveEdit={handleSaveEditCustomer}
-          />
+        {/* SEGMENTED TAB SELECTOR */}
+        <View className="flex-row bg-slate-200/80 p-1 rounded-xl mb-3.5 border border-slate-200">
+          <TouchableOpacity
+            className={`flex-1 py-2 items-center rounded-lg ${
+              activeTab === 'EVALUATION' ? 'bg-white shadow-sm' : ''
+            }`}
+            onPress={() => setActiveTab('EVALUATION')}
+            activeOpacity={0.7}
+          >
+            <Text
+              className={`text-xs font-bold ${
+                activeTab === 'EVALUATION' ? 'text-primary' : 'text-slate-600'
+              }`}
+            >
+              Đánh giá
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className={`flex-1 py-2 items-center rounded-lg ${
+              activeTab === 'FINANCIAL' ? 'bg-white shadow-sm' : ''
+            }`}
+            onPress={() => setActiveTab('FINANCIAL')}
+            activeOpacity={0.7}
+          >
+            <Text
+              className={`text-xs font-bold ${
+                activeTab === 'FINANCIAL' ? 'text-primary' : 'text-slate-600'
+              }`}
+            >
+              Dự toán ({packages.length + standaloneServices.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className={`flex-1 py-2 items-center rounded-lg ${
+              activeTab === 'TIMELINE' ? 'bg-white shadow-sm' : ''
+            }`}
+            onPress={() => setActiveTab('TIMELINE')}
+            activeOpacity={0.7}
+          >
+            <Text
+              className={`text-xs font-bold ${
+                activeTab === 'TIMELINE' ? 'text-primary' : 'text-slate-600'
+              }`}
+            >
+              Tiến độ
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className={`flex-1 py-2 items-center rounded-lg ${
+              activeTab === 'QUOTATIONS' ? 'bg-white shadow-sm' : ''
+            }`}
+            onPress={() => setActiveTab('QUOTATIONS')}
+            activeOpacity={0.7}
+          >
+            <Text
+              className={`text-xs font-bold ${
+                activeTab === 'QUOTATIONS' ? 'text-primary' : 'text-slate-600'
+              }`}
+            >
+              Báo giá ({quotations.length})
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {/* 4. KHỐI THÔNG TIN TÀI CHÍNH & KỲ VỌNG */}
-        <View className="bg-white rounded-[18px] p-4 mb-3.5 border border-slate-200 shadow-sm">
-          <View className="flex-row justify-between items-center mb-3.5">
-            <View className="flex-row items-center gap-2">
-              <View className="w-7 h-7 rounded-lg justify-center items-center bg-blue-50">
-                <Ionicons name="cash-outline" size={17} color="#2563EB" />
-              </View>
-              <Text className="text-[15px] font-extrabold text-slate-900">Thông tin Tài chính & Kỳ vọng</Text>
-            </View>
-          </View>
+        {/* TAB 1: ĐÁNH GIÁ & KHÁCH HÀNG */}
+        {activeTab === 'EVALUATION' && (
+          <View className="gap-3.5 mb-3.5">
+            <CustomerInfoCard
+              opportunity={opportunity}
+              onAddCustomer={() => setIsCustomerModalVisible(true)}
+              onSaveEdit={handleSaveEditCustomer}
+            />
 
-          <View className="flex-row gap-3">
-            <View className="flex-1 bg-slate-50 p-3 rounded-xl border border-slate-100">
-              <Text className="text-[11px] text-slate-500 font-semibold mb-1">Doanh thu kỳ vọng</Text>
-              <Text 
-                className="text-[15px] font-extrabold text-primary" 
-                numberOfLines={1} 
-                adjustsFontSizeToFit 
-                minimumFontScale={0.75}
-              >
-                {formatVNDFull(opportunity.expectedRevenue)}
-              </Text>
-            </View>
+            <OpportunityEvaluationTab opportunity={opportunity} />
 
-            <View className="flex-1 bg-slate-50 p-3 rounded-xl border border-slate-100">
-              <Text className="text-[11px] text-slate-500 font-semibold mb-1">Ngân sách dự kiến</Text>
-              <Text 
-                className="text-[15px] font-bold text-slate-900" 
-                numberOfLines={1} 
-                adjustsFontSizeToFit 
-                minimumFontScale={0.75}
-              >
-                {formatVNDFull(opportunity.budget)}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* 5. KHỐI THỜI GIAN & ĐỊA ĐIỂM */}
-        <View className="bg-white rounded-[18px] p-4 mb-3.5 border border-slate-200 shadow-sm">
-          <View className="flex-row justify-between items-center mb-3.5">
-            <View className="flex-row items-center gap-2">
-              <View className="w-7 h-7 rounded-lg justify-center items-center bg-purple-100">
-                <Feather name="calendar" size={16} color="#7C3AED" />
-              </View>
-              <Text className="text-[15px] font-extrabold text-slate-900">Thời gian & Địa điểm</Text>
-            </View>
-          </View>
-
-          <View className="flex-row flex-wrap gap-3">
-            <View className="w-[47%] bg-slate-50 p-2.5 rounded-lg">
-              <Text className="text-[11px] text-slate-500 mb-0.5">Dự kiến khởi công</Text>
-              <Text className="text-[13px] font-bold text-slate-800">{formatDate(opportunity.startDate)}</Text>
-            </View>
-
-            <View className="w-[47%] bg-slate-50 p-2.5 rounded-lg">
-              <Text className="text-[11px] text-slate-500 mb-0.5">Dự kiến kết thúc</Text>
-              <Text className="text-[13px] font-bold text-slate-800">{formatDate(opportunity.endDate)}</Text>
-            </View>
-
-            <View className="w-[47%] bg-slate-50 p-2.5 rounded-lg">
-              <Text className="text-[11px] text-slate-500 mb-0.5">Địa điểm triển khai</Text>
-              <Text className="text-[13px] font-bold text-slate-800">
-                {Array.isArray(opportunity.region)
-                  ? opportunity.region
-                      .map((r) => REGION_LABELS[r] || r)
-                      .join(', ')
-                  : (REGION_LABELS[opportunity.region as string] || opportunity.region || 'Chưa xác định')}
-              </Text>
-            </View>
-
-            <View className="w-[47%] bg-slate-50 p-2.5 rounded-lg">
-              <Text className="text-[11px] text-slate-500 mb-0.5">Thời lượng thực hiện</Text>
-              <Text className="text-[13px] font-bold text-slate-800">
-                {opportunity.durationMonths ? `${opportunity.durationMonths} Tháng` : 'Linh hoạt'}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* 6. KHỐI ĐÁNH GIÁ CƠ HỘI */}
-        <View className="bg-white rounded-[18px] p-4 mb-3.5 border border-slate-200 shadow-sm">
-          <View className="flex-row justify-between items-center mb-3.5">
-            <View className="flex-row items-center gap-2">
-              <View className="w-7 h-7 rounded-lg justify-center items-center bg-orange-100">
-                <Ionicons name="trending-up" size={17} color="#EA580C" />
-              </View>
-              <Text className="text-[15px] font-extrabold text-slate-900">Đánh giá cơ hội</Text>
-            </View>
-          </View>
-
-          <View className="flex-row flex-wrap gap-3">
-            <View className="w-[47%] bg-slate-50 p-2.5 rounded-lg">
-              <Text className="text-[11px] text-slate-500 mb-0.5">Lĩnh vực kinh doanh</Text>
-              <Text className="text-[13px] font-bold text-slate-800">
-                {FIELD_LABELS[opportunity.field || ''] || opportunity.field || 'Chưa xác định'}
-              </Text>
-            </View>
-
-            <View className="w-[47%] bg-slate-50 p-2.5 rounded-lg">
-              <Text className="text-[11px] text-slate-500 mb-0.5">Độ ưu tiên</Text>
-              <View className="self-start px-2 py-0.5 rounded-md mt-0.5" style={{ backgroundColor: priorityTheme.bg }}>
-                <Text className="text-[11px] font-bold" style={{ color: priorityTheme.text }}>
-                  {priorityLabel}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Win-rate bar */}
-          <View className="mt-3.5 bg-slate-50 p-3 rounded-xl">
-            <View className="flex-row justify-between items-center mb-1.5">
-              <Text className="text-xs font-semibold text-slate-600">Khả năng thành công (Win-rate)</Text>
-              <Text className="text-sm font-extrabold" style={{ color: successColor }}>
-                {successChance}%
-              </Text>
-            </View>
-
-            <View className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
-              <View
-                className="h-full rounded-full"
-                style={{
-                  width: `${Math.min(100, Math.max(0, successChance))}%`,
-                  backgroundColor: successColor,
-                }}
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* 7. KHỐI DỊCH VỤ & GÓI DỊCH VỤ */}
-        <View className="bg-white rounded-[18px] p-4 mb-3.5 border border-slate-200 shadow-sm">
-          <View className="flex-row justify-between items-center mb-3.5">
-            <View className="flex-row items-center gap-2">
-              <View className="w-7 h-7 rounded-lg justify-center items-center bg-indigo-100">
-                <Feather name="package" size={16} color="#4F46E5" />
-              </View>
-              <Text className="text-[15px] font-extrabold text-slate-900">Dịch vụ & Gói dịch vụ</Text>
-            </View>
-          </View>
-
-          {/* Danh sách các gói thầu */}
-          {packages.length > 0 && (
-            <View className="gap-3">
-              {packages.map((pkg) => (
-                <View key={pkg.id} className="bg-sky-50/60 rounded-xl p-3 border border-sky-200">
-                  <View className="flex-row items-center gap-2 mb-2">
-                    <View className="w-6 h-6 rounded-md bg-sky-100 justify-center items-center">
-                      <Feather name="briefcase" size={14} color="#2563EB" />
-                    </View>
-                    <Text className="text-sm font-extrabold text-sky-800 flex-1">
-                      Gói: {pkg.name}{' '}
-                      <Text className="text-[13px] font-semibold text-sky-600">x{pkg.quantity || 1}</Text>
-                    </Text>
-                  </View>
-
-                  {/* Định mức dịch vụ con */}
-                  <View className="ml-2 pl-2.5 border-l-2 border-sky-200 gap-2">
-                    <Text className="text-[10px] font-bold text-sky-600 italic uppercase tracking-wider">
-                      Số lượng dưới đây là định mức cho 1 gói:
-                    </Text>
-
-                    {pkg.services && pkg.services.length > 0 ? (
-                      pkg.services.map((s) => {
-                        const rawRatio = (s.quantity || 1) / (pkg.quantity || 1);
-                        const quotaDisplay =
-                          rawRatio % 1 === 0 ? rawRatio : Number(rawRatio.toFixed(2));
-                        const unitName = s.service?.unit || s.unit || 'Đơn vị';
-
-                        return (
-                          <View key={s.id} className="flex-row justify-between items-center py-1 border-b border-sky-100">
-                            <View className="flex-1 pr-2">
-                              <Text className="text-xs font-semibold text-slate-800">{s.service?.name || 'Dịch vụ'}</Text>
-                              <Text className="text-[11px] text-slate-500 mt-0.5">
-                                Định mức: {quotaDisplay} {unitName} / Gói
-                              </Text>
-                            </View>
-                            <Text className="text-xs font-bold text-sky-700">
-                              {formatNumber(s.sellingPrice)} VNĐ
-                            </Text>
-                          </View>
-                        );
-                      })
-                    ) : (
-                      <Text className="text-[11px] text-slate-400 italic">Chưa có dịch vụ thành phần trong gói.</Text>
-                    )}
-                  </View>
+            {/* Thông tin bổ sung */}
+            <View className="bg-white rounded-[18px] p-4 border border-slate-200 shadow-sm">
+              <View className="flex-row items-center gap-2 mb-3.5">
+                <View className="w-7 h-7 rounded-lg justify-center items-center bg-slate-100">
+                  <Feather name="info" size={16} color="#64748B" />
                 </View>
-              ))}
-            </View>
-          )}
+                <Text className="text-[15px] font-extrabold text-slate-900">Thông tin bổ sung</Text>
+              </View>
 
-          {/* Danh sách Dịch vụ lẻ */}
-          {standaloneServices.length > 0 && (
-            <View className="mt-3.5 gap-1.5">
-              <Text className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-1">Dịch vụ lẻ</Text>
-              {standaloneServices.map((s, idx) => (
-                <View key={s.id || idx} className="flex-row justify-between items-center bg-slate-50 rounded-xl p-2.5 border border-slate-200">
-                  <View className="flex-1 pr-2">
-                    <Text className="text-[13px] font-semibold text-slate-800">
-                      {s.service?.name || s.serviceName || 'Dịch vụ lẻ'}
-                    </Text>
-                    <Text className="text-[11px] text-slate-500 mt-0.5">
-                      Số lượng: {s.quantity || 1} {s.service?.unit || s.unit || ''}
-                    </Text>
-                  </View>
-                  <Text className="text-[13px] font-bold text-slate-700">
-                    {formatNumber(s.sellingPrice || s.expectedRevenue)} VNĐ
+              <View className="gap-2">
+                <View className="flex-row justify-between py-1 border-b border-slate-50">
+                  <Text className="text-xs text-slate-500">Ngày tạo</Text>
+                  <Text className="text-xs font-semibold text-slate-800">{formatDate(opportunity.createdAt)}</Text>
+                </View>
+
+                <View className="flex-row justify-between py-1 border-b border-slate-50">
+                  <Text className="text-xs text-slate-500">Cập nhật lần cuối</Text>
+                  <Text className="text-xs font-semibold text-slate-800">{formatDate(opportunity.updatedAt)}</Text>
+                </View>
+
+                <View className="flex-row justify-between py-1 border-b border-slate-50">
+                  <Text className="text-xs text-slate-500">Người tạo</Text>
+                  <Text className="text-xs font-semibold text-slate-800">
+                    {opportunity.createdBy?.fullName ||
+                      opportunity.creator?.fullName ||
+                      opportunity.createdBy?.username ||
+                      'Chưa cập nhật'}
                   </Text>
                 </View>
-              ))}
-            </View>
-          )}
 
-          {packages.length === 0 && standaloneServices.length === 0 && (
-            <View className="py-5 items-center gap-1.5">
-              <Feather name="layers" size={24} color="#CBD5E1" />
-              <Text className="text-xs text-slate-400 italic">Chưa có dịch vụ hoặc gói nào được chọn.</Text>
-            </View>
-          )}
-        </View>
-
-        {/* 8. KHỐI YÊU CẦU KHÁCH HÀNG & TÀI LIỆU ĐÍNH KÈM */}
-        <View className="bg-white rounded-[18px] p-4 mb-3.5 border border-slate-200 shadow-sm">
-          <View className="flex-row justify-between items-center mb-3.5">
-            <View className="flex-row items-center gap-2">
-              <View className="w-7 h-7 rounded-lg justify-center items-center bg-cyan-100">
-                <Feather name="file-text" size={16} color="#0891B2" />
+                {opportunity.referralPartner && (
+                  <View className="flex-row justify-between py-1 border-b border-slate-50">
+                    <Text className="text-xs text-slate-500">Đối tác giới thiệu</Text>
+                    <Text className="text-xs font-semibold text-slate-800">{opportunity.referralPartner.name}</Text>
+                  </View>
+                )}
               </View>
-              <Text className="text-[15px] font-extrabold text-slate-900">Yêu cầu & Tài liệu đính kèm</Text>
             </View>
           </View>
+        )}
 
-          {/* Yêu cầu đặc thù của khách hàng */}
-          {opportunity.customerRequirements ? (
-            <View className="bg-teal-50/50 border border-teal-100 rounded-xl p-3 mb-3">
-              <Text className="text-xs font-bold text-teal-600 mb-1">Yêu cầu đặc thù của khách hàng:</Text>
-              <Text className="text-[13px] text-teal-900 leading-[18px]">{opportunity.customerRequirements}</Text>
-            </View>
-          ) : null}
-
-          {/* Danh sách tệp & liên kết đính kèm */}
-          {attachments.length > 0 ? (
-            <View className="gap-2">
-              <Text className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-1">Tài liệu đính kèm ({attachments.length})</Text>
-              {attachments.map((att, idx) => {
-                const isLink = att.type === 'LINK';
-                return (
-                  <TouchableOpacity
-                    key={att.id || idx}
-                    className="flex-row items-center bg-slate-50 rounded-xl p-2.5 border border-slate-200 gap-2.5"
-                    onPress={() => handleOpenLink(att.url)}
-                    activeOpacity={0.7}
-                  >
-                    <View
-                      className={`w-8 h-8 rounded-lg justify-center items-center ${
-                        isLink ? 'bg-blue-50' : 'bg-purple-100'
-                      }`}
-                    >
-                      <Feather
-                        name={isLink ? 'external-link' : 'file'}
-                        size={16}
-                        color={isLink ? '#2563EB' : '#7C3AED'}
-                      />
-                    </View>
-
-                    <View className="flex-1">
-                      <Text className="text-[13px] font-semibold text-slate-800" numberOfLines={1}>
-                        {att.name || att.url}
-                      </Text>
-                      {isLink ? (
-                        <Text className="text-[11px] text-slate-500 mt-0.5" numberOfLines={1}>
-                          {att.url}
-                        </Text>
-                      ) : att.size ? (
-                        <Text className="text-[11px] text-slate-500 mt-0.5">
-                          {(att.size / 1024).toFixed(1)} KB
-                        </Text>
-                      ) : null}
-                    </View>
-
-                    <Feather name="arrow-up-right" size={16} color="#94A3B8" />
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ) : !opportunity.customerRequirements ? (
-            <View className="py-4 items-center gap-1.5">
-              <Feather name="paperclip" size={20} color="#CBD5E1" />
-              <Text className="text-xs text-slate-400 italic">Không có tài liệu hoặc yêu cầu đính kèm.</Text>
-            </View>
-          ) : null}
-        </View>
-
-        {/* 9. KHỐI THÔNG TIN BỔ SUNG */}
-        <View className="bg-white rounded-[18px] p-4 mb-3.5 border border-slate-200 shadow-sm">
-          <View className="flex-row justify-between items-center mb-3.5">
-            <View className="flex-row items-center gap-2">
-              <View className="w-7 h-7 rounded-lg justify-center items-center bg-slate-100">
-                <Feather name="info" size={16} color="#64748B" />
-              </View>
-              <Text className="text-[15px] font-extrabold text-slate-900">Thông tin bổ sung</Text>
-            </View>
+        {/* TAB 2: DỰ TOÁN TÀI CHÍNH & DỊCH VỤ */}
+        {activeTab === 'FINANCIAL' && (
+          <View className="mb-3.5">
+            <OpportunityFinancialTab opportunity={opportunity} />
           </View>
+        )}
 
-          <View className="gap-2">
-            <View className="flex-row justify-between py-1 border-b border-slate-50">
-              <Text className="text-xs text-slate-500">Ngày tạo</Text>
-              <Text className="text-xs font-semibold text-slate-800">{formatDate(opportunity.createdAt)}</Text>
-            </View>
-
-            <View className="flex-row justify-between py-1 border-b border-slate-50">
-              <Text className="text-xs text-slate-500">Cập nhật lần cuối</Text>
-              <Text className="text-xs font-semibold text-slate-800">{formatDate(opportunity.updatedAt)}</Text>
-            </View>
-
-            <View className="flex-row justify-between py-1 border-b border-slate-50">
-              <Text className="text-xs text-slate-500">Người tạo</Text>
-              <Text className="text-xs font-semibold text-slate-800">
-                {opportunity.createdBy?.fullName ||
-                  opportunity.creator?.fullName ||
-                  opportunity.createdBy?.username ||
-                  'Chưa cập nhật'}
-              </Text>
-            </View>
-
-            {opportunity.referralPartner && (
-              <View className="flex-row justify-between py-1 border-b border-slate-50">
-                <Text className="text-xs text-slate-500">Đối tác giới thiệu</Text>
-                <Text className="text-xs font-semibold text-slate-800">{opportunity.referralPartner.name}</Text>
-              </View>
-            )}
+        {/* TAB 3: THỜI GIAN & ĐỊA ĐIỂM */}
+        {activeTab === 'TIMELINE' && (
+          <View className="mb-3.5">
+            <OpportunityTimeLocationTab opportunity={opportunity} />
           </View>
-        </View>
+        )}
 
-        {/* 10. KHỐI BÁO GIÁ */}
-        <View className="bg-white rounded-[18px] p-4 mb-3.5 border border-slate-200 shadow-sm">
-          <View className="flex-row justify-between items-center mb-3.5">
-            <View className="flex-row items-center gap-2">
-              <View className="w-7 h-7 rounded-lg justify-center items-center bg-emerald-100">
-                <Feather name="file-text" size={16} color="#059669" />
-              </View>
-              <Text className="text-[15px] font-extrabold text-slate-900">Báo giá ({quotations.length})</Text>
-            </View>
-
-            <View className="flex-row items-center gap-2">
-              {canCreateQuotation && (
-                <TouchableOpacity
-                  className="flex-row items-center gap-1 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200"
-                  onPress={() =>
-                    router.push({
-                      pathname: '/opportunities/quotations/create',
-                      params: { opportunityId: id },
-                    })
-                  }
-                  activeOpacity={0.8}
-                >
-                  <Feather name="plus" size={14} color="#059669" />
-                  <Text className="text-xs font-bold text-emerald-600">Tạo báo giá</Text>
-                </TouchableOpacity>
-              )}
-              {quotations.length > 0 && (
-                <TouchableOpacity
-                  className="flex-row items-center gap-0.5"
-                  onPress={() =>
-                    router.push({
-                      pathname: '/opportunities/quotations/list',
-                      params: { opportunityId: id, opportunityName: opportunity?.name },
-                    })
-                  }
-                  activeOpacity={0.7}
-                >
-                  <Text className="text-xs font-semibold text-slate-500">Xem tất cả</Text>
-                  <Feather name="chevron-right" size={14} color="#64748B" />
-                </TouchableOpacity>
-              )}
-            </View>
+        {/* TAB 4: BÁO GIÁ & ĐỀ XUẤT */}
+        {activeTab === 'QUOTATIONS' && (
+          <View className="mb-3.5">
+            <OpportunityQuotationsTab
+              opportunityId={id as string}
+              opportunityName={opportunity.name}
+              onContractCreated={(newContractId) => {
+                refetchAll();
+                router.push({
+                  pathname: '/contracts/[id]',
+                  params: { id: newContractId },
+                } as any);
+              }}
+            />
           </View>
-
-          {quotations.length > 0 ? (
-            quotations.map((quote) => {
-              const hasApprovedQuote =
-                opportunity?.status === 'QUOTE_APPROVED' ||
-                quotations.some(
-                  (q) => q.status === QuotationStatus.APPROVED || q.status === 'APPROVED'
-                );
-              const isThisItemApproved =
-                quote.status === QuotationStatus.APPROVED || quote.status === 'APPROVED';
-              const isExpired = hasApprovedQuote && !isThisItemApproved;
-
-              return (
-                <QuotationItemCard
-                  key={quote.id}
-                  item={quote}
-                  isAdminOrBod={isAdminOrBod}
-                  isExpired={isExpired}
-                  onPress={(item) =>
-                    router.push({
-                      pathname: '/opportunities/quotations/[quotId]',
-                      params: { quotId: item.id, opportunityId: id },
-                    })
-                  }
-                  onApprove={isExpired ? undefined : handleApproveQuotation}
-                  onReject={isExpired ? undefined : handleRejectQuotation}
-                  onEdit={
-                    isExpired
-                      ? undefined
-                      : (item) =>
-                          router.push({
-                            pathname: '/opportunities/quotations/create',
-                            params: { opportunityId: id, quotationId: item.id },
-                          })
-                  }
-                />
-              );
-            })
-          ) : (
-            <View className="p-6 items-center justify-center gap-2">
-              <Feather name="file-text" size={24} color="#CBD5E1" />
-              <Text className="text-xs text-slate-400 text-center">
-                {hasCustomer
-                  ? 'Chưa có bản báo giá nào được tạo cho cơ hội này.'
-                  : 'Vui lòng gán thông tin khách hàng để thực hiện tạo báo giá.'}
-              </Text>
-              {canCreateQuotation && (
-                <TouchableOpacity
-                  className="flex-row items-center gap-1.5 bg-emerald-600 px-3.5 py-2 rounded-lg mt-2"
-                  onPress={() =>
-                    router.push({
-                      pathname: '/opportunities/quotations/create',
-                      params: { opportunityId: id },
-                    })
-                  }
-                  activeOpacity={0.85}
-                >
-                  <Feather name="plus" size={14} color="#FFFFFF" />
-                  <Text className="text-[13px] font-bold text-white">Tạo báo giá đầu tiên</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-        </View>
+        )}
 
         {/* 11. KHỐI HỢP ĐỒNG KINH TẾ */}
         {hasContract && linkedContract && (

@@ -163,3 +163,39 @@ export function useRejectQuotationMutation() {
   });
 }
 
+/**
+ * Hook to delete a quotation
+ */
+export function useDeleteQuotationMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await quotationService.deleteQuotation(id);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.quotations.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+    },
+  });
+}
+
+/**
+ * Hook to create an addendum quotation
+ */
+export function useCreateAddendumQuotationMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await quotationService.createAddendumQuotation(payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.quotations.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+    },
+  });
+}
+
