@@ -57,15 +57,20 @@ interface QuotationFormItem {
 export default function QuotationCreateEditScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ opportunityId: string; quotationId?: string }>();
-  const opportunityId = params.opportunityId || '';
   const quotationId = params.quotationId;
   const isEditMode = !!quotationId;
 
   // TanStack Queries
+  const { data: quoteData, isLoading: isLoadingQuote } = useQuotationDetailQuery(quotationId || '');
+  const opportunityId =
+    params.opportunityId ||
+    quoteData?.opportunityId ||
+    (quoteData?.opportunity as any)?.id ||
+    '';
+
   const { data: oppData, isLoading: isLoadingOpp } = useOpportunityDetailQuery(opportunityId);
   const { data: allServicesRes, isLoading: isLoadingServices } = useAvailableServicesQuery();
   const { data: pkgTemplatesRes, isLoading: isLoadingPackages } = useServicePackagesQuery();
-  const { data: quoteData, isLoading: isLoadingQuote } = useQuotationDetailQuery(quotationId || '');
   const { data: servicesRes } = useOpportunityServicesQuery(opportunityId);
 
   // TanStack Mutations
@@ -121,7 +126,7 @@ export default function QuotationCreateEditScreen() {
       setNotes(quoteData.note || '');
 
       const loadedItems: QuotationFormItem[] = (quoteData.details || []).map((detail: any) => {
-        const costPrice = parseFloat(String(detail.costAtSale || 0));
+        const costPrice = parseFloat(String(detail.costAtSale || detail.service?.costPrice || 0));
         const sellingPrice = parseFloat(String(detail.sellingPrice || 0));
         const minPrice = roundToTenThousands(costPrice / 0.8);
         const recommendedPrice = roundToTenThousands(costPrice / 0.6);
@@ -140,7 +145,7 @@ export default function QuotationCreateEditScreen() {
           packageQuantity: detail.packageQuantity || 1,
           norm: detail.packageQuantity ? (detail.quantity || 1) / detail.packageQuantity : 1,
           servicePackageId: detail.servicePackageId,
-          unit: detail.service?.unit || '',
+          unit: detail.service?.unit || detail.unit || '',
         };
       });
 
@@ -508,6 +513,7 @@ export default function QuotationCreateEditScreen() {
       const submitData: any = {
         opportunityId,
         note: notes,
+        totalAmount: totals.totalWithVat,
         details: items.map((item) => ({
           serviceId: item.serviceId,
           quantity: item.quantity,

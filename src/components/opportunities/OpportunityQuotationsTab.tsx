@@ -8,8 +8,8 @@ import {
 } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import { useOpportunityQuotationsQuery } from '@/hooks/queries/useQuotations';
-import { QuotationModal } from '@/components/quotations/QuotationModal';
 import { QuotationDetailModal } from '@/components/quotations/QuotationDetailModal';
 import { formatVND, formatDateToDDMMYYYY } from '@/utils/formatters';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -27,6 +27,7 @@ export const OpportunityQuotationsTab: React.FC<OpportunityQuotationsTabProps> =
   opportunityDescription,
   onContractCreated,
 }) => {
+  const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const userRole = (user?.role || '').toUpperCase();
   const canCreateQuotation = ['ADMIN', 'DIRECTOR', 'SALE', 'MANAGER'].includes(userRole);
@@ -37,14 +38,14 @@ export const OpportunityQuotationsTab: React.FC<OpportunityQuotationsTabProps> =
     refetch,
   } = useOpportunityQuotationsQuery(opportunityId);
 
-  const [createModalVisible, setCreateModalVisible] = useState(false);
   const [selectedQuotationId, setSelectedQuotationId] = useState<string | null>(null);
-  const [editingQuotation, setEditingQuotation] = useState<any | null>(null);
 
   const handleOpenCreate = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setEditingQuotation(null);
-    setCreateModalVisible(true);
+    router.push({
+      pathname: '/opportunities/quotations/create',
+      params: { opportunityId },
+    });
   };
 
   const handleOpenDetail = (id: string) => {
@@ -53,8 +54,14 @@ export const OpportunityQuotationsTab: React.FC<OpportunityQuotationsTabProps> =
   };
 
   const handleEditFromDetail = (quotation: any) => {
-    setEditingQuotation(quotation);
-    setCreateModalVisible(true);
+    setSelectedQuotationId(null);
+    router.push({
+      pathname: '/opportunities/quotations/create',
+      params: {
+        opportunityId,
+        quotationId: quotation.id,
+      },
+    });
   };
 
   const getStatusBadge = (status: string) => {
@@ -170,10 +177,10 @@ export const OpportunityQuotationsTab: React.FC<OpportunityQuotationsTabProps> =
 
                 <View style={styles.cardBottom}>
                   <View>
-                    <Text style={styles.amountLabel}>Tổng giá trị báo giá:</Text>
-                    <Text style={styles.amountValue}>{formatVND(q.totalAmount)}</Text>
+                    <Text style={styles.amountLabel}>Tổng giá trị báo giá có thuế:</Text>
+                    <Text style={styles.amountValue}>{formatVND(q.totalWithVat)}</Text>
                   </View>
-
+                
                   <View style={styles.detailLinkRow}>
                     <Text style={styles.detailLinkText}>Xem chi tiết</Text>
                     <Feather name="chevron-right" size={14} color="#EA580C" />
@@ -185,18 +192,6 @@ export const OpportunityQuotationsTab: React.FC<OpportunityQuotationsTabProps> =
         </View>
       )}
 
-      {/* Modal Lập / Sửa Báo Giá */}
-      <QuotationModal
-        visible={createModalVisible}
-        onClose={() => {
-          setCreateModalVisible(false);
-          setEditingQuotation(null);
-        }}
-        opportunityId={opportunityId}
-        opportunityName={opportunityName}
-        editQuotation={editingQuotation}
-        onSuccess={() => refetch()}
-      />
 
       {/* Modal Chi Tiết Báo Giá */}
       <QuotationDetailModal
