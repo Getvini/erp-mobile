@@ -1,0 +1,34 @@
+appId: com.getvini.erp
+name: "P0-4 Milestones Landscape Flow"
+---
+- launchApp
+- waitForAnimationToEnd
+- tapOn:
+    id: contractsTab
+- tapOn:
+    index: 0
+    id: contractList
+- assertVisible:
+    id: contractDetailScreen
+- tapOn:
+    text: "Milestone"
+- assertVisible:
+    id: milestoneTrackerTab
+- assertVisible:
+    id: milestoneProgressBar
+- tapOn:
+    index: 0
+    id: milestoneStatusToggle
+- waitForAnimationToEnd
+- tapOn:
+    id: editMilestoneButton
+- assertVisible:
+    id: milestoneModal
+- tapOn:
+    id: actualDateInput
+- inputText: "26-09-2026"
+- tapOn:
+    id: saveMilestoneButton
+- waitForAnimationToEnd
+- assertNotVisible:
+    id: milestoneModal

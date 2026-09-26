@@ -1,0 +1,34 @@
+appId: com.getvini.erp
+name: "P0-5 Debt Reconciliation Flow"
+---
+- launchApp
+- waitForAnimationToEnd
+- tapOn:
+    id: contractsTab
+- tapOn:
+    index: 0
+    id: contractList
+- tapOn:
+    text: "Công nợ"
+- assertVisible:
+    id: contractDebtCard
+- tapOn:
+    index: 0
+    id: contractDebtCard
+- assertVisible:
+    id: debtDetailsModal
+- tapOn:
+    id: recordPaymentButton
+- assertVisible:
+    id: paymentAmountInput
+- tapOn:
+    id: paymentAmountInput
+- inputText: "5000000"
+- tapOn:
+    id: confirmPaymentButton
+- waitForAnimationToEnd
+- assertVisible:
+    id: remainingDebtAmount
+- tapOn:
+    id: unlockDebtButton
+- assertVisible: "Đã mở khóa"

@@ -1,0 +1,30 @@
+appId: com.getvini.erp
+name: "P0-2 Dashboard Metrics Flow"
+---
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Trang Chủ"
+- assertVisible:
+    id: focusBanner
+- tapOn:
+    id: monthYearPickerButton
+- waitForAnimationToEnd
+- assertVisible:
+    id: monthYearPickerModal
+- tapOn:
+    text: "Tháng 8"
+- tapOn:
+    id: confirmPickerButton
+- waitForAnimationToEnd
+- assertVisible:
+    id: cashflowWidget
+- assertVisible:
+    id: accountBalanceWidget
+- assertVisible:
+    id: upcomingMilestoneWidget
+- swipe:
+    direction: DOWN
+    duration: 800
+- waitForAnimationToEnd
+- assertVisible:
+    id: cashflowWidget

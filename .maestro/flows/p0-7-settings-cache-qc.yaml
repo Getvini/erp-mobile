@@ -1,0 +1,23 @@
+appId: com.getvini.erp
+name: "P0-7 Settings Cache QC Flow"
+---
+- launchApp
+- waitForAnimationToEnd
+- tapOn:
+    id: settingsTab
+- assertVisible: "Cài đặt"
+- tapOn:
+    id: notificationSettingToggle
+- waitForAnimationToEnd
+- tapOn:
+    id: qcConfigButton
+- assertVisible:
+    id: qcConfigModal
+- tapOn:
+    id: saveQcConfigButton
+- waitForAnimationToEnd
+- assertNotVisible:
+    id: qcConfigModal
+- tapOn:
+    id: clearCacheButton
+- assertVisible: "Đã xóa bộ nhớ đệm"
