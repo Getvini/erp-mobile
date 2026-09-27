@@ -660,6 +660,20 @@ export default function FinanceDashboardScreen() {
         </TouchableOpacity>
       </View>
 
+      <TouchableOpacity
+        onPress={() => router.push('/finance/overview' as any)}
+        className="mx-4 mt-3 min-h-12 flex-row items-center rounded-2xl border border-orange-200 bg-orange-50 px-4"
+        accessibilityRole="button"
+        accessibilityLabel="Mở thanh toán và chứng từ dự án"
+      >
+        <Feather name="file-text" size={20} color="#F38820" />
+        <View className="ml-3 flex-1">
+          <Text className="text-sm font-extrabold text-orange-800">Thanh toán & chứng từ dự án</Text>
+          <Text className="text-[11px] text-orange-700">Tổng quan · BBNT · Hóa đơn VAT</Text>
+        </View>
+        <Feather name="chevron-right" size={20} color="#F38820" />
+      </TouchableOpacity>
+
       {loading ? (
         <View className="flex-1 justify-center items-center gap-2.5">
           <ActivityIndicator size="large" color={BrandColors.primary} />

@@ -230,10 +230,7 @@ export const DebtDetailsModal: React.FC<DebtDetailsModalProps> = ({
           onPress: async () => {
             try {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              await deletePaymentMutation.mutateAsync({
-                paymentId: payment.id,
-                debtId: debt.id,
-              });
+              await deletePaymentMutation.mutateAsync(payment.id);
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               Alert.alert('Thành công', 'Đã xóa khoản thanh toán!');
               onSuccess?.();

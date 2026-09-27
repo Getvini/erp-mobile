@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather, MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import {
   usePaymentRequestDetailQuery,
@@ -22,14 +22,24 @@ import {
   useBodDecidePaymentRequestMutation,
   usePayPaymentRequestMutation,
   useCancelPaymentRequestMutation,
+  useSupplementPaymentRequestMutation,
+  useUpdatePaymentRequestMutation,
 } from '@/hooks/queries/usePaymentRequests';
 import {
   APPROVAL_STATUS_CONFIG,
   PAYMENT_STATUS_CONFIG,
   PAYMENT_REQUEST_TYPE_LABELS,
+  paymentRequestService,
 } from '@/services/paymentRequestService';
 import { useAuthStore } from '@/stores/useAuthStore';
-import { formatVND, formatDateToDDMMYYYY } from '@/utils/formatters';
+import {
+  formatVND,
+  formatDateToDDMMYYYY,
+  formatNumberInput,
+  parseNumberInput,
+} from '@/utils/formatters';
+import { InvoiceUploadPicker, UploadedFileItem } from '@/components/payment-requests/InvoiceUploadPicker';
+import { DatePickerModal } from '@/components/common/DatePickerModal';
 
 export default function PaymentRequestDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -46,10 +56,18 @@ export default function PaymentRequestDetailScreen() {
   const bodDecideMutation = useBodDecidePaymentRequestMutation();
   const payMutation = usePayPaymentRequestMutation();
   const cancelMutation = useCancelPaymentRequestMutation();
+  const supplementMutation = useSupplementPaymentRequestMutation();
+  const updateMutation = useUpdatePaymentRequestMutation();
 
   // Dialog State for Action Notes
   const [modalAction, setModalAction] = useState<string | null>(null);
   const [actionNote, setActionNote] = useState('');
+  const [actionContent, setActionContent] = useState('');
+  const [actionAmount, setActionAmount] = useState('');
+  const [actionDueDate, setActionDueDate] = useState('');
+  const [actionFiles, setActionFiles] = useState<UploadedFileItem[]>([]);
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   if (isLoading) {
     return (
@@ -99,30 +117,12 @@ export default function PaymentRequestDetailScreen() {
 
   // RBAC Privileges (Single source of truth theo Master Plan)
   const userRole = (currentUser?.role || '').toUpperCase();
-  const isOwner = currentUser?.id === request.createdById;
+  const isOwner = currentUser?.id === (request.requesterId || request.createdById);
   const isBOD = ['ADMIN', 'DIRECTOR', 'BOD'].includes(userRole);
   const isReviewer = ['ADMIN', 'DIRECTOR', 'BOD', 'ADMIN_SALE', 'MANAGER'].includes(userRole);
   const isAccountant = ['ADMIN', 'DIRECTOR', 'BOD', 'ACCOUNTANT'].includes(userRole);
 
   // Handlers
-  const handleSubmitForReview = async () => {
-    Alert.alert('Gửi duyệt', 'Bạn có chắc chắn muốn gửi đề xuất này để phê duyệt?', [
-      { text: 'Hủy', style: 'cancel' },
-      {
-        text: 'Gửi duyệt',
-        onPress: async () => {
-          try {
-            await submitMutation.mutateAsync(request.id);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-            Alert.alert('Thành công', 'Đã gửi duyệt đề xuất thanh toán!');
-          } catch (err: any) {
-            Alert.alert('Lỗi', err?.message || 'Không thể gửi duyệt.');
-          }
-        },
-      },
-    ]);
-  };
-
   const handleDeleteDraft = async () => {
     Alert.alert('Xóa đề xuất', 'Bạn có chắc chắn muốn xóa bản nháp đề xuất này?', [
       { text: 'Hủy', style: 'cancel' },
@@ -142,8 +142,52 @@ export default function PaymentRequestDetailScreen() {
     ]);
   };
 
-  const handleReviewAction = (action: 'APPROVE' | 'REQUEST_MORE_DOCS' | 'REJECT') => {
+  const openActionModal = (action: string) => {
+    if (request) {
+      setActionContent(request.content || request.reason || request.title || '');
+      setActionAmount(formatNumberInput(request.amount));
+      setActionDueDate(request.confirmedDueDate || request.dueDate || '');
+    }
+    setActionFiles([]);
+    setActionNote('');
     setModalAction(action);
+  };
+
+  const handleReviewAction = (action: 'APPROVE' | 'REQUEST_MORE_DOCS' | 'REJECT') => {
+    openActionModal(action);
+  };
+
+  const resetActionModal = () => {
+    setModalAction(null);
+    setActionNote('');
+    setActionFiles([]);
+    if (request) {
+      setActionContent(request.content || request.reason || request.title || '');
+      setActionAmount(formatNumberInput(request.amount));
+      setActionDueDate(request.confirmedDueDate || request.dueDate || '');
+    }
+  };
+
+  const uploadActionFiles = async () => {
+    const uploaded: any[] = [];
+    for (const file of actionFiles) {
+      const formData = new FormData();
+      formData.append('file', {
+        uri: file.uri,
+        name: file.name,
+        type: file.type || 'application/octet-stream',
+      } as any);
+      const response = await paymentRequestService.uploadPaymentRequestInvoiceFile(formData);
+      if (response.error || !response.data) {
+        throw new Error(response.error || `Không thể tải tệp ${file.name}`);
+      }
+      uploaded.push({
+        ...(response.data as any),
+        name: (response.data as any).name || file.name,
+        fileType: file.type?.includes('pdf') ? 'PDF' : 'IMAGE',
+      });
+    }
+    return uploaded;
   };
 
   const executeModalAction = async () => {
@@ -152,17 +196,55 @@ export default function PaymentRequestDetailScreen() {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
-      if (['APPROVE', 'REQUEST_MORE_DOCS'].includes(modalAction)) {
+      if (['REJECT', 'REQUEST_MORE_DOCS', 'BOD_REJECT'].includes(modalAction) && !actionNote.trim()) {
+        Alert.alert('Thiếu thông tin', 'Vui lòng nhập lý do trước khi xác nhận.');
+        return;
+      }
+
+      if (['DRAFT_SUBMIT', 'SUPPLEMENT'].includes(modalAction)) {
+        const amount = parseNumberInput(actionAmount);
+        if (!actionContent.trim() || amount <= 0 || !actionDueDate) {
+          Alert.alert('Thiếu thông tin', 'Vui lòng nhập nội dung, số tiền và thời hạn thanh toán.');
+          return;
+        }
+
+        if (modalAction === 'DRAFT_SUBMIT') {
+          await updateMutation.mutateAsync({
+            id: request.id,
+            content: actionContent.trim(),
+            amount,
+            dueDate: actionDueDate,
+          });
+          await submitMutation.mutateAsync(request.id);
+        } else {
+          setIsUploading(true);
+          const uploaded = await uploadActionFiles();
+          await supplementMutation.mutateAsync({
+            id: request.id,
+            content: actionContent.trim(),
+            amount,
+            dueDate: actionDueDate,
+            note: actionNote.trim() || undefined,
+            addInvoiceImages: uploaded.filter((file) => file.fileType === 'IMAGE'),
+            addInvoicePdfs: uploaded.filter((file) => file.fileType === 'PDF'),
+          });
+        }
+      } else if (['APPROVE', 'REQUEST_MORE_DOCS', 'REJECT'].includes(modalAction)) {
         await reviewMutation.mutateAsync({
           id: request.id,
           action: modalAction,
           note: actionNote.trim() || undefined,
         });
       } else if (modalAction === 'BOD_APPROVE') {
+        if (!actionDueDate) {
+          Alert.alert('Thiếu thời hạn', 'Vui lòng xác nhận hạn thanh toán trước khi phê duyệt.');
+          return;
+        }
         await bodDecideMutation.mutateAsync({
           id: request.id,
           action: 'APPROVE',
           reason: actionNote.trim() || undefined,
+          confirmedDueDate: actionDueDate,
         });
       } else if (modalAction === 'BOD_REJECT') {
         await bodDecideMutation.mutateAsync({
@@ -171,8 +253,15 @@ export default function PaymentRequestDetailScreen() {
           reason: actionNote.trim() || undefined,
         });
       } else if (modalAction === 'PAY') {
+        if (actionFiles.length === 0) {
+          Alert.alert('Thiếu minh chứng', 'Vui lòng tải lên ảnh hoặc PDF minh chứng đã chi tiền.');
+          return;
+        }
+        setIsUploading(true);
+        const paymentProofs = await uploadActionFiles();
         await payMutation.mutateAsync({
           id: request.id,
+          paymentProofs,
           note: actionNote.trim() || undefined,
         });
       } else if (modalAction === 'CANCEL') {
@@ -182,13 +271,14 @@ export default function PaymentRequestDetailScreen() {
         });
       }
 
-      setModalAction(null);
-      setActionNote('');
+      resetActionModal();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       Alert.alert('Thành công', 'Thao tác phê duyệt đã được ghi nhận!');
       refetch();
     } catch (err: any) {
       Alert.alert('Thất bại', err?.message || 'Không thể xử lý yêu cầu.');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -197,9 +287,15 @@ export default function PaymentRequestDetailScreen() {
   const isApproved = request.approvalStatus === 'APPROVED';
   const isPaid = request.paymentStatus === 'PAID';
   const isDraft = request.approvalStatus === 'DRAFT';
+  const needsMoreDocs = request.approvalStatus === 'NEED_MORE_DOCS';
+  const invoiceFiles = [
+    ...(request.invoiceImages || []),
+    ...(request.invoicePdfs || []),
+    ...(request.invoiceFiles || []),
+  ];
 
   const hasAnyAction =
-    (isDraft && isOwner) ||
+    ((isDraft || needsMoreDocs) && isOwner) ||
     (isPendingReview && isReviewer) ||
     (isPendingBOD && isBOD) ||
     (isApproved && !isPaid && isAccountant);
@@ -225,9 +321,9 @@ export default function PaymentRequestDetailScreen() {
             onPress={() => router.back()}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={{
-              width: 36,
-              height: 36,
-              borderRadius: 18,
+              width: 48,
+              height: 48,
+              borderRadius: 24,
               backgroundColor: '#F1F5F9',
               alignItems: 'center',
               justifyContent: 'center',
@@ -327,7 +423,9 @@ export default function PaymentRequestDetailScreen() {
           {/* Title */}
           <View style={{ marginBottom: 10 }}>
             <Text style={{ fontSize: 11, color: '#64748B', marginBottom: 2 }}>Tiêu đề đề xuất</Text>
-            <Text style={{ fontSize: 14, fontWeight: '600', color: '#0F172A' }}>{request.title}</Text>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: '#0F172A' }}>
+              {request.content || request.title || 'Chưa cập nhật nội dung'}
+            </Text>
           </View>
 
           {/* Type */}
@@ -348,11 +446,34 @@ export default function PaymentRequestDetailScreen() {
             </View>
           )}
 
+          {request.vendor?.name && (
+            <View style={{ marginBottom: 10 }}>
+              <Text style={{ fontSize: 11, color: '#64748B', marginBottom: 2 }}>Nhà cung cấp</Text>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#334155' }}>{request.vendor.name}</Text>
+              {(request.costPrice !== undefined || request.vendorCost !== undefined) && (
+                <Text style={{ marginTop: 2, fontSize: 12, color: '#F38820', fontWeight: '700' }}>
+                  Giá vốn công việc: {formatVND(request.costPrice ?? request.vendorCost)}
+                </Text>
+              )}
+            </View>
+          )}
+
+          {(request.confirmedDueDate || request.dueDate) && (
+            <View style={{ marginBottom: 10 }}>
+              <Text style={{ fontSize: 11, color: '#64748B', marginBottom: 2 }}>
+                {request.confirmedDueDate ? 'Hạn thanh toán (BOD xác nhận)' : 'Hạn thanh toán'}
+              </Text>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#334155' }}>
+                {formatDateToDDMMYYYY(request.confirmedDueDate || request.dueDate)}
+              </Text>
+            </View>
+          )}
+
           {/* Requester */}
           <View style={{ marginBottom: 10 }}>
             <Text style={{ fontSize: 11, color: '#64748B', marginBottom: 2 }}>Người đề xuất</Text>
             <Text style={{ fontSize: 13, fontWeight: '500', color: '#334155' }}>
-              {request.requestedBy?.fullName || 'Không xác định'}
+              {request.requester?.fullName || request.requestedBy?.fullName || 'Không xác định'}
             </Text>
           </View>
 
@@ -364,6 +485,54 @@ export default function PaymentRequestDetailScreen() {
             </View>
           ) : null}
         </View>
+
+        {(request.paidAt || (request.paymentProofs?.length || 0) > 0) && (
+          <View
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: 14,
+              padding: 16,
+              marginBottom: 14,
+              borderWidth: 1,
+              borderColor: '#BBF7D0',
+            }}
+          >
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#166534', marginBottom: 10 }}>
+              Minh Chứng Thanh Toán ({request.paymentProofs?.length || 0})
+            </Text>
+            {request.paidAt && (
+              <Text style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>
+                Ngày chi: <Text style={{ fontWeight: '700' }}>{formatDateToDDMMYYYY(request.paidAt)}</Text>
+              </Text>
+            )}
+            <View style={{ gap: 8 }}>
+              {(request.paymentProofs || []).map((file, index) => (
+                <TouchableOpacity
+                  key={file.id || file.url || index}
+                  onPress={() => file.url && Linking.openURL(file.url)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Mở minh chứng thanh toán ${file.name || index + 1}`}
+                  style={{
+                    minHeight: 48,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 12,
+                    backgroundColor: '#F0FDF4',
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: '#BBF7D0',
+                  }}
+                >
+                  <Feather name="check-circle" size={18} color="#16A34A" />
+                  <Text numberOfLines={1} style={{ flex: 1, marginLeft: 8, fontSize: 13, color: '#166534' }}>
+                    {file.name || `Minh chứng ${index + 1}`}
+                  </Text>
+                  <Feather name="external-link" size={15} color="#16A34A" />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Beneficiary Card */}
         {(request.beneficiaryName || request.beneficiaryAccount) && (
@@ -410,16 +579,16 @@ export default function PaymentRequestDetailScreen() {
           }}
         >
           <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E293B', marginBottom: 10 }}>
-            Hóa Đơn / Chứng Từ Đính Kèm ({request.invoiceFiles?.length || 0})
+            Hóa Đơn / Chứng Từ Đính Kèm ({invoiceFiles.length})
           </Text>
 
-          {(!request.invoiceFiles || request.invoiceFiles.length === 0) ? (
+          {invoiceFiles.length === 0 ? (
             <Text style={{ fontSize: 12, color: '#94A3B8' }}>Không có tài liệu đính kèm.</Text>
           ) : (
             <View style={{ gap: 8 }}>
-              {request.invoiceFiles.map((file, idx) => (
+              {invoiceFiles.map((file, idx) => (
                 <TouchableOpacity
-                  key={file.id || idx}
+                  key={file.id || file.url}
                   onPress={() => file.url && Linking.openURL(file.url)}
                   style={{
                     flexDirection: 'row',
@@ -460,7 +629,7 @@ export default function PaymentRequestDetailScreen() {
 
             <View style={{ gap: 12 }}>
               {request.history.map((h, i) => (
-                <View key={h.id || i} style={{ flexDirection: 'row', gap: 10 }}>
+                <View key={h.id || `${h.action}-${h.createdAt}`} style={{ flexDirection: 'row', gap: 10 }}>
                   <View style={{ alignItems: 'center' }}>
                     <View
                       style={{
@@ -536,7 +705,7 @@ export default function PaymentRequestDetailScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={handleSubmitForReview}
+                onPress={() => openActionModal('DRAFT_SUBMIT')}
                 style={{
                   flex: 2,
                   height: 48,
@@ -546,9 +715,27 @@ export default function PaymentRequestDetailScreen() {
                   justifyContent: 'center',
                 }}
               >
-                <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>Gửi phê duyệt</Text>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>
+                  {request.isAutoGenerated ? 'Kiểm tra & gửi duyệt' : 'Sửa & gửi duyệt'}
+                </Text>
               </TouchableOpacity>
             </>
+          )}
+
+          {needsMoreDocs && isOwner && (
+            <TouchableOpacity
+              onPress={() => openActionModal('SUPPLEMENT')}
+              style={{
+                flex: 1,
+                height: 48,
+                borderRadius: 10,
+                backgroundColor: '#F38820',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>Bổ sung hồ sơ</Text>
+            </TouchableOpacity>
           )}
 
           {/* Reviewer / Admin Sale Actions */}
@@ -590,7 +777,7 @@ export default function PaymentRequestDetailScreen() {
           {isPendingBOD && isBOD && (
             <>
               <TouchableOpacity
-                onPress={() => setModalAction('BOD_REJECT')}
+                onPress={() => openActionModal('BOD_REJECT')}
                 style={{
                   flex: 1,
                   height: 48,
@@ -606,7 +793,7 @@ export default function PaymentRequestDetailScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => setModalAction('BOD_APPROVE')}
+                onPress={() => openActionModal('BOD_APPROVE')}
                 style={{
                   flex: 1.5,
                   height: 48,
@@ -624,7 +811,7 @@ export default function PaymentRequestDetailScreen() {
           {/* Accountant Payment Action */}
           {isApproved && !isPaid && isAccountant && (
             <TouchableOpacity
-              onPress={() => setModalAction('PAY')}
+              onPress={() => openActionModal('PAY')}
               style={{
                 flex: 1,
                 height: 48,
@@ -644,27 +831,34 @@ export default function PaymentRequestDetailScreen() {
 
       {/* Action Dialog / Note Modal */}
       {modalAction && (
-        <Modal visible transparent animationType="fade" onRequestClose={() => setModalAction(null)}>
+        <Modal visible transparent animationType="slide" onRequestClose={resetActionModal}>
           <View
             style={{
               flex: 1,
               backgroundColor: 'rgba(15, 23, 42, 0.65)',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 20,
+              justifyContent: 'flex-end',
             }}
           >
-            <View
-              style={{
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{
                 backgroundColor: '#FFFFFF',
-                borderRadius: 16,
+                borderTopLeftRadius: 24,
+                borderTopRightRadius: 24,
                 padding: 20,
-                width: '100%',
-                maxWidth: 400,
+                paddingBottom: Math.max(insets.bottom, 16) + 8,
+              }}
+              style={{
+                maxHeight: '88%',
               }}
             >
+              <View style={{ width: 44, height: 4, borderRadius: 2, backgroundColor: '#CBD5E1', alignSelf: 'center', marginBottom: 16 }} />
               <Text style={{ fontSize: 16, fontWeight: '700', color: '#0F172A', marginBottom: 10 }}>
-                {modalAction === 'APPROVE'
+                {modalAction === 'DRAFT_SUBMIT'
+                  ? request.isAutoGenerated ? 'Kiểm tra nháp tự sinh' : 'Sửa bản nháp'
+                  : modalAction === 'SUPPLEMENT'
+                  ? 'Bổ sung hồ sơ theo yêu cầu'
+                  : modalAction === 'APPROVE'
                   ? 'Ghi chú duyệt đề xuất'
                   : modalAction === 'REQUEST_MORE_DOCS'
                   ? 'Nội dung yêu cầu bổ sung'
@@ -675,10 +869,75 @@ export default function PaymentRequestDetailScreen() {
                   : 'Ghi chú thao tác'}
               </Text>
 
+              {['DRAFT_SUBMIT', 'SUPPLEMENT'].includes(modalAction) && (
+                <View style={{ gap: 12, marginBottom: 14 }}>
+                  <View>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#334155', marginBottom: 6 }}>Nội dung chi *</Text>
+                    <TextInput
+                      value={actionContent}
+                      onChangeText={setActionContent}
+                      placeholder="Nhập nội dung đề xuất"
+                      multiline
+                      style={{ minHeight: 76, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, padding: 12, textAlignVertical: 'top', color: '#0F172A' }}
+                    />
+                  </View>
+                  <View>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#334155', marginBottom: 6 }}>Số tiền *</Text>
+                    <TextInput
+                      value={actionAmount}
+                      onChangeText={(value) => setActionAmount(formatNumberInput(value))}
+                      keyboardType="numeric"
+                      placeholder="0"
+                      style={{ minHeight: 48, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, paddingHorizontal: 12, color: '#0F172A', fontWeight: '700' }}
+                    />
+                  </View>
+                  <View>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#334155', marginBottom: 6 }}>Thời hạn thanh toán *</Text>
+                    <TouchableOpacity
+                      onPress={() => setDatePickerVisible(true)}
+                      accessibilityRole="button"
+                      style={{ minHeight: 48, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+                    >
+                      <Text style={{ color: actionDueDate ? '#0F172A' : '#94A3B8' }}>
+                        {actionDueDate ? formatDateToDDMMYYYY(actionDueDate) : 'Chọn ngày'}
+                      </Text>
+                      <Feather name="calendar" size={18} color="#F38820" />
+                    </TouchableOpacity>
+                  </View>
+                  {modalAction === 'SUPPLEMENT' && (
+                    <InvoiceUploadPicker files={actionFiles} onChange={setActionFiles} maxFiles={5} />
+                  )}
+                </View>
+              )}
+
+              {modalAction === 'BOD_APPROVE' && (
+                <View style={{ marginBottom: 14 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#334155', marginBottom: 6 }}>Hạn thanh toán BOD xác nhận *</Text>
+                  <TouchableOpacity
+                    onPress={() => setDatePickerVisible(true)}
+                    style={{ minHeight: 48, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+                  >
+                    <Text style={{ color: actionDueDate ? '#0F172A' : '#94A3B8' }}>
+                      {actionDueDate ? formatDateToDDMMYYYY(actionDueDate) : 'Chọn ngày'}
+                    </Text>
+                    <Feather name="calendar" size={18} color="#F38820" />
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {modalAction === 'PAY' && (
+                <View style={{ marginBottom: 14 }}>
+                  <Text style={{ fontSize: 12, color: '#64748B', lineHeight: 18 }}>
+                    Minh chứng ảnh/PDF là bắt buộc trước khi xác nhận đã chi tiền.
+                  </Text>
+                  <InvoiceUploadPicker files={actionFiles} onChange={setActionFiles} maxFiles={5} />
+                </View>
+              )}
+
               <TextInput
                 value={actionNote}
                 onChangeText={setActionNote}
-                placeholder="Nhập ghi chú hoặc lý do nếu có..."
+                placeholder={['REJECT', 'REQUEST_MORE_DOCS', 'BOD_REJECT'].includes(modalAction) ? 'Nhập lý do bắt buộc...' : 'Nhập ghi chú nếu có...'}
                 placeholderTextColor="#94A3B8"
                 multiline
                 numberOfLines={3}
@@ -698,12 +957,11 @@ export default function PaymentRequestDetailScreen() {
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <TouchableOpacity
                   onPress={() => {
-                    setModalAction(null);
-                    setActionNote('');
+                    resetActionModal();
                   }}
                   style={{
                     flex: 1,
-                    height: 42,
+                    height: 48,
                     borderRadius: 8,
                     borderWidth: 1,
                     borderColor: '#CBD5E1',
@@ -716,22 +974,37 @@ export default function PaymentRequestDetailScreen() {
 
                 <TouchableOpacity
                   onPress={executeModalAction}
+                  disabled={isUploading || supplementMutation.isPending || updateMutation.isPending || payMutation.isPending}
                   style={{
                     flex: 1,
-                    height: 42,
+                    height: 48,
                     borderRadius: 8,
                     backgroundColor: modalAction.includes('REJECT') ? '#DC2626' : '#F38820',
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
                 >
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFF' }}>Xác nhận</Text>
+                  {(isUploading || supplementMutation.isPending || updateMutation.isPending || payMutation.isPending) ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFF' }}>Xác nhận</Text>
+                  )}
                 </TouchableOpacity>
               </View>
-            </View>
+            </ScrollView>
           </View>
         </Modal>
       )}
+      <DatePickerModal
+        visible={datePickerVisible}
+        title="Chọn hạn thanh toán"
+        initialDate={actionDueDate}
+        onClose={() => setDatePickerVisible(false)}
+        onConfirm={(_, apiDate) => {
+          setActionDueDate(apiDate);
+          setDatePickerVisible(false);
+        }}
+      />
     </View>
   );
 }

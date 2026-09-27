@@ -8,6 +8,10 @@ import {
   Alert,
   Linking,
   RefreshControl,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -48,6 +52,7 @@ import { DocumentPreviewModal } from '@/components/common/DocumentPreviewModal';
 import {
   useOpportunityDetailQuery,
   useApproveOpportunityMutation,
+  useRejectOpportunityMutation,
   useUpdateOpportunityMutation,
 } from '@/hooks/queries/useOpportunities';
 import {
@@ -137,12 +142,14 @@ export default function OpportunityDetailScreen() {
 
   const updateOpportunityMutation = useUpdateOpportunityMutation();
   const approveOpportunityMutation = useApproveOpportunityMutation();
+  const rejectOpportunityMutation = useRejectOpportunityMutation();
   const createContractMutation = useCreateContractMutation();
   const updateCustomerMutation = useUpdateCustomerMutation();
   const approveQuotationMutation = useApproveQuotationMutation();
   const rejectQuotationMutation = useRejectQuotationMutation();
 
   const isApproving = approveOpportunityMutation.isPending;
+  const isRejecting = rejectOpportunityMutation.isPending;
   const isCreatingContract = createContractMutation.isPending;
 
   // Tab Segment State
@@ -150,6 +157,8 @@ export default function OpportunityDetailScreen() {
 
   // Customer Assign Modal State
   const [isCustomerModalVisible, setIsCustomerModalVisible] = useState(false);
+  const [isRejectModalVisible, setIsRejectModalVisible] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
 
   // Document Preview Modal State
   const [previewUrl, setPreviewUrl] = useState('');
@@ -331,6 +340,23 @@ export default function OpportunityDetailScreen() {
         },
       ]
     );
+  };
+
+  const handleRejectOpportunity = async () => {
+    const reason = rejectReason.trim();
+    if (!reason) {
+      Alert.alert('Thiếu lý do', 'Vui lòng nhập lý do từ chối cơ hội.');
+      return;
+    }
+    if (!id) return;
+    try {
+      await rejectOpportunityMutation.mutateAsync({ id, reason });
+      setIsRejectModalVisible(false);
+      setRejectReason('');
+      Alert.alert('Đã từ chối', 'Cơ hội đã được từ chối và danh sách đã được cập nhật.');
+    } catch (err: any) {
+      Alert.alert('Lỗi', err?.message || 'Không thể từ chối cơ hội.');
+    }
   };
 
   // BOD Approve Quotation Action
@@ -1057,38 +1083,104 @@ export default function OpportunityDetailScreen() {
         onClose={() => setIsPreviewVisible(false)}
       />
 
+      <Modal
+        visible={isRejectModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsRejectModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          className="flex-1 justify-end bg-black/60"
+        >
+          <View className="rounded-t-[28px] bg-white px-5 pt-3 pb-6">
+            <View className="h-1 w-11 self-center rounded-full bg-slate-300 mb-4" />
+            <Text className="text-lg font-extrabold text-slate-900">Từ chối cơ hội</Text>
+            <Text className="text-sm text-slate-500 mt-1 mb-4">
+              Lý do sẽ được lưu vào lịch sử và gửi đến người phụ trách cơ hội.
+            </Text>
+            <TextInput
+              value={rejectReason}
+              onChangeText={setRejectReason}
+              placeholder="Nhập lý do từ chối..."
+              placeholderTextColor="#94A3B8"
+              multiline
+              autoFocus
+              className="min-h-[112px] rounded-2xl border border-slate-300 bg-slate-50 p-3 text-sm text-slate-900"
+              style={{ textAlignVertical: 'top' }}
+              accessibilityLabel="Lý do từ chối cơ hội"
+            />
+            <View className="flex-row gap-3 mt-4">
+              <TouchableOpacity
+                className="h-12 flex-1 items-center justify-center rounded-xl border border-slate-300 bg-white"
+                onPress={() => {
+                  setIsRejectModalVisible(false);
+                  setRejectReason('');
+                }}
+              >
+                <Text className="font-bold text-slate-600">Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className={`h-12 flex-[1.4] flex-row items-center justify-center gap-2 rounded-xl bg-red-600 ${isRejecting ? 'opacity-60' : ''}`}
+                onPress={handleRejectOpportunity}
+                disabled={isRejecting}
+              >
+                {isRejecting ? <ActivityIndicator color="#FFFFFF" /> : <Feather name="x-circle" size={18} color="#FFFFFF" />}
+                <Text className="font-extrabold text-white">Xác nhận từ chối</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       {/* 12. STICKY BOTTOM BAR: NÚT DUYỆT CƠ HỘI CHO BOD / ADMIN */}
       {isAdminOrBod && isAwaitingApproval && (
         <View className="p-4 bg-white border-t border-slate-200">
           {hasCustomer ? (
-            <TouchableOpacity
-              className={`flex-row items-center justify-center gap-2 bg-primary py-3.5 rounded-2xl shadow-lg ${
-                isApproving ? 'opacity-60' : ''
-              }`}
-              onPress={handleApproveOpportunity}
-              disabled={isApproving}
-              activeOpacity={0.85}
-            >
-              {isApproving ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <Feather name="check-circle" size={18} color="#FFFFFF" />
-                  <Text className="text-[15px] font-extrabold text-white">Phê duyệt cơ hội này</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            <View className="flex-row gap-3">
+              <TouchableOpacity
+                className="h-12 flex-1 flex-row items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50"
+                onPress={() => setIsRejectModalVisible(true)}
+                disabled={isApproving || isRejecting}
+              >
+                <Feather name="x-circle" size={18} color="#DC2626" />
+                <Text className="text-sm font-extrabold text-red-600">Từ chối</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className={`h-12 flex-[1.5] flex-row items-center justify-center gap-2 bg-primary rounded-2xl shadow-lg ${
+                  isApproving ? 'opacity-60' : ''
+                }`}
+                onPress={handleApproveOpportunity}
+                disabled={isApproving || isRejecting}
+                activeOpacity={0.85}
+              >
+                {isApproving ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Feather name="check-circle" size={18} color="#FFFFFF" />
+                    <Text className="text-sm font-extrabold text-white">Phê duyệt</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
           ) : (
-            <TouchableOpacity
-              className="flex-row items-center justify-center gap-2 bg-amber-600 py-3.5 rounded-2xl shadow-lg"
-              onPress={() => setIsCustomerModalVisible(true)}
-              activeOpacity={0.85}
-            >
-              <Feather name="user-plus" size={17} color="#FFFFFF" />
-              <Text className="text-[15px] font-extrabold text-white">
-                Thêm khách hàng để duyệt cơ hội
-              </Text>
-            </TouchableOpacity>
+            <View className="flex-row gap-3">
+              <TouchableOpacity
+                className="h-12 flex-1 items-center justify-center rounded-2xl border border-red-200 bg-red-50"
+                onPress={() => setIsRejectModalVisible(true)}
+              >
+                <Text className="text-sm font-extrabold text-red-600">Từ chối</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="h-12 flex-[1.8] flex-row items-center justify-center gap-2 bg-amber-600 rounded-2xl shadow-lg"
+                onPress={() => setIsCustomerModalVisible(true)}
+                activeOpacity={0.85}
+              >
+                <Feather name="user-plus" size={17} color="#FFFFFF" />
+                <Text className="text-sm font-extrabold text-white">Thêm khách hàng để duyệt</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       )}
