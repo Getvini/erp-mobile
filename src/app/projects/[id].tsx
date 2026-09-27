@@ -35,6 +35,7 @@ import TaskAssignModal from '@/components/projects/TaskAssignModal';
 import CreateMonthlyWorkModal from '@/components/projects/CreateMonthlyWorkModal';
 import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { safeGoBack } from '@/utils/navigation';
+import { getProjectManagerUser, hasTeamMemberRole } from '@/utils/teamMember';
 import {
   useProjectDetailQuery,
   useTeamMembersQuery,
@@ -102,14 +103,13 @@ export default function ProjectDetailScreen() {
     : (project?.team?.members || []);
 
   const isAdminOrBod = isManagementRole(user?.role);
-  const assignedPmId =
-    project?.projectManager?.id ||
-    effectiveTeamMembers.find((m) => m.role === 'PROJECT_MANAGER' || m.role === 'PM')?.user?.id;
+  const assignedPm = getProjectManagerUser(project, effectiveTeamMembers);
+  const assignedPmId = assignedPm?.id;
   const isAssignedPm = !!user?.id && !!assignedPmId && assignedPmId === user.id;
   const leadUser =
     project?.team?.teamLead ||
     effectiveTeamMembers.find(
-      (m) => (m.role === 'LEAD' || m.role === 'ACCOUNT' || m.role === 'TEAM_LEAD') && m.user?.id !== assignedPmId
+      (m) => hasTeamMemberRole(m, 'LEAD') && m.user?.id !== assignedPmId
     )?.user;
   const isCurrentTeamLead = !!user?.id && !!leadUser?.id && user.id === leadUser.id;
   const isAdmin = user?.role === 'ADMIN';
@@ -132,6 +132,41 @@ export default function ProjectDetailScreen() {
 
   const handleRemoveMember = async (memberId: string) => {
     if (!project?.team?.id) return;
+
+    // Check if member to remove holds the ACCOUNT role and is the last one in the project
+    const memberToRemove = effectiveTeamMembers.find(
+      (m: any) =>
+        m.id === memberId ||
+        (Array.isArray(m.memberships) && m.memberships.some((ms: any) => ms.id === memberId))
+    );
+    const targetUserId = memberToRemove?.user?.id || memberToRemove?.userId;
+
+    const hasAccountRole =
+      (memberToRemove &&
+        (hasTeamMemberRole(memberToRemove, 'ACCOUNT') ||
+          (Array.isArray(memberToRemove.roles) &&
+            memberToRemove.roles.some((r: any) => (typeof r === 'string' ? r : r?.role) === 'ACCOUNT')))) ||
+      (targetUserId && targetUserId === leadUser?.id);
+
+    if (hasAccountRole) {
+      const otherAccountsCount = effectiveTeamMembers.filter((m: any) => {
+        const uId = m.user?.id || m.userId;
+        if (uId === targetUserId) return false;
+        const roles = Array.isArray(m.roles)
+          ? m.roles.map((r: any) => (typeof r === 'string' ? r : r?.role))
+          : getTeamMemberRoles(m);
+        return roles.includes('ACCOUNT') || (leadUser?.id && uId === leadUser.id);
+      }).length;
+
+      if (otherAccountsCount === 0) {
+        Alert.alert(
+          'Không thể xóa',
+          'Không thể xóa nhân sự này vì đây là người duy nhất giữ vai trò Account/Lead trong đội dự án. Vui lòng phân công nhân sự khác giữ vai trò này trước khi xóa.'
+        );
+        return;
+      }
+    }
+
     Alert.alert('Xác nhận xóa', 'Bạn có chắc chắn muốn xóa nhân sự này khỏi đội dự án?', [
       { text: 'Hủy', style: 'cancel' },
       {
@@ -295,46 +330,46 @@ export default function ProjectDetailScreen() {
       </View>
 
       {/* Tab Switcher */}
-      <View className="flex-row bg-white border-b border-slate-200 px-1">
-        <TouchableOpacity
-          className={`flex-1 items-center py-3 border-b-2 ${activeTab === 'OVERVIEW' ? 'border-primary' : 'border-transparent'}`}
-          onPress={() => setActiveTab('OVERVIEW')}
-          activeOpacity={0.7}
+      <View className="bg-white border-b border-slate-200 px-3 py-2.5">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}
         >
-          <Text className={`text-[12px] sm:text-[13px] ${activeTab === 'OVERVIEW' ? 'text-primary font-bold' : 'text-slate-500 font-semibold'}`}>
-            Tổng quan
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          className={`flex-1 items-center py-3 border-b-2 ${activeTab === 'PRODUCT_DESC' ? 'border-primary' : 'border-transparent'}`}
-          onPress={() => setActiveTab('PRODUCT_DESC')}
-          activeOpacity={0.7}
-        >
-          <Text className={`text-[12px] sm:text-[13px] ${activeTab === 'PRODUCT_DESC' ? 'text-primary font-bold' : 'text-slate-500 font-semibold'}`}>
-            Thông tin chuẩn
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          className={`flex-1 items-center py-3 border-b-2 ${activeTab === 'TASKS' ? 'border-primary' : 'border-transparent'}`}
-          onPress={() => setActiveTab('TASKS')}
-          activeOpacity={0.7}
-        >
-          <Text className={`text-[12px] sm:text-[13px] ${activeTab === 'TASKS' ? 'text-primary font-bold' : 'text-slate-500 font-semibold'}`}>
-            Công việc ({tasks.length})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          className={`flex-1 items-center py-3 border-b-2 ${activeTab === 'ACCEPTANCE' ? 'border-primary' : 'border-transparent'}`}
-          onPress={() => setActiveTab('ACCEPTANCE')}
-          activeOpacity={0.7}
-        >
-          <Text className={`text-[12px] sm:text-[13px] ${activeTab === 'ACCEPTANCE' ? 'text-primary font-bold' : 'text-slate-500 font-semibold'}`}>
-            Nghiệm thu ({acceptances.length})
-          </Text>
-        </TouchableOpacity>
+          {[
+            { key: 'OVERVIEW', label: 'Tổng quan', icon: 'grid' },
+            { key: 'PRODUCT_DESC', label: 'Thông tin chuẩn', icon: 'file-text' },
+            { key: 'TASKS', label: `Công việc (${tasks.length})`, icon: 'check-square' },
+            { key: 'ACCEPTANCE', label: `Nghiệm thu (${acceptances.length})`, icon: 'award' },
+          ].map((tab) => {
+            const isActive = activeTab === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                onPress={() => setActiveTab(tab.key as any)}
+                activeOpacity={0.7}
+                className={`flex-row items-center gap-1.5 px-3.5 py-2 rounded-xl border ${
+                  isActive
+                    ? 'bg-orange-50 border-primary'
+                    : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <Feather
+                  name={tab.icon as any}
+                  size={13}
+                  color={isActive ? BrandColors.primary : '#64748B'}
+                />
+                <Text
+                  className={`text-xs ${
+                    isActive ? 'text-primary font-bold' : 'text-slate-600 font-semibold'
+                  }`}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* Main Content Area */}
@@ -483,9 +518,11 @@ export default function ProjectDetailScreen() {
               onClose={() => setShowAddTeamMember(false)}
               teamId={project.team.id}
               existingMemberUserIds={
-                project.team.members?.map((m) => m.user?.id).filter((uid): uid is string => !!uid) || []
+                effectiveTeamMembers.map((m) => m.user?.id).filter((uid): uid is string => !!uid) || []
               }
+              existingMembers={effectiveTeamMembers}
               existingLeadName={leadUser?.fullName}
+              existingLeadUserId={leadUser?.id}
               onSuccess={() => {
                 loadProjectDetail();
               }}
@@ -503,6 +540,7 @@ export default function ProjectDetailScreen() {
               member={editingMember}
               existingLeadName={leadUser?.fullName}
               existingLeadUserId={leadUser?.id}
+              existingMembers={effectiveTeamMembers}
               onSuccess={() => {
                 loadProjectDetail();
               }}

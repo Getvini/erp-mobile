@@ -17,6 +17,7 @@ export interface CompanyUser {
   fullName: string;
   email?: string;
   role?: string;
+  workload?: any;
 }
 
 export const TEAM_MEMBER_ROLE = {
@@ -37,7 +38,7 @@ export const TEAM_MEMBER_ROLE_LABELS: Record<string, string> = {
   GRAPHIC_DESIGNER: 'Thiết kế đồ họa',
   CAMERAMAN: 'Quay phim',
   PROJECT_MANAGER: 'Quản lý dự án',
-  ACCOUNT: 'Lead dự án',
+  ACCOUNT: 'Account dự án',
   SCRIPTER: 'Biên kịch',
   SOCIAL_MEDIA_MANAGER: 'Quản lý MXH',
   SEO_SPECIALIST: 'Chuyên viên SEO',
@@ -62,14 +63,27 @@ export const teamService = {
     return { data: Array.isArray(data) ? (data as any[]) : [], error: res.error };
   },
 
-  async getTeamMembers(teamId: string) {
-    const res = await apiService.get(`/teams/${teamId}/members`);
-    const data = res.data?.data || res.data || [];
+  async getTeamMembers(teamId: string, month?: number, year?: number) {
+    const now = new Date();
+    const m = month || now.getMonth() + 1;
+    const y = year || now.getFullYear();
+    const res = await apiService.get(`/teams/${teamId}/members`, { month: m, year: y });
+    const data = res.data || res.data?.data || [];
     return { data: Array.isArray(data) ? (data as TeamMember[]) : [], error: res.error };
   },
 
-  async addTeamMember(teamId: string, userId: string, role: string) {
-    const res = await apiService.post(`/teams/${teamId}/members`, { userId, role });
+  async addTeamMember(teamId: string, userId: string, role?: string, roles?: string[]) {
+    const roleList = roles && roles.length > 0 ? roles : (role ? [role] : []);
+    const res = await apiService.post(`/teams/${teamId}/members`, {
+      userId,
+      role: roleList[0],
+      roles: roleList,
+    });
+    return { data: res.data?.data || res.data, error: res.error };
+  },
+
+  async updateTeamMemberRoles(teamId: string, userId: string, roles: string[]) {
+    const res = await apiService.put(`/teams/${teamId}/members/${userId}/roles`, { roles });
     return { data: res.data?.data || res.data, error: res.error };
   },
 
@@ -87,8 +101,11 @@ export const teamService = {
     return { data: res.data?.data || res.data, error: res.error };
   },
 
-  async getAvailableUsers() {
-    const res = await apiService.get('/users', { limit: 100 });
+  async getAvailableUsers(month?: number, year?: number) {
+    const now = new Date();
+    const m = month || now.getMonth() + 1;
+    const y = year || now.getFullYear();
+    const res = await apiService.get('/users', { limit: 100, month: m, year: y });
     const data = res.data?.data || res.data || [];
     return { data: Array.isArray(data) ? (data as CompanyUser[]) : [], error: res.error };
   },

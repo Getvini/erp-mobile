@@ -53,7 +53,7 @@ export default function ProjectAcceptanceTab({
         <View className="flex-row items-start gap-2.5 bg-orange-50 border border-orange-200 rounded-2xl p-3.5">
           <Feather name="lock" size={18} color="#C2410C" />
           <View className="flex-1">
-            <Text className="text-sm font-bold text-orange-800 mb-0.5">Dự án chưa được Lead chấp nhận</Text>
+            <Text className="text-sm font-bold text-orange-800 mb-0.5">Dự án chưa được Account chấp nhận</Text>
             <Text className="text-xs text-orange-950 leading-5">
               Chưa thể tạo hoặc yêu cầu nghiệm thu mới cho tới khi PM chấp nhận dự án.
             </Text>

@@ -280,7 +280,7 @@ export default function CustomerDetailScreen() {
                 <Feather name="file-text" size={36} color="#CBD5E1" />
                 <Text className="text-sm font-bold text-slate-600">Chưa có hợp đồng nào</Text>
                 <Text className="text-xs text-slate-400 text-center">
-                  Khách hàng này hiện chưa có phụ lục hoặc hợp đồng kinh tế nào trong hệ thống.
+                  Khách hàng này hiện chưa có phụ lục hoặc hợp đồng nào trong hệ thống.
                 </Text>
               </View>
             )}

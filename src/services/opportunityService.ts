@@ -155,6 +155,7 @@ export interface OpportunityItem {
     name?: string;
     status?: string;
     sellingPrice?: number;
+    totalWithVat?: number;
   }>;
   creator?: {
     id: string;

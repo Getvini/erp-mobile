@@ -329,7 +329,10 @@ export function useTeamMembersQuery(teamId?: string) {
     queryKey: ['teams', 'members', teamId],
     queryFn: async () => {
       if (!teamId) return [];
-      const res = await teamService.getTeamMembers(teamId);
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const year = now.getFullYear();
+      const res = await teamService.getTeamMembers(teamId, month, year);
       if (res.error) {
         throw new Error(res.error);
       }
@@ -369,13 +372,17 @@ export function useUpdateTeamMemberRoleMutation() {
 }
 
 /**
- * Hook to fetch available company users for project team
+ * Hook to fetch available company users for project team with workload
  */
 export function useAvailableUsersQuery() {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+
   return useQuery({
-    queryKey: ['users', 'available'],
+    queryKey: ['users', 'available', month, year],
     queryFn: async () => {
-      const res = await teamService.getAvailableUsers();
+      const res = await teamService.getAvailableUsers(month, year);
       if (res.error) {
         throw new Error(res.error);
       }
@@ -395,12 +402,43 @@ export function useAddTeamMemberMutation() {
       teamId,
       userId,
       role,
+      roles,
     }: {
       teamId: string;
       userId: string;
-      role: string;
+      role?: string;
+      roles?: string[];
     }) => {
-      const res = await teamService.addTeamMember(teamId, userId, role);
+      const res = await teamService.addTeamMember(teamId, userId, role, roles);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+      queryClient.invalidateQueries({ queryKey: ['teams', 'members', variables.teamId] });
+    },
+  });
+}
+
+/**
+ * Hook to update team member roles (multi-role)
+ */
+export function useUpdateTeamMemberRolesMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      teamId,
+      userId,
+      roles,
+    }: {
+      teamId: string;
+      userId: string;
+      roles: string[];
+    }) => {
+      const res = await teamService.updateTeamMemberRoles(teamId, userId, roles);
       if (res.error) {
         throw new Error(res.error);
       }

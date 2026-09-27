@@ -464,8 +464,13 @@ export default function OpportunityDetailScreen() {
 
   const draftCount = quotations.filter((q) => q.status === 'DRAFT').length;
   const showBadge = draftCount > 0;
+  const hasApprovedQuotation =
+    opportunity.status === 'QUOTE_APPROVED' ||
+    opportunity.status === 'CONTRACT_CREATED' ||
+    quotations.some((q) => q.status === 'APPROVED' || q.status === 'QUOTE_APPROVED');
 
   const canCreateQuotation =
+    !hasApprovedQuotation &&
     hasCustomer &&
     (opportunity.status === 'QUOTATION_DRAFTING' ||
       opportunity.status === 'PENDING_QUOTE_APPROVAL' ||
@@ -913,6 +918,7 @@ export default function OpportunityDetailScreen() {
               opportunityId={id as string}
               opportunityName={opportunity.name}
               opportunityDescription={opportunity.description}
+              opportunityStatus={opportunity.status}
               onContractCreated={(newContractId) => {
                 refetchAll();
                 router.push({
@@ -968,9 +974,9 @@ export default function OpportunityDetailScreen() {
                     {linkedContract.name || opportunity.name}
                   </Text>
                 </View>
-                {linkedContract.sellingPrice ? (
+                {linkedContract.totalWithVat ? (
                   <Text className="text-sm font-extrabold text-emerald-600">
-                    {formatVNDFull(linkedContract.sellingPrice)}
+                    {formatVNDFull(linkedContract.totalWithVat)}
                   </Text>
                 ) : null}
               </View>

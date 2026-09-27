@@ -9,21 +9,24 @@ import {
   Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { TeamMember, TEAM_MEMBER_ROLE_LABELS } from '@/services/teamService';
-import { useUpdateTeamMemberRoleMutation } from '@/hooks/queries/useProjects';
+import { TEAM_MEMBER_ROLE_LABELS } from '@/services/teamService';
+import { useUpdateTeamMemberRolesMutation } from '@/hooks/queries/useProjects';
+import { BrandColors } from '@/constants/colors';
+import { getTeamMemberRoles } from '@/utils/teamMember';
 
 interface EditTeamMemberRoleModalProps {
   visible: boolean;
   onClose: () => void;
   teamId: string;
-  member: TeamMember | null;
+  member: any;
   existingLeadName?: string;
   existingLeadUserId?: string;
+  existingMembers?: any[];
   onSuccess: () => void;
 }
 
 const ROLES_LIST = [
-  { key: 'ACCOUNT', label: 'Lead dự án', desc: 'Quản lý & duyệt công việc nhóm' },
+  { key: 'ACCOUNT', label: 'Account dự án', desc: 'Quản lý & duyệt công việc nhóm' },
   { key: 'EDITOR', label: 'Editor', desc: 'Dựng phim & biên tập video' },
   { key: 'CONTENT_CREATOR', label: 'Nội dung', desc: 'Sáng tạo nội dung & bài viết' },
   { key: 'GRAPHIC_DESIGNER', label: 'Thiết kế đồ họa', desc: 'Thiết kế banner, hình ảnh' },
@@ -40,47 +43,85 @@ export default function EditTeamMemberRoleModal({
   member,
   existingLeadName,
   existingLeadUserId,
+  existingMembers,
   onSuccess,
 }: EditTeamMemberRoleModalProps) {
-  const [selectedRole, setSelectedRole] = useState<string>('EDITOR');
-  const updateRoleMutation = useUpdateTeamMemberRoleMutation();
-  const isSubmitting = updateRoleMutation.isPending;
+  const [selectedRoles, setSelectedRoles] = useState<string[]>(['EDITOR']);
+  const updateRolesMutation = useUpdateTeamMemberRolesMutation();
+  const isSubmitting = updateRolesMutation.isPending;
 
   useEffect(() => {
     if (visible && member) {
-      setSelectedRole(member.role || 'EDITOR');
+      const initialRoles = Array.isArray(member.roles)
+        ? (member.roles.map((r: any) => typeof r === 'string' ? r : r?.role).filter(Boolean) as string[])
+        : (getTeamMemberRoles(member) as string[]);
+      setSelectedRoles(initialRoles.length > 0 ? initialRoles : [member.role || 'EDITOR']);
     }
   }, [visible, member]);
 
   if (!member) return null;
 
-  const currentMemberUserId = member.user?.id;
-  const isTargetAlreadyLead = !!existingLeadUserId && existingLeadUserId === currentMemberUserId;
+  const currentMemberUserId = member.user?.id || member.userId;
 
-  const handleSave = async () => {
-    if (member.role === 'ACCOUNT' || isTargetAlreadyLead) {
-      Alert.alert('Không thể chỉnh sửa', 'Không được phép thay đổi vai trò của Lead dự án.');
+  // Count how many OTHER members currently hold the ACCOUNT role in this team
+  const otherAccountsCount = React.useMemo(() => {
+    if (!existingMembers || !Array.isArray(existingMembers)) return 1;
+    return existingMembers.filter((m: any) => {
+      const uId = m.user?.id || m.userId;
+      if (uId === currentMemberUserId) return false;
+      const roles = Array.isArray(m.roles)
+        ? m.roles.map((r: any) => (typeof r === 'string' ? r : r?.role))
+        : getTeamMemberRoles(m);
+      return roles.includes('ACCOUNT') || (existingLeadUserId && uId === existingLeadUserId);
+    }).length;
+  }, [existingMembers, currentMemberUserId, existingLeadUserId]);
+
+  const toggleRole = (roleKey: string) => {
+    if (roleKey === 'ACCOUNT' && selectedRoles.includes('ACCOUNT') && otherAccountsCount === 0) {
+      Alert.alert(
+        'Không thể bỏ vai trò',
+        'Dự án phải có ít nhất một nhân sự giữ vai trò Account/Lead dự án. Không thể bỏ vai trò này.'
+      );
       return;
     }
 
-    if (!teamId || !member.id) {
+    setSelectedRoles((prev) =>
+      prev.includes(roleKey)
+        ? prev.filter((r) => r !== roleKey)
+        : [...prev, roleKey]
+    );
+  };
+
+  const handleSave = async () => {
+    if (!teamId || !currentMemberUserId) {
       Alert.alert('Lỗi', 'Thông tin thành viên không hợp lệ.');
       return;
     }
 
-    if (selectedRole === member.role) {
-      onClose();
+    if (selectedRoles.length === 0) {
+      Alert.alert('Cảnh báo', 'Nhân sự phải có ít nhất một vai trò trong đội dự án.');
+      return;
+    }
+
+    if (otherAccountsCount === 0 && !selectedRoles.includes('ACCOUNT')) {
+      Alert.alert(
+        'Không thể cập nhật',
+        'Dự án phải có ít nhất một nhân sự giữ vai trò Account/Lead dự án. Vui lòng phân công nhân sự khác trước khi bỏ vai trò này.'
+      );
       return;
     }
 
     try {
-      await updateRoleMutation.mutateAsync({
+      await updateRolesMutation.mutateAsync({
         teamId,
-        memberId: member.id,
-        role: selectedRole,
+        userId: currentMemberUserId,
+        roles: selectedRoles,
       });
 
-      Alert.alert('Thành công', `Đã cập nhật vai trò của ${member.user?.fullName || 'nhân sự'} thành ${TEAM_MEMBER_ROLE_LABELS[selectedRole] || selectedRole}.`);
+      Alert.alert(
+        'Thành công',
+        `Đã cập nhật vai trò của ${member.user?.fullName || 'nhân sự'}.`
+      );
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -91,126 +132,125 @@ export default function EditTeamMemberRoleModal({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View className="flex-1 bg-slate-900/60 justify-end">
-        <View className="bg-surface rounded-t-3xl p-5 max-h-[90%] gap-3.5">
+        <View className="bg-surface rounded-t-3xl p-4 pb-6 max-h-[90%] gap-3">
           {/* Header */}
-          <View className="flex-row justify-between items-start">
-            <View className="gap-0.5">
-              <Text className="text-lg font-bold text-text-primary">Cập nhật vai trò thành viên</Text>
-              <Text className="text-xs text-slate-500">{member.user?.fullName || 'Nhân sự'}</Text>
+          <View className="flex-row justify-between items-start border-b border-slate-100 pb-2.5">
+            <View className="flex-1">
+              <Text className="text-base font-bold text-text-primary">Cập nhật vai trò thành viên</Text>
+              <Text className="text-xs text-slate-500 mt-0.5">{member.user?.fullName || 'Nhân sự'}</Text>
             </View>
-            <TouchableOpacity onPress={onClose} className="p-1 rounded-lg bg-slate-100">
-              <Feather name="x" size={20} color="#64748B" />
+            <TouchableOpacity onPress={onClose} className="p-1.5 rounded-full bg-slate-100" activeOpacity={0.7}>
+              <Feather name="x" size={18} color="#64748B" />
             </TouchableOpacity>
           </View>
 
           {/* Member Card Summary */}
-          <View className="flex-row items-center gap-3 bg-background rounded-xl p-3 border border-border">
-            <View className="w-9 h-9 rounded-full bg-primary-light justify-center items-center">
-              <Text className="text-sm font-bold text-primary">
+          <View className="flex-row items-center gap-3 bg-slate-50 rounded-xl p-3 border border-border">
+            <View className="w-9 h-9 rounded-full bg-primary justify-center items-center">
+              <Text className="text-sm font-bold text-white">
                 {member.user?.fullName ? member.user.fullName.charAt(0).toUpperCase() : 'M'}
               </Text>
             </View>
             <View className="flex-1">
               <Text className="text-sm font-bold text-text-primary">{member.user?.fullName || 'Thành viên'}</Text>
               <Text className="text-xs text-slate-500">
-                Vai trò hiện tại:{' '}
+                Vai trò đang chọn:{' '}
                 <Text className="font-bold text-primary">
-                  {TEAM_MEMBER_ROLE_LABELS[member.role] || member.role}
+                  {selectedRoles.map((r) => TEAM_MEMBER_ROLE_LABELS[r] || r).join(', ') || 'Chưa chọn'}
                 </Text>
               </Text>
             </View>
           </View>
 
           {/* Role Selection */}
-          <Text className="text-xs font-bold text-slate-700">Chọn vai trò chuyên môn mới</Text>
-          <ScrollView className="max-h-[280px]" nestedScrollEnabled showsVerticalScrollIndicator={false}>
+          <View className="flex-row justify-between items-baseline">
+            <Text className="text-xs font-bold text-slate-800">
+              Chọn một hoặc nhiều vai trò
+            </Text>
+            <Text className="text-[11px] font-semibold text-primary">
+              Đã chọn ({selectedRoles.length})
+            </Text>
+          </View>
+
+          <ScrollView className="max-h-[300px]" nestedScrollEnabled showsVerticalScrollIndicator={false}>
             <View className="gap-2">
               {ROLES_LIST.map((roleItem) => {
-                const isLeadDisabled =
-                  roleItem.key === 'ACCOUNT' && !!existingLeadName && !isTargetAlreadyLead;
-                const isSelected = selectedRole === roleItem.key && !isLeadDisabled;
+                const isSelected = selectedRoles.includes(roleItem.key);
 
                 return (
                   <TouchableOpacity
                     key={roleItem.key}
-                    className={`border rounded-xl p-3 gap-1 ${
+                    className={`border rounded-xl p-2.5 flex-row items-center justify-between ${
                       isSelected
                         ? 'border-primary bg-orange-50/40'
-                        : isLeadDisabled
-                        ? 'border-border bg-background opacity-70'
-                        : 'border-border bg-surface'
+                        : 'border-border bg-slate-50/50'
                     }`}
-                    onPress={() => {
-                      if (isLeadDisabled) {
-                        Alert.alert(
-                          'Không thể chọn',
-                          `Dự án này đã có Lead dự án (${existingLeadName}). Mỗi dự án chỉ được phép có 1 Lead.`
-                        );
-                        return;
-                      }
-                      setSelectedRole(roleItem.key);
-                    }}
-                    activeOpacity={isLeadDisabled ? 0.9 : 0.8}
+                    onPress={() => toggleRole(roleItem.key)}
+                    activeOpacity={0.7}
                   >
-                    <View className="flex-row justify-between items-center">
-                      <View className="flex-row items-center gap-1.5">
+                    <View className="flex-1 mr-2">
+                      <View className="flex-row items-center gap-1.5 flex-wrap">
                         <Text
-                          className={`text-sm font-bold ${
+                          className={`text-xs font-bold ${
                             isSelected
                               ? 'text-primary'
-                              : isLeadDisabled
-                              ? 'text-slate-400'
-                              : 'text-text-primary'
+                              : 'text-slate-800'
                           }`}
                         >
                           {roleItem.label}
                         </Text>
-                        {isLeadDisabled && (
-                          <View className="flex-row items-center gap-1 bg-slate-200 px-1.5 py-0.5 rounded">
-                            <Feather name="lock" size={10} color="#94A3B8" />
-                            <Text className="text-[10px] font-bold text-slate-500">Đã có Lead</Text>
+                        {roleItem.key === 'ACCOUNT' && otherAccountsCount === 0 && isSelected && (
+                          <View className="bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200">
+                            <Text className="text-[10px] font-bold text-amber-800">Bắt buộc giữ</Text>
                           </View>
                         )}
                       </View>
-                      {isSelected && (
-                        <Feather name="check-circle" size={16} color="#F38820" />
+                      <Text className="text-[11px] text-text-secondary mt-0.5">
+                        {roleItem.desc}
+                      </Text>
+                    </View>
+
+                    {/* Checkbox indicator */}
+                    <View className="shrink-0 pl-1">
+                      {isSelected ? (
+                        <View className="w-5 h-5 rounded-md bg-primary items-center justify-center">
+                          <Feather name="check" size={14} color="#FFFFFF" />
+                        </View>
+                      ) : (
+                        <View className="w-5 h-5 rounded-md border border-slate-300 bg-white" />
                       )}
                     </View>
-                    <Text
-                      className={`text-xs ${
-                        isSelected
-                          ? 'text-orange-700'
-                          : isLeadDisabled
-                          ? 'text-slate-300'
-                          : 'text-slate-500'
-                      }`}
-                    >
-                      {roleItem.desc}
-                    </Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
           </ScrollView>
 
-          {/* Footer Buttons */}
-          <View className="flex-row gap-3 mt-1.5">
-            <TouchableOpacity className="flex-1 py-3 rounded-xl border border-border items-center justify-center" onPress={onClose} disabled={isSubmitting}>
-              <Text className="text-sm font-semibold text-slate-500">Hủy</Text>
-            </TouchableOpacity>
+          {/* Footer Actions */}
+          <View className="flex-row justify-end items-center gap-2.5 border-t border-slate-100 pt-3">
             <TouchableOpacity
-              className={`flex-[2] flex-row items-center justify-center gap-1.5 bg-primary py-3 rounded-xl ${
-                isSubmitting ? 'opacity-60' : ''
+              className="px-4 py-2.5 rounded-xl bg-slate-100"
+              onPress={onClose}
+              disabled={isSubmitting}
+              activeOpacity={0.7}
+            >
+              <Text className="text-xs font-semibold text-slate-600">Hủy</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className={`flex-row items-center gap-1.5 px-5 py-2.5 rounded-xl bg-primary ${
+                selectedRoles.length === 0 || isSubmitting ? 'opacity-50' : ''
               }`}
               onPress={handleSave}
-              disabled={isSubmitting}
+              disabled={selectedRoles.length === 0 || isSubmitting}
+              activeOpacity={0.8}
             >
               {isSubmitting ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
                 <>
-                  <Feather name="check" size={16} color="#FFFFFF" />
-                  <Text className="text-sm font-bold text-white">Cập nhật vai trò</Text>
+                  <Feather name="save" size={15} color="#FFFFFF" />
+                  <Text className="text-xs font-bold text-white">Lưu vai trò</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -220,4 +260,3 @@ export default function EditTeamMemberRoleModal({
     </Modal>
   );
 }
-

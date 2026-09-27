@@ -321,7 +321,7 @@ export default function ProjectTasksTab({
         <View className="flex-row items-start gap-2.5 rounded-xl border border-orange-100 bg-orange-50 p-3">
           <Feather name="lock" size={18} color="#C2410C" />
           <View className="flex-1">
-            <Text className="text-[13px] font-bold text-orange-700">Dự án chưa được Lead chấp nhận</Text>
+            <Text className="text-[13px] font-bold text-orange-700">Dự án chưa được Account chấp nhận</Text>
             <Text className="mt-0.5 text-[11px] leading-4 text-orange-800">
               Tất cả các tính năng phân công, tạo việc phát sinh và cập nhật tiến độ đều bị tạm khóa cho đến khi Lead chấp nhận dự án.
             </Text>

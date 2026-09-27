@@ -127,7 +127,7 @@ export default function AssignPmModal({
               {isSubmitting ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text className="text-sm font-bold text-white">Lưu phân công</Text>
+                <Text className="text-sm font-bold text-white">Phân công</Text>
               )}
             </TouchableOpacity>
           </View>

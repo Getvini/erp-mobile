@@ -51,6 +51,7 @@ import {
 '@/hooks/queries/useProjects';
 import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { safeGoBack } from '@/utils/navigation';
+import { getProjectManagerUser, hasTeamMemberRole } from '@/utils/teamMember';
 import { MilestoneTrackerTab } from '@/components/finance/MilestoneTrackerTab';
 import { useDebtsByContractQuery } from '@/hooks/queries/useDebts';
 import { usePaymentMilestonesByContractQuery } from '@/hooks/queries/useMilestones';
@@ -132,8 +133,8 @@ export default function ContractDetailScreen() {
   const { data: pmUsersData } = usePmUsersQuery();
   const pmUsers: UserPMItem[] = isAdminOrBod ? pmUsersData || [] : [];
 
-  const { data: projectData } = useProjectByContractQuery(contractId);
-  const project: ProjectItem | null = projectData || null;
+  const { data: projectData, refetch: refetchProject } = useProjectByContractQuery(contractId);
+  const project: ProjectItem | null = projectData || (contract as any)?.project || null;
 
   const assignProjectMutation = useAssignProjectMutation();
   const isAssigningPm = assignProjectMutation.isPending;
@@ -143,17 +144,21 @@ export default function ContractDetailScreen() {
 
   useEffect(() => {
     if (project) {
-      const pmMember = project.team?.members?.find((m) => m.role === 'PROJECT_MANAGER');
-      setSelectedPmId(pmMember?.user?.id || '');
+      const pmUser = getProjectManagerUser(project);
+      setSelectedPmId(pmUser?.id || '');
     } else {
       setSelectedPmId('');
     }
   }, [project]);
 
-  useSSERefresh('invalidate_Contracts', refetch);
+  useSSERefresh(['invalidate_Contracts', 'invalidate_Projects'], () => {
+    refetch();
+    refetchProject();
+  });
 
   const handleRefresh = () => {
     refetch();
+    refetchProject();
     refetchDebts();
     refetchMilestones();
   };
@@ -162,9 +167,9 @@ export default function ContractDetailScreen() {
     if (!contract) return;
     try {
       await assignProjectMutation.mutateAsync({ contractId: contract.id, pmId: pmId || null });
+      await Promise.all([refetch(), refetchProject()]);
       Alert.alert('Thành công', 'Phân công PM phụ trách dự án thành công!');
       setIsPmPickerVisible(false);
-      refetch();
     } catch (err: any) {
       Alert.alert('Lỗi phân công', err?.message || 'Không thể phân công PM');
     }
@@ -593,7 +598,7 @@ export default function ContractDetailScreen() {
 
         <View className="flex-1 items-center mx-[8px]">
           <Text className="text-[15px] font-extrabold text-slate-900">{contractCode !== '—' ? contractCode : 'HỢP ĐỒNG'}</Text>
-          <Text className="text-[11px] text-slate-500 mt-[1px]">Chi tiết hồ sơ hợp đồng kinh tế</Text>
+          <Text className="text-[11px] text-slate-500 mt-[1px]">Chi tiết hồ sơ hợp đồng</Text>
         </View>
 
         <TouchableOpacity
@@ -722,9 +727,11 @@ export default function ContractDetailScreen() {
 
             <View className="flex-row justify-between items-center py-[4px] gap-[10px]">
               <Text className="text-[12px] text-slate-500">Ngày tạo</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', flex: 1, gap: 5 }}>
+              <View className="flex-row items-center gap-1.5">
                 <Feather name="calendar" size={13} color="#64748B" />
-                <Text style={{ flex: 0 }} className="text-[13px] font-semibold text-slate-800 flex-1 text-right">{formatDate(contract.createdAt)}</Text>
+                <Text className="text-[13px] font-semibold text-slate-800">
+                  {formatDate(contract.createdAt)}
+                </Text>
               </View>
             </View>
 
@@ -870,44 +877,41 @@ export default function ContractDetailScreen() {
                 <Text className="text-[12px] text-slate-500">PM phụ trách</Text>
                 <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 6 }}>
                   {(() => {
-                  const pmMember = project.team?.members?.find(
-                    (m) => m.role === 'PROJECT_MANAGER'
-                  );
-                  const hasPm = !!pmMember?.user;
-                  const pmName = pmMember?.user?.fullName || 'Chưa phân công PM';
+                  const pmUser = getProjectManagerUser(project);
+                  const hasPm = !!pmUser;
+                  const pmName = pmUser?.fullName || 'Chưa phân công PM';
                   return (
                     <>
                         <Text
                         style={
-
                         { flex: 0, fontWeight: '700', color: hasPm ? '#0F172A' : '#94A3B8' }} className="text-[13px] font-semibold text-slate-800 flex-1 text-right">
-
-                        
                           {pmName}
                         </Text>
 
-                        {isAdminOrBod && !hasPm &&
+                        {isAdminOrBod &&
                       <TouchableOpacity
-
-                        onPress={() => setIsPmPickerVisible(true)}
+                        onPress={() => {
+                          setSelectedPmId(pmUser?.id || '');
+                          setIsPmPickerVisible(true);
+                        }}
                         disabled={isAssigningPm}
-                        activeOpacity={0.7} className="flex-row items-center gap-[4px] bg-blue-50 border border-[#93C5FD] px-[8px] py-[3px] rounded-[6px]">
-                        
-                            <Feather name="user-plus" size={12} color="#2563EB" />
-                            <Text className="text-[11px] font-bold text-blue-600">Phân công</Text>
+                        activeOpacity={0.7} className="flex-row items-center gap-[4px] bg-orange-100 border border-[#F38820] px-[8px] py-[3px] rounded-[6px]">
+                            <Feather name="user-plus" size={12} color="#F38820" />
+                            <Text className="text-[11px] font-bold text-[#F38820]">{hasPm ? 'Đổi PM' : 'Phân công'}</Text>
                           </TouchableOpacity>
                       }
                       </>);
-
                 })()}
                 </View>
               </View>
 
-              {/* Lead dự án */}
+              {/* Lead dự án(Account) */}
               <View className="flex-row justify-between items-center py-[4px] gap-[10px]">
-                <Text className="text-[12px] text-slate-500">Lead dự án</Text>
+                <Text className="text-[12px] text-slate-500">Account dự án</Text>
                 <Text style={{ fontWeight: '600' }} className="text-[13px] font-semibold text-slate-800 flex-1 text-right">
-                  {project.team?.teamLead?.fullName || 'PM chưa chọn lead'}
+                  {project.team?.teamLead?.fullName ||
+                    project.team?.members?.find((m: any) => hasTeamMemberRole(m, 'LEAD'))?.user?.fullName ||
+                    'PM chưa chọn account'}
                 </Text>
               </View>
             </View>
@@ -1688,58 +1692,79 @@ export default function ContractDetailScreen() {
             </Text>
 
             <ScrollView style={{ maxHeight: 250 }} showsVerticalScrollIndicator={false}>
-              {pmUsers.length > 0 ?
-              pmUsers.map((pm) => {
-                const isSelected = selectedPmId === pm.id;
-                return (
-                  <TouchableOpacity
-                    key={pm.id}
-
-                    onPress={() => {
-                      setSelectedPmId(pm.id);
-                      handleAssignPmSubmit(pm.id);
-                    }}
-                    disabled={isAssigningPm}
-                    activeOpacity={0.7} className={["flex-row items-center gap-[10px] p-[10px] rounded-[10px] border border-slate-200 mb-[8px] bg-white", isSelected && "border-[#3B82F6] bg-blue-50"].filter(Boolean).join(" ")}>
-                    
+              {pmUsers.length > 0 ? (
+                pmUsers.map((pm) => {
+                  const isSelected = selectedPmId === pm.id;
+                  return (
+                    <TouchableOpacity
+                      key={pm.id}
+                      onPress={() => setSelectedPmId(pm.id)}
+                      disabled={isAssigningPm}
+                      activeOpacity={0.7}
+                      className={[
+                        "flex-row items-center gap-[10px] p-[10px] rounded-[10px] border border-slate-200 mb-[8px] bg-white",
+                        isSelected && "border-[#F38820] bg-orange-100"
+                      ].filter(Boolean).join(" ")}
+                    >
                       <View
-                      style={isSelected && { backgroundColor: '#2563EB' }} className="w-[32px] h-[32px] rounded-[16px] bg-slate-100 items-center justify-center">
-                      
+                        style={isSelected && { backgroundColor: '#F38820' }}
+                        className="w-[32px] h-[32px] rounded-[16px] bg-slate-100 items-center justify-center"
+                      >
                         <Text
-                        style={
-
-                        isSelected && { color: '#FFFFFF' }} className="text-[13px] font-extrabold text-slate-600">
-
-                        
+                          style={isSelected && { color: '#FFFFFF' }}
+                          className="text-[13px] font-extrabold text-slate-600"
+                        >
                           {pm.fullName?.substring(0, 1).toUpperCase() || 'P'}
                         </Text>
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text
-                        style={
-
-                        isSelected && { color: '#1D4ED8', fontWeight: '700' }} className="text-[13px] font-semibold text-slate-900">
-
-                        
+                          style={isSelected && { color: '#F38820', fontWeight: '700' }}
+                          className="text-[13px] font-semibold text-slate-900"
+                        >
                           {pm.fullName}
                         </Text>
-                        {pm.email ? <Text className="text-[11px] text-slate-500">{pm.email}</Text> : null}
+                        {pm.email ? (
+                          <Text className="text-[11px] text-slate-500">{pm.email}</Text>
+                        ) : null}
                       </View>
-                      {isSelected ? <Feather name="check-circle" size={18} color="#2563EB" /> : null}
-                    </TouchableOpacity>);
-
-              }) :
-
-              <Text className="text-[12px] text-slate-400 text-center py-[12px]">Không tìm thấy tài khoản PM nào</Text>
-              }
+                      {isSelected ? (
+                        <Feather name="check-circle" size={18} color="#F38820" />
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                })
+              ) : (
+                <Text className="text-[12px] text-slate-400 text-center py-[12px]">
+                  Không tìm thấy tài khoản PM nào
+                </Text>
+              )}
             </ScrollView>
 
-            <View style={{ marginTop: 16 }} className="flex-row justify-end gap-[10px]">
+            <View style={{ marginTop: 16 }} className="flex-row justify-end items-center gap-[10px]">
               <TouchableOpacity
-
-                onPress={() => setIsPmPickerVisible(false)} className="px-[14px] py-[8px] rounded-[8px] bg-slate-100">
-                
+                onPress={() => setIsPmPickerVisible(false)}
+                className="px-[14px] py-[8px] rounded-[8px] bg-slate-100"
+              >
                 <Text className="text-[13px] font-semibold text-slate-600">Đóng</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => handleAssignPmSubmit(selectedPmId)}
+                disabled={!selectedPmId || isAssigningPm}
+                className={`flex-row items-center gap-1.5 px-[16px] py-[8px] rounded-[8px] ${
+                  !selectedPmId || isAssigningPm ? 'bg-orange-200' : 'bg-orange-600'
+                }`}
+                activeOpacity={0.8}
+              >
+                {isAssigningPm ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Feather name="user-check" size={14} color="#FFFFFF" />
+                    <Text className="text-[13px] font-bold text-white">Phân công</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           </View>

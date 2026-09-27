@@ -83,7 +83,18 @@ export default function QuotationsListScreen() {
     opportunity?.leadName
   );
 
+  const hasApprovedQuote =
+    opportunity?.status === 'QUOTE_APPROVED' ||
+    opportunity?.status === 'CONTRACT_CREATED' ||
+    quotations.some(
+      (q) =>
+        q.status === QuotationStatus.APPROVED ||
+        q.status === 'APPROVED' ||
+        q.status === 'QUOTE_APPROVED'
+    );
+
   const canCreateQuotation =
+    !hasApprovedQuote &&
     hasCustomer &&
     opportunity &&
     (opportunity.status === 'QUOTATION_DRAFTING' ||
@@ -153,10 +164,6 @@ export default function QuotationsListScreen() {
       params: { opportunityId, quotationId: quote.id },
     });
   };
-
-  const hasApprovedQuote =
-    opportunity?.status === 'QUOTE_APPROVED' ||
-    quotations.some((q) => q.status === QuotationStatus.APPROVED || q.status === 'APPROVED');
 
   const renderQuotationItem = ({ item }: { item: QuotationItem }) => {
     const isThisItemApproved =

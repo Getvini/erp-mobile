@@ -1,11 +1,13 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
+import React, { useMemo } from 'react';
+import { View, Text, TouchableOpacity, ActivityIndicator, Linking, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { ProjectDetailItem } from '@/services/projectService';
 import { TeamMember, TEAM_MEMBER_ROLE_LABELS, USER_ROLE } from '@/services/teamService';
 import { BrandColors } from '@/constants/colors';
 import { formatNumber } from '@/utils/formatters';
+import { getProjectManagerUser, hasTeamMemberRole, groupTeamMembers, getUserAccountRole } from '@/utils/teamMember';
+import { WorkloadBadge } from '@/components/common/WorkloadBadge';
 
 
 interface ProjectOverviewTabProps {
@@ -51,15 +53,13 @@ export default function ProjectOverviewTab({
   const router = useRouter();
   const effectiveMembers = (teamMembers && teamMembers.length > 0) ? teamMembers : (project.team?.members || []);
 
-  const pmUser =
-    project.projectManager ||
-    effectiveMembers.find((m) => m.role === 'PROJECT_MANAGER' || m.role === 'PM')?.user;
+  const pmUser = getProjectManagerUser(project, effectiveMembers);
   const pm = pmUser;
 
   const leadUser =
     project.team?.teamLead ||
     effectiveMembers.find(
-      (m) => (m.role === 'LEAD' || m.role === 'ACCOUNT' || m.role === 'TEAM_LEAD') && m.user?.id !== pmUser?.id
+      (m) => hasTeamMemberRole(m, 'LEAD') && m.user?.id !== pmUser?.id
     )?.user;
   const saleorAdminSale = user?.role === 'BD' || user?.role === 'SALE' || user?.role === 'ADMIN_SALE';
   const isBODOrAdminSaleOrAdmin = user?.role === 'BOD' || user?.role === 'ADMIN_SALE' || user?.role === 'ADMIN';
@@ -77,28 +77,6 @@ export default function ProjectOverviewTab({
 
   return (
     <View className="p-4 gap-3.5">
-      {/* 0. Create Monthly Work CTA Card */}
-      {canCreateMonthlyWork && (
-        <TouchableOpacity
-          className="flex-row items-center justify-between bg-purple-700 p-4 rounded-2xl shadow-sm border border-purple-800"
-          onPress={onOpenCreateMonthlyWork}
-          activeOpacity={0.85}
-        >
-          <View className="flex-row items-center gap-3 flex-1">
-            <View className="w-10 h-10 rounded-xl bg-white/20 items-center justify-center">
-              <Feather name="calendar" size={20} color="#FFFFFF" />
-            </View>
-            <View className="flex-1">
-              <Text className="text-sm font-bold text-white">Tạo công việc tháng mới</Text>
-              <Text className="text-xs text-purple-100 mt-0.5">
-                Tự động khởi tạo phụ lục & công việc mẫu theo tháng
-              </Text>
-            </View>
-          </View>
-          <Feather name="chevron-right" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
-      )}
-
       {/* 1. Missing PM Banner */}
       {!pm && (
         <View className="bg-amber-100 border border-amber-300 rounded-2xl p-4 gap-3">
@@ -130,7 +108,7 @@ export default function ProjectOverviewTab({
           <View className="flex-row items-start gap-2.5">
             <Feather name="clock" size={20} color="#C2410C" />
             <View className="flex-1">
-              <Text className="text-[15px] font-bold text-orange-800 mb-0.5">Dự án đang chờ Lead xác nhận</Text>
+              <Text className="text-[15px] font-bold text-orange-800 mb-0.5">Dự án đang chờ Account xác nhận</Text>
             </View>
           </View>
 
@@ -154,7 +132,7 @@ export default function ProjectOverviewTab({
             <View className="flex-row items-center gap-1.5 bg-orange-100 px-3 py-2 rounded-lg">
               <Feather name="lock" size={13} color="#9A3412" />
               <Text className="text-xs text-orange-950 font-semibold flex-1">
-                Chỉ Lead phụ trách mới có quyền chấp nhận dự án.
+                Chỉ Account phụ trách mới có quyền chấp nhận dự án.
               </Text>
             </View>
           )}
@@ -311,9 +289,9 @@ export default function ProjectOverviewTab({
 
         <Text className="text-sm font-bold text-text-primary">{team?.name || 'Đội dự án'}</Text>
         <Text className="text-xs text-text-secondary">
-          Trưởng nhóm (Lead dự án):{' '}
+          Trưởng nhóm (Account dự án):{' '}
           <Text className={`font-bold ${leadUser ? 'text-emerald-700' : 'text-text-muted'}`}>
-            {leadUser?.fullName || 'Chưa chọn Lead dự án'}
+            {leadUser?.fullName || 'Chưa chọn Account dự án'}
           </Text>
         </Text>
 
@@ -326,52 +304,96 @@ export default function ProjectOverviewTab({
           </View>
         ) : (
           <View className="gap-2 mt-1">
-            {effectiveMembers && effectiveMembers.length > 0 ? (
-              effectiveMembers.map((m) => {
-                const isPmRole = !!pmUser?.id && m.user?.id === pmUser.id;
-                const isLeadRole = !isPmRole && !!leadUser?.id && m.user?.id === leadUser.id;
+            {(() => {
+              const grouped = groupTeamMembers(effectiveMembers, team?.teamLead?.id || leadUser?.id);
+              if (!grouped || grouped.length === 0) {
+                return <Text className="text-xs text-text-muted italic">Chưa có thành viên bổ sung trong đội.</Text>;
+              }
+
+              return grouped.map((group) => {
+                const isPmRole = group.roles.includes('PROJECT_MANAGER') || (!!pmUser?.id && group.userId === pmUser.id);
+                const isTeamLead = !isPmRole && (!!leadUser?.id && group.userId === leadUser.id);
+                const hasAccount = !isPmRole && group.roles.includes('ACCOUNT');
 
                 return (
-                  <View key={m.id} className="flex-row items-center justify-between bg-background rounded-xl p-2.5 border border-border gap-2.5">
+                  <View key={group.userId} className="flex-row items-center justify-between bg-background rounded-xl p-2.5 border border-border gap-2.5">
                     <View className="w-8 h-8 rounded-full bg-primary justify-center items-center">
                       <Text className="text-xs font-bold text-white">
-                        {m.user?.fullName ? m.user.fullName.charAt(0).toUpperCase() : 'M'}
+                        {group.user?.fullName ? group.user.fullName.charAt(0).toUpperCase() : 'M'}
                       </Text>
                     </View>
 
-                    <View className="flex-1 gap-0.5">
+                    <View className="flex-1 gap-1">
                       <View className="flex-row items-center gap-1.5 flex-wrap">
-                        <Text className="text-xs font-bold text-text-primary">{m.user?.fullName || 'Thành viên'}</Text>
-                        {isPmRole ? (
-                          <View className="bg-blue-50 px-1.5 py-0.5 rounded">
+                        <Text className="text-xs font-bold text-text-primary">{group.user?.fullName || 'Thành viên'}</Text>
+                        {isPmRole && (
+                          <View className="bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
                             <Text className="text-[10px] font-bold text-blue-700">PM/Manager</Text>
                           </View>
-                        ) : isLeadRole ? (
-                          <View className="bg-emerald-50 px-1.5 py-0.5 rounded">
-                            <Text className="text-[10px] font-bold text-emerald-700">Lead dự án</Text>
-                          </View>
-                        ) : (
-                          <View className="bg-purple-100 px-1.5 py-0.5 rounded">
-                            <Text className="text-[10px] font-bold text-purple-700">
-                              {TEAM_MEMBER_ROLE_LABELS[m.role] || m.role || 'Thành viên'}
-                            </Text>
+                        )}
+                        {isTeamLead && (
+                          <View className="bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            <Text className="text-[10px] font-bold text-emerald-700">Account dự án</Text>
                           </View>
                         )}
+                        {!isTeamLead && hasAccount && (
+                          <View className="bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            <Text className="text-[10px] font-bold text-emerald-700">Account dự án</Text>
+                          </View>
+                        )}
+                        {group.roles
+                          .filter((r) => r !== 'PROJECT_MANAGER' && r !== 'ACCOUNT')
+                          .map((role) => (
+                            <View key={role} className="bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200">
+                              <Text className="text-[10px] font-bold text-primary">
+                                {TEAM_MEMBER_ROLE_LABELS[role] || role}
+                              </Text>
+                            </View>
+                          ))}
+                        <WorkloadBadge workload={group.user?.workload} />
                       </View>
-                      <Text className="text-[11px] text-text-secondary">
-                        {(m.user as any)?.role
-                          ? USER_ROLE[(m.user as any).role] || (m.user as any).role
-                          : m.user?.email || 'Nhân sự'}
-                      </Text>
+                      {(() => {
+                        const accountRole = getUserAccountRole(group.user);
+                        const roleLabel =
+                          (accountRole && USER_ROLE[accountRole]) || accountRole || group.user?.email || 'Nhân sự';
+                        return (
+                          <Text className="text-[11px] text-text-secondary">
+                            {roleLabel}
+                          </Text>
+                        );
+                      })()}
                     </View>
 
-                    {canManageTeam && !isPmRole && !isLeadRole && (
+                    {canManageTeam && !isPmRole && (
                       <View className="flex-row items-center gap-1.5">
-                        <TouchableOpacity className="p-1.5 rounded-lg bg-teal-50 border border-teal-100" onPress={() => onEditMemberRole?.(m)} activeOpacity={0.7}>
+                        <TouchableOpacity
+                          className="p-1.5 rounded-lg bg-orange-50 border border-orange-200"
+                          onPress={() => onEditMemberRole?.(group)}
+                          activeOpacity={0.7}
+                        >
                           <Feather name="edit-2" size={13} color={BrandColors.primary} />
                         </TouchableOpacity>
-                        {onRemoveMember && (
-                          <TouchableOpacity className="p-1.5 rounded-lg bg-rose-100" onPress={() => onRemoveMember(m.id)} activeOpacity={0.7}>
+                        {onRemoveMember && !isTeamLead && group.memberships?.[0]?.id && (
+                          <TouchableOpacity
+                            className="p-1.5 rounded-lg bg-rose-100"
+                            onPress={() => {
+                              const isAccountMember = group.roles.includes('ACCOUNT') || group.userId === leadUser?.id;
+                              if (isAccountMember) {
+                                const otherAccounts = grouped.filter(
+                                  (g) => g.userId !== group.userId && (g.roles.includes('ACCOUNT') || g.userId === leadUser?.id)
+                                );
+                                if (otherAccounts.length === 0) {
+                                  Alert.alert(
+                                    'Không thể xóa',
+                                    'Không thể xóa nhân sự này vì đây là người duy nhất giữ vai trò Account/Lead trong đội dự án. Vui lòng phân công nhân sự khác giữ vai trò này trước khi xóa.'
+                                  );
+                                  return;
+                                }
+                              }
+                              onRemoveMember(group.memberships[0].id);
+                            }}
+                            activeOpacity={0.7}
+                          >
                             <Feather name="trash-2" size={14} color="#EF4444" />
                           </TouchableOpacity>
                         )}
@@ -379,13 +401,11 @@ export default function ProjectOverviewTab({
                     )}
                   </View>
                 );
-              })
-            ) : (
-              <Text className="text-xs text-text-muted italic">Chưa có thành viên bổ sung trong đội.</Text>
-            )}
+              });
+            })()}
 
             {canManageTeam && (
-              <TouchableOpacity className="flex-row items-center justify-center gap-1.5 bg-teal-50 border border-teal-100 py-2.5 rounded-xl mt-1" onPress={onOpenAddMember} activeOpacity={0.8}>
+              <TouchableOpacity className="flex-row items-center justify-center gap-1.5 bg-orange-50 border border-orange-200 py-2.5 rounded-xl mt-1" onPress={onOpenAddMember} activeOpacity={0.8}>
                 <Feather name="plus-circle" size={15} color={BrandColors.primary} />
                 <Text className="text-xs font-bold text-primary">Thêm thành viên vào đội dự án</Text>
               </TouchableOpacity>

@@ -114,7 +114,7 @@ export default function ContractsScreen() {
 
         {/* Contract Title */}
         <Text className="text-[15px] font-bold text-[#0F172A] mb-2 leading-5" numberOfLines={2}>
-          {item.name || 'Hợp đồng kinh tế'}
+          {item.name || 'Hợp đồng'}
         </Text>
 
         {/* Customer & Opportunity Info */}
@@ -164,7 +164,7 @@ export default function ContractsScreen() {
     return (
       <SafeAreaView className="flex-1 bg-[#F8FAFC]">
         <View className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-[#E2E8F0]">
-          <Text className="text-lg font-bold text-[#0F172A]">Hợp đồng kinh tế</Text>
+          <Text className="text-lg font-bold text-[#0F172A]">Hợp đồng</Text>
         </View>
         <View className="flex-1 items-center justify-center px-8">
           <View className="w-16 h-16 rounded-full bg-[#F1F5F9] items-center justify-center mb-4">
@@ -185,7 +185,7 @@ export default function ContractsScreen() {
       {/* App Header */}
       <View className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-[#E2E8F0]">
         <View>
-          <Text className="text-lg font-bold text-[#0F172A]">Hợp đồng kinh tế</Text>
+          <Text className="text-lg font-bold text-[#0F172A]">Hợp đồng</Text>
           <Text className="text-xs text-[#64748B] mt-0.5">
             Quản lý {totalCount} hợp đồng & phụ lục phát sinh
           </Text>

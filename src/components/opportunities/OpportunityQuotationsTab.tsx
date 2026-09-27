@@ -18,6 +18,7 @@ export interface OpportunityQuotationsTabProps {
   opportunityId: string;
   opportunityName?: string;
   opportunityDescription?: string;
+  opportunityStatus?: string;
   onContractCreated?: (contractId: string) => void;
 }
 
@@ -25,18 +26,28 @@ export const OpportunityQuotationsTab: React.FC<OpportunityQuotationsTabProps> =
   opportunityId,
   opportunityName,
   opportunityDescription,
+  opportunityStatus,
   onContractCreated,
 }) => {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const userRole = (user?.role || '').toUpperCase();
-  const canCreateQuotation = ['ADMIN', 'DIRECTOR', 'SALE', 'MANAGER'].includes(userRole);
+  const canCreateQuotationRole = ['ADMIN', 'DIRECTOR', 'SALE', 'MANAGER'].includes(userRole);
 
   const {
     data: quotations = [],
     isLoading,
     refetch,
   } = useOpportunityQuotationsQuery(opportunityId);
+
+  const hasApprovedQuotation =
+    opportunityStatus === 'QUOTE_APPROVED' ||
+    opportunityStatus === 'CONTRACT_CREATED' ||
+    quotations.some(
+      (q: any) => q.status === 'APPROVED' || q.status === 'QUOTE_APPROVED'
+    );
+
+  const canCreateQuotation = canCreateQuotationRole && !hasApprovedQuotation;
 
   const [selectedQuotationId, setSelectedQuotationId] = useState<string | null>(null);
 

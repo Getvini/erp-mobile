@@ -56,7 +56,7 @@ const MODULES = [
   {
     id: 'contracts',
     title: 'Hợp đồng & Phụ lục',
-    desc: 'Quản lý danh sách hợp đồng kinh tế, điều khoản thanh toán và phụ lục phát sinh.',
+    desc: 'Quản lý danh sách hợp đồng, điều khoản thanh toán và phụ lục phát sinh.',
     icon: 'document-text-outline' as const,
     color: '#3B82F6',
     badge: 'Pháp lý',
