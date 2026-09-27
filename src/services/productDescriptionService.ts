@@ -1,21 +1,26 @@
 import { apiService } from './api';
 
+export interface ProductDescriptionDocument {
+  name?: string | null;
+  url: string;
+}
+
 export interface ProductDescriptionItem {
-  id: string;
+  id?: string | null;
   productName: string;
-  sourceType: 'LINK' | 'FILE';
-  sourceName?: string;
-  sourceUrl?: string;
-  size?: number;
-  publicId?: string;
+  fileUrl?: string;
+  fileName?: string;
+  extractedText?: string | null;
+  note?: string | null;
+  documents?: ProductDescriptionDocument[];
 }
 
 export interface ProductDescriptionSubmission {
   id: string;
   projectId: string;
-  versionNumber?: number;
+  versionNumber?: number | null;
   status: 'DRAFT' | 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED';
-  reviewNote?: string;
+  reviewNote?: string | null;
   createdBy?: {
     id: string;
     fullName: string;
@@ -24,7 +29,7 @@ export interface ProductDescriptionSubmission {
     id: string;
     fullName: string;
   };
-  reviewedAt?: string;
+  reviewedAt?: string | null;
   items: ProductDescriptionItem[];
   createdAt?: string;
   updatedAt?: string;
@@ -54,8 +59,8 @@ class ProductDescriptionService {
     return { data: item, error: res.error };
   }
 
-  async submitSubmission(projectId: string, submissionId: string): Promise<{ data?: any; error?: string }> {
-    const res = await apiService.post(`/projects/${projectId}/product-descriptions/${submissionId}/submit`, {});
+  async submitSubmission(projectId: string, submissionId: string, payload?: { items?: any[] }): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.post(`/projects/${projectId}/product-descriptions/${submissionId}/submit`, payload || {});
     return { data: res.data, error: res.error };
   }
 
@@ -67,6 +72,26 @@ class ProductDescriptionService {
   async rejectSubmission(projectId: string, submissionId: string, reviewNote?: string): Promise<{ data?: any; error?: string }> {
     const res = await apiService.post(`/projects/${projectId}/product-descriptions/${submissionId}/reject`, { reviewNote });
     return { data: res.data, error: res.error };
+  }
+
+  async extractFile(projectId: string, fileUrl: string): Promise<{ data?: { extractedText: string; hasComplexLayout?: boolean }; error?: string }> {
+    const res = await apiService.post<{ extractedText: string; hasComplexLayout?: boolean }>(
+      `/projects/${projectId}/product-descriptions/extract-file`,
+      { fileUrl }
+    );
+    const rawData = res.data as any;
+    const result = rawData?.data && typeof rawData.data === 'object' ? rawData.data : rawData;
+    return { data: result, error: res.error };
+  }
+
+  async aiFormat(projectId: string, text: string, productName?: string): Promise<{ data?: { extractedText: string }; error?: string }> {
+    const res = await apiService.post<{ extractedText: string }>(
+      `/projects/${projectId}/product-descriptions/ai-format`,
+      { text, productName }
+    );
+    const rawData = res.data as any;
+    const result = rawData?.data && typeof rawData.data === 'object' ? rawData.data : rawData;
+    return { data: result, error: res.error };
   }
 }
 

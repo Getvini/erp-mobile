@@ -73,4 +73,58 @@ export function useActivateDebtMutation(contractId?: string) {
     },
   });
 }
+export function useDebtsQuery(params?: Record<string, any>) {
+  return useQuery({
+    queryKey: ['debts', params],
+    queryFn: async (): Promise<Debt[]> => {
+      const res = await debtService.getDebts(params);
+      if (res.error) throw new Error(res.error);
+      return res.data || [];
+    },
+  });
+}
 
+export function useDebtDetailQuery(debtId?: string) {
+  return useQuery({
+    queryKey: ['debts', 'detail', debtId],
+    queryFn: async (): Promise<Debt | null> => {
+      if (!debtId) return null;
+      const res = await debtService.getDebt(debtId);
+      if (res.error) throw new Error(res.error);
+      return res.data || null;
+    },
+    enabled: Boolean(debtId),
+  });
+}
+
+export function useDeleteDebtMutation(contractId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await debtService.deleteDebt(id);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: () => {
+      invalidateFinancials(queryClient, contractId);
+    },
+  });
+}
+
+export function useUnlockDebtMutation(contractId?: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { id: string; reason: string }) => {
+      const res = await debtService.unlockDebt(payload);
+      if (res.error || !res.data) throw new Error(res.error || 'Không thể mở khóa công nợ');
+      return res.data;
+    },
+    onSuccess: () => {
+      invalidateFinancials(queryClient, contractId);
+    },
+  });
+}
+
+export const useActivateDebtItemMutation = useActivateDebtMutation;
+export const useCreateDebtPaymentMutation = useCreatePaymentMutation;
+export const useDeleteDebtPaymentMutation = useDeletePaymentMutation;

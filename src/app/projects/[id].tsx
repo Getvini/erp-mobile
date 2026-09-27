@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,11 +14,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/context/AuthContext';
 import { isManagementRole } from '@/utils/rbac';
 import { ProjectDetailItem, PROJECT_STATUS_CONFIG } from '@/services/projectService';
-import { taskService, TaskDetail } from '@/services/taskService';
-import { acceptanceService, AcceptanceItem } from '@/services/acceptanceService';
+import { TaskDetail } from '@/services/taskService';
+import { AcceptanceItem } from '@/services/acceptanceService';
 import { BrandColors } from '@/constants/colors';
 
-import { teamService } from '@/services/teamService';
 import ProjectOverviewTab from '@/components/projects/ProjectOverviewTab';
 import ProjectTasksTab from '@/components/projects/ProjectTasksTab';
 import ProjectAcceptanceTab from '@/components/projects/ProjectAcceptanceTab';
@@ -35,7 +34,7 @@ import TaskAssignModal from '@/components/projects/TaskAssignModal';
 import CreateMonthlyWorkModal from '@/components/projects/CreateMonthlyWorkModal';
 import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { safeGoBack } from '@/utils/navigation';
-import { getProjectManagerUser, hasTeamMemberRole } from '@/utils/teamMember';
+import { getProjectManagerUser, hasTeamMemberRole, getTeamMemberRoles } from '@/utils/teamMember';
 import {
   useProjectDetailQuery,
   useTeamMembersQuery,
@@ -69,10 +68,10 @@ export default function ProjectDetailScreen() {
   const removeTeamMemberMutation = useRemoveTeamMemberMutation();
 
   const { data: tasksData, isLoading: isLoadingTasks, refetch: refetchTasks } = useTasksByProjectQuery(String(id || ''));
-  const tasks: TaskDetail[] = tasksData || [];
+  const tasks: TaskDetail[] = useMemo(() => tasksData || [], [tasksData]);
 
   const { data: acceptancesData, isLoading: isLoadingAcceptances, refetch: refetchAcceptances } = useAcceptancesQuery({ projectId: String(id || '') });
-  const acceptances: AcceptanceItem[] = acceptancesData || [];
+  const acceptances: AcceptanceItem[] = useMemo(() => acceptancesData || [], [acceptancesData]);
 
   const isLoading = isProjectLoading;
   const isRefreshing = isProjectFetching;
@@ -134,28 +133,28 @@ export default function ProjectDetailScreen() {
     if (!project?.team?.id) return;
 
     // Check if member to remove holds the ACCOUNT role and is the last one in the project
-    const memberToRemove = effectiveTeamMembers.find(
+    const memberToRemove = (effectiveTeamMembers as any[]).find(
       (m: any) =>
         m.id === memberId ||
         (Array.isArray(m.memberships) && m.memberships.some((ms: any) => ms.id === memberId))
     );
-    const targetUserId = memberToRemove?.user?.id || memberToRemove?.userId;
+    const targetUserId = memberToRemove?.user?.id || (memberToRemove as any)?.userId;
 
     const hasAccountRole =
       (memberToRemove &&
         (hasTeamMemberRole(memberToRemove, 'ACCOUNT') ||
-          (Array.isArray(memberToRemove.roles) &&
-            memberToRemove.roles.some((r: any) => (typeof r === 'string' ? r : r?.role) === 'ACCOUNT')))) ||
-      (targetUserId && targetUserId === leadUser?.id);
+          (Array.isArray((memberToRemove as any).roles) &&
+            (memberToRemove as any).roles.some((r: any) => (typeof r === 'string' ? r : r?.role) === 'ACCOUNT')))) ||
+      Boolean(targetUserId && targetUserId === leadUser?.id);
 
     if (hasAccountRole) {
-      const otherAccountsCount = effectiveTeamMembers.filter((m: any) => {
+      const otherAccountsCount = (effectiveTeamMembers as any[]).filter((m: any) => {
         const uId = m.user?.id || m.userId;
         if (uId === targetUserId) return false;
         const roles = Array.isArray(m.roles)
           ? m.roles.map((r: any) => (typeof r === 'string' ? r : r?.role))
-          : getTeamMemberRoles(m);
-        return roles.includes('ACCOUNT') || (leadUser?.id && uId === leadUser.id);
+          : (getTeamMemberRoles(m) as string[]);
+        return roles.includes('ACCOUNT') || Boolean(leadUser?.id && uId === leadUser.id);
       }).length;
 
       if (otherAccountsCount === 0) {
@@ -225,15 +224,12 @@ export default function ProjectDetailScreen() {
 
   const assignableTasks = useMemo(() => tasks.filter(isTaskAssignable), [tasks, isTaskAssignable]);
 
-  // Clean up selectedTaskIds whenever tasks list changes
-  useEffect(() => {
-    setSelectedTaskIds((prev) =>
-      prev.filter((id) => {
-        const t = tasks.find((item) => item.id === id);
-        return t ? isTaskAssignable(t) : false;
-      })
-    );
-  }, [tasks, isTaskAssignable]);
+  const validSelectedTaskIds = useMemo(() => {
+    return selectedTaskIds.filter((id) => {
+      const t = tasks.find((item) => item.id === id);
+      return t ? isTaskAssignable(t) : false;
+    });
+  }, [selectedTaskIds, tasks, isTaskAssignable]);
 
   const handleToggleSelectTask = (taskId: string) => {
     setSelectedTaskIds((prev) =>
@@ -246,7 +242,7 @@ export default function ProjectDetailScreen() {
     if (groupAssignable.length === 0) return;
 
     const assignableIds = groupAssignable.map((t) => t.id);
-    const isAllGroupSelected = assignableIds.every((id) => selectedTaskIds.includes(id));
+    const isAllGroupSelected = assignableIds.every((id) => validSelectedTaskIds.includes(id));
 
     if (isAllGroupSelected) {
       setSelectedTaskIds((prev) => prev.filter((id) => !assignableIds.includes(id)));
@@ -256,7 +252,7 @@ export default function ProjectDetailScreen() {
   };
 
   const handleSelectAllTasks = () => {
-    if (selectedTaskIds.length === assignableTasks.length) {
+    if (validSelectedTaskIds.length === assignableTasks.length) {
       setSelectedTaskIds([]);
     } else {
       setSelectedTaskIds(assignableTasks.map((t) => t.id));
@@ -426,7 +422,7 @@ export default function ProjectDetailScreen() {
             projectStatus={project?.status}
             isPmOrAdmin={isPmOrAdmin}
             isSelectMode={isSelectMode}
-            selectedTaskIds={selectedTaskIds}
+            selectedTaskIds={validSelectedTaskIds}
             onToggleSelectMode={() => {
               setIsSelectMode((prev) => !prev);
               if (isSelectMode) setSelectedTaskIds([]);
@@ -472,17 +468,17 @@ export default function ProjectDetailScreen() {
             activeOpacity={0.7}
           >
             <Text className="text-[13px] font-semibold text-slate-400">
-              {selectedTaskIds.length > 0 && selectedTaskIds.length === assignableTasks.length
+              {validSelectedTaskIds.length > 0 && validSelectedTaskIds.length === assignableTasks.length
                 ? 'Bỏ chọn tất cả'
                 : 'Chọn tất cả'}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            className={`flex-row items-center gap-2 bg-primary px-4 py-2.5 rounded-xl ${selectedTaskIds.length === 0 ? 'opacity-50' : ''}`}
-            disabled={selectedTaskIds.length === 0}
+            className={`flex-row items-center gap-2 bg-primary px-4 py-2.5 rounded-xl ${validSelectedTaskIds.length === 0 ? 'opacity-50' : ''}`}
+            disabled={validSelectedTaskIds.length === 0}
             onPress={() => {
-              const selectedList = tasks.filter((t) => selectedTaskIds.includes(t.id));
+              const selectedList = tasks.filter((t) => validSelectedTaskIds.includes(t.id));
               if (selectedList.length > 0) {
                 setAssigningTask(selectedList);
                 setShowAssignTask(true);
@@ -492,7 +488,7 @@ export default function ProjectDetailScreen() {
           >
             <Feather name="users" size={15} color="#FFFFFF" />
             <Text className="text-[13px] font-bold text-white">
-              Phân công {selectedTaskIds.length > 0 ? `(${selectedTaskIds.length}) ` : ''}công việc
+              Phân công {validSelectedTaskIds.length > 0 ? `(${validSelectedTaskIds.length}) ` : ''}công việc
             </Text>
           </TouchableOpacity>
         </View>

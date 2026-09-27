@@ -1,4 +1,4 @@
-/** @type {import('tailwindcss').Config} */
+﻿/** @type {import('tailwindcss').Config} */
 module.exports = {
   content: ["./src/**/*.{js,jsx,ts,tsx}"],
   presets: [require("nativewind/preset")],
@@ -6,34 +6,34 @@ module.exports = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: "#F38820",
-          dark: "#D97010",
-          light: "#FFF7ED",
-          border: "#FDCB9E",
+          DEFAULT: "rgb(243 136 32)",
+          dark: "rgb(217 112 16)",
+          light: "rgb(255 247 237)",
+          border: "rgb(253 203 158)",
         },
-        surface: "#FFFFFF",
-        background: "#F8FAFC",
+        surface: "rgb(255 255 255)",
+        background: "rgb(248 250 252)",
         text: {
-          primary: "#0F172A",
-          secondary: "#64748B",
-          muted: "#94A3B8",
+          primary: "rgb(15 23 42)",
+          secondary: "rgb(100 116 139)",
+          muted: "rgb(148 163 184)",
         },
-        border: "#E2E8F0",
+        border: "rgb(226 232 240)",
         success: {
-          DEFAULT: "#10B981",
-          light: "#ECFDF5",
+          DEFAULT: "rgb(16 185 129)",
+          light: "rgb(236 253 245)",
         },
         warning: {
-          DEFAULT: "#F59E0B",
-          light: "#FFFBEB",
+          DEFAULT: "rgb(245 158 11)",
+          light: "rgb(255 251 235)",
         },
         info: {
-          DEFAULT: "#3B82F6",
-          light: "#EFF6FF",
+          DEFAULT: "rgb(59 130 246)",
+          light: "rgb(239 246 255)",
         },
         danger: {
-          DEFAULT: "#EF4444",
-          light: "#FEF2F2",
+          DEFAULT: "rgb(239 68 68)",
+          light: "rgb(254 242 242)",
         },
       },
       borderRadius: {

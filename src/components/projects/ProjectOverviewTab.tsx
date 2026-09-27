@@ -1,13 +1,16 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Linking, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { ProjectDetailItem } from '@/services/projectService';
 import { TeamMember, TEAM_MEMBER_ROLE_LABELS, USER_ROLE } from '@/services/teamService';
 import { BrandColors } from '@/constants/colors';
-import { formatNumber } from '@/utils/formatters';
+import { formatNumber, formatDateToDDMMYYYY } from '@/utils/formatters';
 import { getProjectManagerUser, hasTeamMemberRole, groupTeamMembers, getUserAccountRole } from '@/utils/teamMember';
 import { WorkloadBadge } from '@/components/common/WorkloadBadge';
+import { ProjectWorkingFilesSection } from '@/components/projects/ProjectWorkingFilesSection';
+import { DatePickerModal } from '@/components/common/DatePickerModal';
+import { useUpdateProjectMutation } from '@/hooks/queries/useProjects';
 
 
 interface ProjectOverviewTabProps {
@@ -53,9 +56,9 @@ export default function ProjectOverviewTab({
   const router = useRouter();
   const effectiveMembers = (teamMembers && teamMembers.length > 0) ? teamMembers : (project.team?.members || []);
 
+
   const pmUser = getProjectManagerUser(project, effectiveMembers);
   const pm = pmUser;
-
   const leadUser =
     project.team?.teamLead ||
     effectiveMembers.find(
@@ -67,6 +70,14 @@ export default function ProjectOverviewTab({
   const contract = project.contract;
   const progress = project.progress ?? 0;
 
+  const startDateStr =
+    project.plannedStartDate ||
+    (project.contract as any)?.plannedStartDate;
+  const endDateStr =
+    project.plannedEndDate ||
+    (project.contract as any)?.plannedEndDate;
+
+
   const handleOpenAttachment = (url?: string) => {
     if (url) {
       Linking.openURL(url).catch((err) => {
@@ -75,7 +86,78 @@ export default function ProjectOverviewTab({
     }
   };
 
+  const isClosed = ['COMPLETED', 'CANCELLED'].includes(project.status);
+  const isOnHold = project.status === 'ON_HOLD' || Boolean((project as any).isOnHold);
+  const isAssignedPm = pmUser?.id === user?.id && getUserAccountRole(user) === 'PM';
+  const canEditTimeline = !isClosed && !isOnHold && (getUserAccountRole(user) === 'ADMIN' || isAssignedPm);
+
+  // Timeline edit state
+  const [editingTimeline, setEditingTimeline] = useState(false);
+  const [timelineForm, setTimelineForm] = useState({
+    plannedStartDate: startDateStr || '',
+    plannedEndDate: endDateStr || '',
+  });
+  const [datePickerField, setDatePickerField] = useState<'plannedStartDate' | 'plannedEndDate' | null>(null);
+  const updateProjectMutation = useUpdateProjectMutation();
+
+  const hasTimelineChanges =
+    timelineForm.plannedStartDate !== (startDateStr || '') ||
+    timelineForm.plannedEndDate !== (endDateStr || '');
+
+  const handleSaveTimeline = async () => {
+    if (!canEditTimeline || !project.id) return;
+
+    if(!timelineForm.plannedStartDate || !timelineForm.plannedEndDate){
+      Alert.alert('Lỗi', 'Ngày bắt đầu và ngày kết thúc không được để trống');
+      return;
+    }
+
+    if(timelineForm.plannedStartDate > timelineForm.plannedEndDate){
+      Alert.alert('Lỗi', 'Ngày bắt đầu phải nhỏ hơn ngày kết thúc');
+      return;
+    }
+
+    try {
+      await updateProjectMutation.mutateAsync({
+        id: project.id,
+        plannedStartDate: timelineForm.plannedStartDate || null,
+        plannedEndDate: timelineForm.plannedEndDate || null,
+      });
+      setEditingTimeline(false);
+      Alert.alert('Thành công', 'Đã cập nhật tiến trình dự án');
+    } catch (err: any) {
+      Alert.alert('Lỗi', err?.message || 'Không thể cập nhật tiến trình dự án');
+    }
+  };
+
+  const [currentTimestamp] = useState(() => Date.now());
+
+
+  const timeline = useMemo(() => {
+    if (!startDateStr || !endDateStr) return null;
+    const start = new Date(startDateStr).getTime();
+    const end = new Date(endDateStr).getTime();
+    if (isNaN(start) || isNaN(end) || end <= start) return null;
+
+    const totalDays = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)));
+    const elapsedDays = Math.max(0, Math.round((currentTimestamp - start) / (1000 * 60 * 60 * 24)));
+    const diffFromEnd = Math.round((end - currentTimestamp) / (1000 * 60 * 60 * 24));
+    const percentElapsed = Math.min(100, Math.max(0, Math.round((elapsedDays / totalDays) * 100)));
+    const isOverdue = diffFromEnd < 0;
+
+    return {
+      startDateFormatted: formatDateToDDMMYYYY(startDateStr),
+      endDateFormatted: formatDateToDDMMYYYY(endDateStr),
+      totalDays,
+      elapsedDays,
+      diffDays: Math.abs(diffFromEnd),
+      percentElapsed,
+      isOverdue,
+    };
+  }, [startDateStr, endDateStr, currentTimestamp]);
+
   return (
+    <>
     <View className="p-4 gap-3.5">
       {/* 1. Missing PM Banner */}
       {!pm && (
@@ -142,7 +224,9 @@ export default function ProjectOverviewTab({
       {/* Project Info Card */}
       <View className="bg-surface rounded-2xl p-4 border border-border gap-3">
         <View className="flex-row items-center gap-2">
-          <Feather name="calendar" size={16} color={BrandColors.primary} />
+          <View className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 items-center justify-center mr-2.5">
+            <Feather name="calendar" size={16} color={BrandColors.primary} />
+          </View>
           <Text className="text-[15px] font-bold text-text-primary">Thông tin dự án</Text>
         </View>
 
@@ -167,6 +251,134 @@ export default function ProjectOverviewTab({
           <Text className="text-xs text-text-secondary italic leading-5">
             {contract?.description || (project as any).description || 'Chưa có mô tả chi tiết từ khách hàng.'}
           </Text>
+        </View>
+
+        {/* TIẾN TRÌNH DỰ ÁN — inside Project Info card */}
+        <View className="border-t border-slate-100 pt-3 gap-2">
+          {/* Row 1: Label */}
+          <Text className="text-[10px] font-extrabold text-text-muted tracking-wider">
+            TIẾN TRÌNH DỰ ÁN
+          </Text>
+
+          {/* Row 2: Badge + Edit button */}
+          <View className="flex-row items-center justify-between">
+            {timeline ? (
+              <View className="flex-row items-center gap-1.5 bg-primary/10 px-3 py-1.5 rounded-full">
+                <Feather
+                  name={timeline.isOverdue ? 'alert-circle' : 'clock'}
+                  size={11}
+                  color={timeline.isOverdue ? '#E11D48' : BrandColors.primary}
+                />
+                <Text className={`text-[11px] font-bold ${
+                  timeline.isOverdue ? 'text-rose-600' : 'text-primary'
+                }`}>
+                  {timeline.isOverdue
+                    ? `Quá hạn ${timeline.diffDays} ngày`
+                    : `Còn ${timeline.diffDays} ngày`}
+                </Text>
+              </View>
+            ) : (
+              <Text className="text-[11px] text-text-muted italic">Chưa thiết lập</Text>
+            )}
+            {canEditTimeline && !editingTimeline && (
+              <TouchableOpacity
+                className="flex-row items-center gap-1 bg-primary/10 border border-primary/20 px-2.5 py-1.5 rounded-lg"
+                onPress={() => {
+                  setTimelineForm({ plannedStartDate: startDateStr || '', plannedEndDate: endDateStr || '' });
+                  setEditingTimeline(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <Feather name="edit-2" size={11} color={BrandColors.primary} />
+                <Text className="text-[11px] font-bold text-primary">Sửa tiến trình</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {editingTimeline ? (
+            /* Edit mode */
+            <View className="gap-2">
+              <View className="flex-row gap-3">
+                <TouchableOpacity
+                  className="flex-1 bg-background border border-primary/40 rounded-xl px-3 py-2.5 gap-1"
+                  onPress={() => setDatePickerField('plannedStartDate')}
+                  activeOpacity={0.7}
+                >
+                  <Text className="text-[10px] font-bold text-text-muted">Ngày dự kiến bắt đầu</Text>
+                  <View className="flex-row items-center gap-1.5">
+                    <Feather name="calendar" size={12} color={BrandColors.primary} />
+                    <Text className="text-xs font-semibold text-primary">
+                      {timelineForm.plannedStartDate
+                        ? formatDateToDDMMYYYY(timelineForm.plannedStartDate)
+                        : 'Chọn ngày'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className="flex-1 bg-background border border-primary/40 rounded-xl px-3 py-2.5 gap-1"
+                  onPress={() => setDatePickerField('plannedEndDate')}
+                  activeOpacity={0.7}
+                >
+                  <Text className="text-[10px] font-bold text-text-muted">Ngày dự kiến kết thúc</Text>
+                  <View className="flex-row items-center gap-1.5">
+                    <Feather name="calendar" size={12} color={BrandColors.primary} />
+                    <Text className="text-xs font-semibold text-primary">
+                      {timelineForm.plannedEndDate
+                        ? formatDateToDDMMYYYY(timelineForm.plannedEndDate)
+                        : 'Chọn ngày'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+              <View className="flex-row gap-2">
+                <TouchableOpacity
+                  className="flex-1 border border-border rounded-xl py-2 items-center"
+                  onPress={() => setEditingTimeline(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text className="text-xs font-bold text-text-secondary">Hủy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className={`flex-1 rounded-xl py-2 items-center ${
+                    hasTimelineChanges && !updateProjectMutation.isPending ? 'bg-primary' : 'bg-slate-200'
+                  }`}
+                  onPress={handleSaveTimeline}
+                  disabled={!hasTimelineChanges || updateProjectMutation.isPending}
+                  activeOpacity={0.8}
+                >
+                  {updateProjectMutation.isPending ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <Text className={`text-xs font-bold ${
+                      hasTimelineChanges ? 'text-white' : 'text-slate-400'
+                    }`}>Lưu tiến trình</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            /* View mode */
+            <View className="flex-row gap-3">
+              <View className="flex-1 bg-background border border-border rounded-xl px-3 py-2.5 gap-1">
+                <Text className="text-[10px] font-bold text-text-muted">Ngày dự kiến bắt đầu</Text>
+                <View className="flex-row items-center gap-1.5">
+                  <Feather name="calendar" size={12} color={BrandColors.primary} />
+                  <Text className="text-xs font-semibold text-text-primary">
+                    {startDateStr ? formatDateToDDMMYYYY(startDateStr) : 'Chưa cập nhật'}
+                  </Text>
+                </View>
+              </View>
+              <View className="flex-1 bg-background border border-border rounded-xl px-3 py-2.5 gap-1">
+                <Text className="text-[10px] font-bold text-text-muted">Ngày dự kiến kết thúc</Text>
+                <View className="flex-row items-center gap-1.5">
+                  <Feather name="calendar" size={12} color={BrandColors.primary} />
+                  <Text className="text-xs font-semibold text-text-primary">
+                    {endDateStr ? formatDateToDDMMYYYY(endDateStr) : 'Chưa cập nhật'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
         </View>
 
         <View className="gap-2 mt-1">
@@ -203,21 +415,32 @@ export default function ProjectOverviewTab({
       </View>
 
 
-      {/* Task Progress Stat Card */}
+      {/* Task & Timeline Progress Stat Card */}
       <View className="bg-surface rounded-2xl p-4 border border-border gap-3">
         <View className="flex-row items-center gap-2">
-          <Feather name="pie-chart" size={16} color={BrandColors.primary} />
-          <Text className="text-[15px] font-bold text-text-primary">Thống kê tiến độ công việc</Text>
+          <View className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 items-center justify-center mr-2.5">
+            <Feather name="pie-chart" size={16} color={BrandColors.primary} />
+          </View>
+          <Text className="text-[15px] font-bold text-text-primary">Tiến độ công việc & Thời gian</Text>
         </View>
 
-        <View className="flex-row items-baseline gap-2">
-          <Text className="text-3xl font-extrabold text-primary">{progress}%</Text>
-          <Text className="text-xs text-text-secondary font-medium">Tổng thể dự án</Text>
+        {/* Task Completion Progress */}
+        <View>
+          <View className="flex-row items-baseline justify-between mb-1.5">
+            <View className="flex-row items-baseline gap-2">
+              <Text className="text-2xl font-extrabold text-primary">{progress}%</Text>
+              <Text className="text-xs text-text-secondary font-medium">Hoàn thành công việc</Text>
+            </View>
+            <Text className="text-xs font-semibold text-text-muted">
+              {taskStats.completed}/{taskStats.total} việc
+            </Text>
+          </View>
+          <View className="h-2 bg-slate-100 rounded-full overflow-hidden">
+            <View className="h-full bg-primary rounded-full" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
+          </View>
         </View>
 
-        <View className="h-2 bg-slate-200 rounded-full overflow-hidden">
-          <View className="h-full bg-primary rounded-full" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
-        </View>
+
 
         <View className="flex-row justify-between bg-background rounded-xl p-3">
           <View className="items-center gap-0.5">
@@ -239,11 +462,16 @@ export default function ProjectOverviewTab({
         </View>
       </View>
 
+      {/* Working Files Section */}
+      <ProjectWorkingFilesSection project={project} />
+
       {/* Project Manager Card */}
       <View className="bg-surface rounded-2xl p-4 border border-border gap-3">
         <View className="flex-row justify-between items-center">
           <View className="flex-row items-center gap-2">
-            <Feather name="user-check" size={16} color={BrandColors.primary} />
+            <View className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 items-center justify-center mr-2.5">
+              <Feather name="user-check" size={16} color={BrandColors.primary} />
+            </View>
             <Text className="text-[15px] font-bold text-text-primary">Quản lý dự án (PM)</Text>
           </View>
           {canAssignPm && (
@@ -276,7 +504,9 @@ export default function ProjectOverviewTab({
       <View className="bg-surface rounded-2xl p-4 border border-border gap-3">
         <View className="flex-row justify-between items-center">
           <View className="flex-row items-center gap-2">
-            <Feather name="users" size={16} color={BrandColors.primary} />
+            <View className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 items-center justify-center mr-2.5">
+              <Feather name="users" size={16} color={BrandColors.primary} />
+            </View>
             <Text className="text-[15px] font-bold text-text-primary">Đội ngũ thực hiện</Text>
           </View>
           {canManageTeam && pmUser && (
@@ -445,5 +675,28 @@ export default function ProjectOverviewTab({
         </View>
       )}
     </View>
+
+      {/* DatePicker for timeline edit */}
+      <DatePickerModal
+        visible={datePickerField !== null}
+        onClose={() => setDatePickerField(null)}
+        onConfirm={(_ddmmyyyy, yyyymmdd) => {
+          if (datePickerField) {
+            setTimelineForm(prev => ({ ...prev, [datePickerField]: yyyymmdd }));
+          }
+          setDatePickerField(null);
+        }}
+        initialDate={
+          datePickerField === 'plannedStartDate'
+            ? timelineForm.plannedStartDate || undefined
+            : timelineForm.plannedEndDate || undefined
+        }
+        title={
+          datePickerField === 'plannedStartDate'
+            ? 'Ngày dự kiến bắt đầu'
+            : 'Ngày dự kiến kết thúc'
+        }
+      />
+    </>
   );
 }

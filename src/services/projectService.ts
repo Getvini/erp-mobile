@@ -63,8 +63,8 @@ export interface ProjectItem {
   name: string;
   status: string;
   code?: string;
-  startDate?: string;
-  endDate?: string;
+  plannedStartDate?: string;
+  plannedEndDate?: string;
   budget?: number;
   progress?: number;
   contract?: {
@@ -74,12 +74,12 @@ export interface ProjectItem {
     description?: string;
     sellingPrice?: number;
     createdById?: string;
-    attachments?: Array<{
+    attachments?: {
       name: string;
       url: string;
       type?: string;
       size?: number;
-    }>;
+    }[];
     customer?: {
       id: string;
       name: string;
@@ -94,7 +94,7 @@ export interface ProjectItem {
       id: string;
       fullName: string;
     };
-    members?: Array<{
+    members?: {
       id: string;
       role: string;
       user?: {
@@ -102,7 +102,7 @@ export interface ProjectItem {
         fullName: string;
         email?: string;
       };
-    }>;
+    }[];
   };
 }
 
@@ -113,14 +113,26 @@ export interface UserPMItem {
   role?: string;
 }
 
+export interface WorkingFileItem {
+  id: string;
+  name: string;
+  url: string;
+  type: 'LINK' | 'FILE';
+  size?: number;
+  createdAt?: string;
+  createdById?: string;
+  createdByName?: string;
+}
+
 export interface ProjectDetailItem extends ProjectItem {
   projectManager?: {
     id: string;
     fullName: string;
     email?: string;
   };
-  jobs?: Array<any>;
-  tasks?: Array<any>;
+  jobs?: any[];
+  tasks?: any[];
+  workingFiles?: WorkingFileItem[];
   contract?: ProjectItem['contract'] & {
     contractCode?: string;
     signingDate?: string;
@@ -173,7 +185,17 @@ class ProjectService {
   }
 
 
+  async updateProject(id: string, payload: {
+    plannedStartDate?: string | null;
+    plannedEndDate?: string | null;
+    [key: string]: any;
+  }): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.patch(`/projects/${id}`, payload);
+    return { data: res.data, error: res.error };
+  }
+
   async updateProjectStatus(id: string, status: string): Promise<{ data?: any; error?: string }> {
+
     const res = await apiService.patch(`/projects/${id}/status`, { status });
     return { data: res.data, error: res.error };
   }
@@ -212,6 +234,11 @@ class ProjectService {
     const res = await apiService.get<any>('/service-packages');
     const items = Array.isArray(res.data) ? res.data : res.data?.data && Array.isArray(res.data.data) ? res.data.data : [];
     return { data: items, error: res.error };
+  }
+
+  async updateWorkingFiles(id: string, workingFiles: WorkingFileItem[]): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.patch(`/projects/${id}/working-files`, { workingFiles });
+    return { data: res.data, error: res.error };
   }
 
   async getPmUsers(): Promise<{ data?: UserPMItem[]; error?: string }> {
