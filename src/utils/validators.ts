@@ -24,6 +24,15 @@ export const DECIMAL_REGEX = /^[0-9]+(\.[0-9]+)?$/;
 // Regex Mã số thuế Việt Nam (10 số hoặc 13 số có dạng 1234567890-123)
 export const TAX_ID_REGEX = /^[0-9]{10}(-[0-9]{3})?$/;
 
+// Regex Tỷ lệ % (từ 0 đến 100, cho phép tối đa 2 chữ số thập phân)
+export const PERCENT_REGEX = /^(100(\.0{1,2})?|[0-9]{1,2}(\.[0-9]{1,2})?)$/;
+
+// Regex Mã định danh (3-30 ký tự hoa, số, gạch ngang, gạch dưới)
+export const IDENTIFIER_REGEX = /^[A-Z0-9_-]{3,30}$/;
+
+// Regex Ngày tháng nhập tay UI theo chuẩn DD-MM-YYYY
+export const DATE_UI_REGEX = /^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-\d{4}$/;
+
 /**
  * Kiểm tra tính hợp lệ của đường dẫn URL (Link Hợp đồng, Link báo giá...)
  * Hỗ trợ các link domain, localhost, IP nội bộ, và port.
@@ -100,4 +109,29 @@ export const isValidNumber = (val?: string | number): boolean => {
 export const isValidTaxId = (taxId?: string): boolean => {
   if (!taxId || !taxId.trim()) return false;
   return TAX_ID_REGEX.test(taxId.trim());
+};
+
+/**
+  * Kiểm tra Tỷ lệ % hợp lệ (0 đến 100, tối đa 2 chữ số thập phân)
+  */
+export const isValidPercent = (val?: string | number): boolean => {
+  if (val === undefined || val === null || val === '') return false;
+  const str = String(val).trim();
+  return PERCENT_REGEX.test(str);
+};
+
+/**
+  * Kiểm tra Mã định danh hợp lệ (3-30 ký tự, in hoa, số, _, -)
+  */
+export const isValidIdentifier = (code?: string): boolean => {
+  if (!code || !code.trim()) return false;
+  return IDENTIFIER_REGEX.test(code.trim());
+};
+
+/**
+  * Kiểm tra Ngày tháng nhập UI định dạng DD-MM-YYYY
+  */
+export const isValidDateUI = (dateStr?: string): boolean => {
+  if (!dateStr || !dateStr.trim()) return false;
+  return DATE_UI_REGEX.test(dateStr.trim());
 };

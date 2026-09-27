@@ -12,7 +12,7 @@ export const queryKeys = {
   // Dashboard & Home Metrics
   dashboard: {
     all: ['dashboard'] as const,
-    summary: (params?: { month?: number; year?: number }) => [...queryKeys.dashboard.all, params || {}] as const,
+    summary: (params?: Record<string, any>) => [...queryKeys.dashboard.all, 'summary', params || {}] as const,
   },
 
   // Opportunities / Cơ hội kinh doanh
@@ -108,5 +108,54 @@ export const queryKeys = {
   finance: {
     all: ['finance'] as const,
     contractDebts: () => [...queryKeys.finance.all, 'contract-debts'] as const,
+  },
+
+  // Payment Milestones / Đợt thanh toán
+  paymentMilestones: {
+    all: ['paymentMilestones'] as const,
+    lists: () => [...queryKeys.paymentMilestones.all, 'list'] as const,
+    list: (params?: Record<string, any>) => [...queryKeys.paymentMilestones.lists(), params || {}] as const,
+    byContract: (contractId: string) => [...queryKeys.paymentMilestones.all, 'contract', contractId] as const,
+    byProject: (projectId: string) => [...queryKeys.paymentMilestones.all, 'project', projectId] as const,
+    details: () => [...queryKeys.paymentMilestones.all, 'detail'] as const,
+    detail: (id: string) => [...queryKeys.paymentMilestones.details(), id] as const,
+  },
+
+  // Payment Requests / Đề xuất thanh toán & tạm ứng
+  paymentRequests: {
+    all: ['paymentRequests'] as const,
+    lists: () => [...queryKeys.paymentRequests.all, 'list'] as const,
+    list: (params?: Record<string, any>) => [...queryKeys.paymentRequests.lists(), params || {}] as const,
+    details: () => [...queryKeys.paymentRequests.all, 'detail'] as const,
+    detail: (id: string) => [...queryKeys.paymentRequests.details(), id] as const,
+    totalDebt: (params?: Record<string, any>) => [...queryKeys.paymentRequests.all, 'total-debt', params || {}] as const,
+  },
+
+  // Debts / Công nợ hợp đồng & đối soát
+  debts: {
+    all: ['debts'] as const,
+    lists: () => [...queryKeys.debts.all, 'list'] as const,
+    list: (params?: Record<string, any>) => [...queryKeys.debts.lists(), params || {}] as const,
+    byContract: (contractId: string) => [...queryKeys.debts.all, 'contract', contractId] as const,
+    details: () => [...queryKeys.debts.all, 'detail'] as const,
+    detail: (id: string) => [...queryKeys.debts.details(), id] as const,
+  },
+
+  // Payment Dashboard / Bảng điều khiển tài chính & dòng tiền
+  paymentDashboard: {
+    all: ['paymentDashboard'] as const,
+    overview: (params?: Record<string, any>) => [...queryKeys.paymentDashboard.all, 'overview', params || {}] as const,
+  },
+
+  // Finance Documents / Biên bản nghiệm thu & Hóa đơn VAT
+  financeDocuments: {
+    all: ['financeDocuments'] as const,
+    byContract: (contractId: string) => [...queryKeys.financeDocuments.all, 'contract', contractId] as const,
+  },
+
+  // Settings / Cài đặt hệ thống & QC
+  settings: {
+    all: ['settings'] as const,
+    qc: () => [...queryKeys.settings.all, 'qc'] as const,
   },
 };

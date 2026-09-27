@@ -27,7 +27,8 @@ import { CreateOpportunityPayload } from '@/services/opportunityService';
 import {
   useCreateOpportunityMutation,
   useAvailableServicesQuery,
-  useServicePackagesQuery } from
+  useServicePackagesQuery,
+  useOpportunityDetailQuery } from
 '@/hooks/queries/useOpportunities';
 
 import {
@@ -387,7 +388,7 @@ const formatMonthYear = (value: string, prevValue: string): string => {
 
 export default function CreateOpportunityScreen() {
   const router = useRouter();
-  const { mode } = useLocalSearchParams<{mode?: string;}>();
+  const { mode, cloneFromId } = useLocalSearchParams<{ mode?: string; cloneFromId?: string }>();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isSmallScreen = width < 380;
@@ -414,16 +415,25 @@ export default function CreateOpportunityScreen() {
     removeService,
     selectServiceItem,
     setServiceQuantity,
+    addPackageService,
+    removePackageService,
+    updatePackageService,
+    setPackageServiceJobIncluded,
+    setPackageServiceJobBrief,
+    setServiceJobIncluded,
+    setServiceJobBrief,
     addLink,
     removeLink,
     updateLink,
     addAttachedFiles,
     removeAttachedFile,
-    resetForm
+    resetForm,
+    setNameParts
   } = useOpportunityFormStore();
 
   const {
     name,
+    nameParts,
     description,
     field,
     expectedRevenue,
@@ -441,13 +451,6 @@ export default function CreateOpportunityScreen() {
     attachedFiles
   } = formData;
 
-  // Opportunity Name Parts State (chuẩn Web: 3 ô ghép)
-  const [nameParts, setNameParts] = useState({
-    customerName: '',
-    brandName: '',
-    monthYear: ''
-  });
-
   // Refs cho việc nhảy tự động giữa các ô nhập liệu khi nhấn Hoàn tất/Next
   const brandNameRef = useRef<TextInput>(null);
   const monthYearRef = useRef<TextInput>(null);
@@ -455,14 +458,10 @@ export default function CreateOpportunityScreen() {
 
   // Auto-combine: customerName_brandName_MM/YY
   const opportunityName = useMemo(() => {
-    const { customerName, brandName, monthYear } = nameParts;
+    if (!nameParts) return name || '';
+    const { customerName = '', brandName = '', monthYear = '' } = nameParts;
     return [customerName.trim(), brandName.trim(), monthYear.trim()].filter(Boolean).join('_');
-  }, [nameParts]);
-
-  // Sync opportunityName vào store
-  useEffect(() => {
-    updateField('name', opportunityName);
-  }, [opportunityName]);
+  }, [nameParts, name]);
 
   // Convenience Setters
   const setDescription = (val: string) => updateField('description', val);
@@ -483,7 +482,7 @@ export default function CreateOpportunityScreen() {
   const { data: rawServ, isLoading: isLoadingServices } = useAvailableServicesQuery();
   const { data: rawPkg, isLoading: isLoadingPackages } = useServicePackagesQuery();
 
-  const availableServices = useMemo<Array<{id: string;name: string;costPrice?: number;}>>(() => {
+  const availableServices = useMemo<Array<{ id: string; name: string; costPrice?: number; serviceJobs?: any[] }>>(() => {
     if (!rawServ) return [];
     return Array.isArray(rawServ) ? rawServ : (rawServ as any)?.data && Array.isArray((rawServ as any).data) ? (rawServ as any).data : [];
   }, [rawServ]);
@@ -495,13 +494,20 @@ export default function CreateOpportunityScreen() {
 
   const isLoadingMeta = isLoadingServices || isLoadingPackages;
   const createOpportunityMutation = useCreateOpportunityMutation();
+  const { data: clonedOpp, isLoading: isCloningLoading } = useOpportunityDetailQuery(cloneFromId ? String(cloneFromId) : '');
+  const [hasAppliedClone, setHasAppliedClone] = useState(false);
 
   // UI Selection Modals State
   const [isFieldModalVisible, setIsFieldModalVisible] = useState(false);
   const [isRegionModalVisible, setIsRegionModalVisible] = useState(false);
   const [activeDatePicker, setActiveDatePicker] = useState<'start' | 'end' | null>(null);
   const [activePackageIndex, setActivePackageIndex] = useState<number | null>(null);
-  const [activeServiceIndex, setActiveServiceIndex] = useState<number | null>(null);
+  const [activeServiceTarget, setActiveServiceTarget] = useState<
+    | { type: 'standalone'; index: number }
+    | { type: 'package'; pkgIndex: number; serviceIndex: number }
+    | null
+  >(null);
+  const [expandedPackages, setExpandedPackages] = useState<Record<number, boolean>>({ 0: true });
 
   const autoSaveTimerRef = useRef<any>(null);
 
@@ -570,10 +576,100 @@ export default function CreateOpportunityScreen() {
 
   // Reset form if opening clean (not in draft mode)
   useEffect(() => {
-    if (mode !== 'draft') {
+    if (mode !== 'draft' && !cloneFromId) {
       resetForm();
     }
-  }, [mode]);
+  }, [mode, cloneFromId]);
+
+  // Auto-fill from cloned opportunity if ?cloneFromId=...
+  useEffect(() => {
+    if (cloneFromId && clonedOpp && !hasAppliedClone) {
+      setHasAppliedClone(true);
+
+      const rawName = String(clonedOpp.name || '');
+      const rawNameParts = rawName.split('_');
+      let cust = '';
+      let brand = '';
+      let my = '';
+
+      if (rawNameParts.length >= 3) {
+        cust = rawNameParts[0].trim();
+        brand = rawNameParts.slice(1, -1).join('_').trim();
+        my = rawNameParts[rawNameParts.length - 1].trim();
+      } else if (rawNameParts.length === 2) {
+        cust = rawNameParts[0].trim();
+        my = rawNameParts[1].trim();
+      } else {
+        cust = rawName.trim();
+      }
+
+      if (clonedOpp.customer?.name) {
+        cust = clonedOpp.customer.name;
+      } else if (clonedOpp.leadName) {
+        cust = clonedOpp.leadName;
+      }
+
+      setNameParts({
+        customerName: cust,
+        brandName: brand,
+        monthYear: my,
+      });
+
+      // Standalone services (not belonging to any package)
+      const standaloneServices = (clonedOpp.services || [])
+        .filter((s: any) => !s.opportunityPackageId && !s.isPackageService)
+        .map((s: any) => ({
+          serviceId: s.serviceId || s.service?.id || s.id || '',
+          quantity: Number(s.quantity) || 1,
+        }));
+
+      // Packages
+      const mappedPackages = (clonedOpp.packages || []).map((pkg: any) => ({
+        servicePackageId:
+          pkg.servicePackageId ||
+          pkg.servicePackage?.id ||
+          pkg.package?.id ||
+          pkg.id ||
+          '',
+        name: pkg.name || pkg.servicePackage?.name || pkg.package?.name || '',
+        description: pkg.description || pkg.servicePackage?.description || '',
+        quantity: Number(pkg.quantity) || 1,
+        services: (pkg.services || pkg.items || []).map((s: any) => ({
+          serviceId: s.serviceId || s.service?.id || '',
+          quantity: Number(s.quantity) || 1,
+          sellingPrice: Number(s.sellingPrice ?? s.service?.costPrice ?? 0),
+        })),
+      }));
+
+      // Attachments / Links
+      const attachments = clonedOpp.attachments || [];
+      const links = attachments.filter((a: any) => a.type === 'LINK').map((a: any) => a.url);
+      const paddedLinks = links.length >= 3 ? links : [...links, ...Array(3 - links.length).fill('')];
+
+      const regionList = Array.isArray(clonedOpp.region)
+        ? clonedOpp.region
+        : typeof clonedOpp.region === 'string' && clonedOpp.region
+        ? [clonedOpp.region]
+        : [];
+
+      updateFormData({
+        description: clonedOpp.description || '',
+        field: clonedOpp.field || '',
+        expectedRevenue: Number(clonedOpp.expectedRevenue) || 0,
+        budget: Number(clonedOpp.budget) || 0,
+        startDate: clonedOpp.startDate ? toDisplayDate(clonedOpp.startDate) : '',
+        endDate: clonedOpp.endDate ? toDisplayDate(clonedOpp.endDate) : '',
+        durationMonths: Number(clonedOpp.durationMonths) || 1,
+        priority: clonedOpp.priority || 'Medium',
+        successChance: Number(clonedOpp.successChance) || 0,
+        selectedRegions: regionList,
+        customerRequirements: clonedOpp.customerRequirements || '',
+        services: standaloneServices.length > 0 ? standaloneServices : [{ serviceId: '', quantity: 1 }],
+        packages: mappedPackages.length > 0 ? mappedPackages : [{ servicePackageId: '', quantity: 1 }],
+        links: paddedLinks.length > 0 ? paddedLinks : ['', '', ''],
+      });
+    }
+  }, [cloneFromId, clonedOpp, hasAppliedClone]);
 
   // Auto-restore draft if opened in draft mode (?mode=draft)
   useEffect(() => {
@@ -583,8 +679,19 @@ export default function CreateOpportunityScreen() {
           const savedDraft = await AsyncStorage.getItem(STORAGE_DRAFT_KEY);
           if (savedDraft) {
             const d = JSON.parse(savedDraft);
+            let restoredNameParts = d.nameParts;
+            if (!restoredNameParts && d.name) {
+              const parts = String(d.name).split('_');
+              restoredNameParts = {
+                customerName: parts[0]?.trim() || '',
+                brandName: parts.length >= 3 ? parts.slice(1, -1).join('_').trim() : parts[1]?.trim() || '',
+                monthYear: parts.length >= 2 ? parts[parts.length - 1]?.trim() || '' : ''
+              };
+            }
+
             updateFormData({
               ...d,
+              ...(restoredNameParts ? { nameParts: restoredNameParts } : {}),
               expectedRevenue: typeof d.expectedRevenue === 'number' ? d.expectedRevenue : parseNumberInput(d.expectedRevenue),
               budget: typeof d.budget === 'number' ? d.budget : parseNumberInput(d.budget),
               startDate: d.startDate ? toDisplayDate(d.startDate) : '',
@@ -659,6 +766,11 @@ export default function CreateOpportunityScreen() {
     const template = availablePackages.find((t) => String(t.id) === String(templateId));
     selectPackageTemplate(index, template);
     setActivePackageIndex(null);
+    setExpandedPackages((prev) => ({ ...prev, [index]: true }));
+  };
+
+  const handleToggleExpandPackage = (index: number) => {
+    setExpandedPackages((prev) => ({ ...prev, [index]: !prev[index] }));
   };
 
   const handlePackageQuantityChange = (index: number, qty: number) => {
@@ -670,9 +782,17 @@ export default function CreateOpportunityScreen() {
 
   const handleRemoveService = (index: number) => removeService(index);
 
-  const handleSelectServiceItem = (index: number, serviceId: string) => {
-    selectServiceItem(index, serviceId);
-    setActiveServiceIndex(null);
+  const handleSelectServiceFromModal = (serviceId: string) => {
+    if (!activeServiceTarget) return;
+
+    if (activeServiceTarget.type === 'standalone') {
+      const found = availableServices.find((s) => String(s.id) === String(serviceId));
+      selectServiceItem(activeServiceTarget.index, serviceId, found);
+    } else if (activeServiceTarget.type === 'package') {
+      const found = availableServices.find((s) => String(s.id) === String(serviceId));
+      updatePackageService(activeServiceTarget.pkgIndex, activeServiceTarget.serviceIndex, 'serviceId', serviceId, found);
+    }
+    setActiveServiceTarget(null);
   };
 
   const handleServiceQuantityChange = (index: number, qty: number) => {
@@ -810,28 +930,44 @@ export default function CreateOpportunityScreen() {
       return;
     }
 
+    const missingBrief = [
+      ...services,
+      ...packages.flatMap((pkg) => pkg.services || [])
+    ].some((service) =>
+      (service.jobs || []).some((job) => job.isBriefVideo && job.included && !job.briefVideo?.trim())
+    );
+
+    if (missingBrief) {
+      Alert.alert('Thiếu thông tin', 'Vui lòng nhập đầy đủ brief cho hạng mục Video AI demo.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const validServices = services.
-      filter((s) => s.serviceId && s.quantity > 0).
-      map((s) => ({
-        id: s.serviceId,
-        quantity: Number(s.quantity) || 1
-      }));
-
-      const validPackages = packages.
-      filter((pkg) => pkg.servicePackageId).
-      map((pkg) => ({
-        servicePackageId: pkg.servicePackageId,
-        name: pkg.name,
-        description: pkg.description,
-        quantity: Number(pkg.quantity) || 1,
-        services: (pkg.services || []).map((s) => ({
-          serviceId: s.serviceId,
+      const validServices = services
+        .filter((s) => s.serviceId && s.quantity > 0)
+        .map((s) => ({
+          id: s.serviceId,
           quantity: Number(s.quantity) || 1,
-          sellingPrice: s.sellingPrice
-        }))
-      }));
+          jobs: s.jobs || []
+        }));
+
+      const validPackages = packages
+        .filter((pkg) => pkg.servicePackageId)
+        .map((pkg) => ({
+          servicePackageId: pkg.servicePackageId,
+          name: pkg.name,
+          description: pkg.description,
+          quantity: Number(pkg.quantity) || 1,
+          services: (pkg.services || [])
+            .filter((s) => s.serviceId)
+            .map((s) => ({
+              serviceId: s.serviceId,
+              quantity: Number(s.quantity) || 1,
+              sellingPrice: s.sellingPrice,
+              jobs: s.jobs || []
+            }))
+        }));
 
       if (validServices.length === 0 && validPackages.length === 0) {
         Alert.alert('Thiếu thông tin', 'Vui lòng chọn ít nhất 1 dịch vụ lẻ hoặc 1 gói dịch vụ.');
@@ -936,7 +1072,7 @@ export default function CreateOpportunityScreen() {
 
           <View className="flex-1 ml-[12px]">
             <Text className="text-[17px] font-bold text-slate-900">
-              {mode === 'draft' ? 'Chỉnh Sửa Bản Nháp' : 'Tạo Cơ Hội Mới'}
+              {cloneFromId ? 'Sao Chép Cơ Hội' : mode === 'draft' ? 'Chỉnh Sửa Bản Nháp' : 'Tạo Cơ Hội Mới'}
             </Text>
             <View className="flex-row items-center mt-[2px]">
               {lastSavedTime ?
@@ -946,7 +1082,7 @@ export default function CreateOpportunityScreen() {
                 </View> :
 
               <Text className="text-[12px] text-slate-500 mt-[2px]">
-                  {mode === 'draft' ? 'Chỉnh sửa thông tin bản nháp' : 'Điền thông tin chi tiết của cơ hội'}
+                  {cloneFromId ? 'Tạo cơ hội tương tự từ hồ sơ sẵn có' : mode === 'draft' ? 'Chỉnh sửa thông tin bản nháp' : 'Điền thông tin chi tiết của cơ hội'}
                 </Text>
               }
             </View>
@@ -978,6 +1114,24 @@ export default function CreateOpportunityScreen() {
         extraScrollHeight={Platform.OS === 'ios' ? 70 : 100}
         extraHeight={100}>
         
+          {/* Banner trạng thái sao chép cơ hội */}
+          {cloneFromId && isCloningLoading && (
+            <View className="flex-row items-center gap-2.5 bg-blue-50 border border-blue-200 p-3.5 rounded-2xl mb-2">
+              <ActivityIndicator size="small" color="#2563EB" />
+              <Text className="text-xs text-blue-700 font-semibold flex-1">
+                Đang nạp dữ liệu từ cơ hội gốc...
+              </Text>
+            </View>
+          )}
+          {cloneFromId && !isCloningLoading && clonedOpp && (
+            <View className="flex-row items-center gap-2.5 bg-emerald-50 border border-emerald-200 p-3 rounded-2xl mb-1">
+              <Feather name="check-circle" size={16} color="#059669" />
+              <Text className="text-xs text-emerald-800 font-semibold flex-1">
+                Đã sao chép dữ liệu từ cơ hội "{clonedOpp.name}". Hãy kiểm tra lại và nhấn tạo mới.
+              </Text>
+            </View>
+          )}
+
           {/* 1. THÔNG TIN CƠ BẢN */}
           <View className="bg-white rounded-[14px] p-[16px] border border-slate-200">
             <View className="flex-row items-center mb-[16px] gap-[12px]">
@@ -1010,15 +1164,15 @@ export default function CreateOpportunityScreen() {
               <View className="mb-[10px]">
                 <Text className="text-[12px] font-semibold text-slate-600 mb-[5px]">Tên khách hàng <Text className="text-[#EF4444]">*</Text></Text>
                 <TextInput
-
-                placeholder="VD: Công ty ABC"
-                placeholderTextColor="#94A3B8"
-                returnKeyType="next"
-                onSubmitEditing={() => brandNameRef.current?.focus()}
-                blurOnSubmit={false}
-                value={nameParts.customerName}
-                onChangeText={(v) => setNameParts((prev) => ({ ...prev, customerName: v }))} className="bg-slate-50 border border-slate-300 rounded-[10px] px-[12px] py-[10px] text-[14px] text-slate-900" />
-              
+                  placeholder="VD: Công ty ABC"
+                  placeholderTextColor="#94A3B8"
+                  returnKeyType="next"
+                  onSubmitEditing={() => brandNameRef.current?.focus()}
+                  blurOnSubmit={false}
+                  value={nameParts?.customerName || ''}
+                  onChangeText={(v) => setNameParts({ customerName: v })}
+                  className="bg-slate-50 border border-slate-300 rounded-[10px] px-[12px] py-[10px] text-[14px] text-slate-900"
+                />
               </View>
 
               {/* Row 2: Tên Brand + MM/YY cạnh nhau */}
@@ -1026,35 +1180,35 @@ export default function CreateOpportunityScreen() {
                 <View style={{ flex: 1, marginRight: 8 }} className="mb-[10px]">
                   <Text className="text-[12px] font-semibold text-slate-600 mb-[5px]">Tên Brand <Text className="text-[#EF4444]">*</Text></Text>
                   <TextInput
-                  ref={brandNameRef}
-
-                  placeholder="VD: GETVINI"
-                  placeholderTextColor="#94A3B8"
-                  returnKeyType="next"
-                  onSubmitEditing={() => monthYearRef.current?.focus()}
-                  blurOnSubmit={false}
-                  value={nameParts.brandName}
-                  onChangeText={(v) => setNameParts((prev) => ({ ...prev, brandName: v }))} className="bg-slate-50 border border-slate-300 rounded-[10px] px-[12px] py-[10px] text-[14px] text-slate-900" />
-                
+                    ref={brandNameRef}
+                    placeholder="VD: GETVINI"
+                    placeholderTextColor="#94A3B8"
+                    returnKeyType="next"
+                    onSubmitEditing={() => monthYearRef.current?.focus()}
+                    blurOnSubmit={false}
+                    value={nameParts?.brandName || ''}
+                    onChangeText={(v) => setNameParts({ brandName: v })}
+                    className="bg-slate-50 border border-slate-300 rounded-[10px] px-[12px] py-[10px] text-[14px] text-slate-900"
+                  />
                 </View>
 
                 <View style={{ width: 100 }} className="mb-[10px]">
                   <Text className="text-[12px] font-semibold text-slate-600 mb-[5px]">Tháng/Năm <Text className="text-[#EF4444]">*</Text></Text>
                   <TextInput
-                  ref={monthYearRef}
-
-                  placeholder="mm/yy"
-                  placeholderTextColor="#94A3B8"
-                  keyboardType="numeric"
-                  maxLength={5}
-                  returnKeyType="next"
-                  onSubmitEditing={() => descriptionRef.current?.focus()}
-                  blurOnSubmit={false}
-                  value={nameParts.monthYear}
-                  onChangeText={(v) =>
-                  setNameParts((prev) => ({ ...prev, monthYear: formatMonthYear(v, prev.monthYear) }))
-                  } className="bg-slate-50 border border-slate-300 rounded-[10px] px-[12px] py-[10px] text-[14px] text-slate-900" />
-                
+                    ref={monthYearRef}
+                    placeholder="mm/yy"
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="numeric"
+                    maxLength={5}
+                    returnKeyType="next"
+                    onSubmitEditing={() => descriptionRef.current?.focus()}
+                    blurOnSubmit={false}
+                    value={nameParts?.monthYear || ''}
+                    onChangeText={(v) =>
+                      setNameParts({ monthYear: formatMonthYear(v, nameParts?.monthYear || '') })
+                    }
+                    className="bg-slate-50 border border-slate-300 rounded-[10px] px-[12px] py-[10px] text-[14px] text-slate-900"
+                  />
                 </View>
               </View>
             </View>
@@ -1385,110 +1539,192 @@ export default function CreateOpportunityScreen() {
               <Text className="text-[11px] font-extrabold text-slate-400 tracking-[0.8px] mb-[8px]">GÓI DỊCH VỤ ĐỀ XUẤT</Text>
 
               {packages.map((pkg, idx) => {
-              const selectedPkg = availablePackages.find((p) => String(p.id) === String(pkg.servicePackageId));
+                const selectedPkg = availablePackages.find((p) => String(p.id) === String(pkg.servicePackageId));
+                const isExpanded = expandedPackages[idx] ?? true;
+                const pkgServices = pkg.services || [];
 
-              // If package not chosen yet: render clean select box with trash icon (like screenshot)
-              if (!pkg.servicePackageId) {
-                return (
-                  <View key={idx} className="flex-row items-center bg-[rgba(239,_246,_255,_0.4)] border border-blue-200 rounded-[12px] p-[10px] gap-[10px] mb-[8px]">
+                // If package not chosen yet: render clean select box with trash icon (like screenshot)
+                if (!pkg.servicePackageId) {
+                  return (
+                    <View key={idx} className="flex-row items-center bg-[rgba(239,_246,_255,_0.4)] border border-blue-200 rounded-[12px] p-[10px] gap-[10px] mb-[8px]">
                       <TouchableOpacity
-
-                      onPress={() => setActivePackageIndex(idx)}
-                      activeOpacity={0.7} className="flex-1 flex-row items-center justify-between bg-white border-[2px] border-blue-200 rounded-[8px] px-[12px] py-[9px]">
-                      
+                        onPress={() => setActivePackageIndex(idx)}
+                        activeOpacity={0.7}
+                        className="flex-1 flex-row items-center justify-between bg-white border-[2px] border-blue-200 rounded-[8px] px-[12px] py-[9px]">
                         <Text className="text-[13px] font-bold text-[#1E3A8A]">-- Chọn gói dịch vụ --</Text>
                         <Feather name="chevron-down" size={18} color="#1E3A8A" />
                       </TouchableOpacity>
 
                       <TouchableOpacity
-
-                      onPress={() => handleRemovePackage(idx)}
-                      activeOpacity={0.7} className="p-[6px]">
-                      
+                        onPress={() => handleRemovePackage(idx)}
+                        activeOpacity={0.7}
+                        className="p-[6px]">
                         <Feather name="trash-2" size={18} color="#F87171" />
                       </TouchableOpacity>
-                    </View>);
+                    </View>
+                  );
+                }
 
-              }
-
-              // If package chosen: render PackageItem card matching Web
-              return (
-                <View key={idx} className="bg-[rgba(239,_246,_255,_0.4)] border-[2px] border-[#DBEAFE] rounded-[14px] p-[12px] mb-[10px]">
+                // If package chosen: render PackageItem card matching Web (with accordion & sub-services)
+                return (
+                  <View key={idx} className="bg-[rgba(239,_246,_255,_0.4)] border-[2px] border-[#DBEAFE] rounded-[14px] p-[12px] mb-[12px]">
                     <View className="flex-row items-center justify-between">
                       <View className="flex-row items-center gap-[10px] flex-1">
                         <View className="w-[34px] h-[34px] rounded-[10px] bg-blue-600 justify-center items-center">
                           <Feather name="briefcase" size={18} color="#FFFFFF" />
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text className="text-[14px] font-bold text-[#1E3A8A]">{selectedPkg?.name || 'Gói dịch vụ'}</Text>
+                          <Text className="text-[14px] font-bold text-[#1E3A8A]">{selectedPkg?.name || pkg.name || 'Gói dịch vụ'}</Text>
                           <Text className="text-[9px] font-extrabold text-blue-600 tracking-[0.6px] mt-[1px]">GÓI DỊCH VỤ</Text>
                         </View>
                       </View>
 
                       <View className="flex-row items-center gap-[8px]">
-                        <View className="w-[52px] h-[38px] bg-white border border-slate-300 rounded-[8px] justify-center items-center">
+                        <View className="flex-row items-center bg-white border border-slate-300 rounded-[8px] px-[6px] h-[38px]">
+                          <Text className="text-[11px] text-slate-500 mr-[4px]">SL</Text>
                           <TextInput
-
-                          keyboardType="numeric"
-                          value={formatNumberInput(String(pkg.quantity))}
-                          onChangeText={(txt) => handlePackageQuantityChange(idx, parseNumberInput(txt) || 1)} className="w-full h-full text-center text-[14px] font-bold text-slate-900" />
-                        
+                            keyboardType="numeric"
+                            value={formatNumberInput(String(pkg.quantity))}
+                            onChangeText={(txt) => handlePackageQuantityChange(idx, parseNumberInput(txt) || 1)}
+                            className="w-[36px] text-center text-[14px] font-bold text-slate-900"
+                          />
                         </View>
 
                         <TouchableOpacity
-
-                        onPress={() => handleRemovePackage(idx)}
-                        activeOpacity={0.7} className="p-[6px]">
-                        
+                          onPress={() => handleRemovePackage(idx)}
+                          activeOpacity={0.7}
+                          className="p-[6px]">
                           <Feather name="trash-2" size={18} color="#F87171" />
                         </TouchableOpacity>
                       </View>
                     </View>
 
-                    {selectedPkg?.items && selectedPkg.items.length > 0 &&
-                  <View className="mt-[10px] pt-[10px] border-t border-t-[#DBEAFE] gap-[4px]">
-                        <View className="flex-row items-center gap-[6px] mb-[6px]">
-                          <Feather name="layers" size={13} color="#2563EB" />
-                          <Text className="text-[12px] font-bold text-[#1D4ED8]">
-                            Bao gồm {selectedPkg.items.length} dịch vụ thành phần:
-                          </Text>
-                        </View>
-                        {selectedPkg.items.map((pi: any, piIdx: number) => {
-                      const cost = pi.service?.costPrice || 0;
-                      const qty = pi.defaultQuantity || 1;
-                      const isLast = piIdx === selectedPkg.items.length - 1;
-                      return (
-                        <View
-                          key={piIdx} className={["flex-row items-center justify-between py-[6px] border-b border-b-blue-50 gap-[8px]",
-
-
-                          isLast && "border-b-[0px] pb-[2px]"].filter(Boolean).join(" ")}>
-
-                          
-                              <View className="flex-row items-center gap-[6px] flex-1">
-                                <Text className="text-[13px] text-[#3B82F6] font-bold">•</Text>
-                                <Text numberOfLines={1} className="text-[12px] font-semibold text-slate-800 flex-1">
-                                  {pi.service?.name || pi.serviceName || 'Dịch vụ thành phần'}
-                                </Text>
-                              </View>
-                              <View className="flex-row items-center gap-[8px]">
-                                <View className="bg-blue-50 px-[6px] py-[2px] rounded-[6px] border border-blue-200">
-                                  <Text className="text-[11px] font-bold text-[#1D4ED8]">x{formatQuantity(qty)}</Text>
-                                </View>
-                                {cost > 0 &&
-                            <Text className="text-[12px] text-emerald-600 font-bold">
-                                    {formatVND(cost)}
-                                  </Text>
-                            }
-                              </View>
-                            </View>);
-
-                    })}
+                    {pkg.description ? (
+                      <View className="mt-[8px] bg-white/70 rounded-[8px] p-[8px]">
+                        <Text className="text-[12px] text-slate-600">{pkg.description}</Text>
                       </View>
-                  }
-                  </View>);
+                    ) : null}
 
-            })}
+                    {/* Accordion Toggle Bar: Dịch vụ trong gói */}
+                    <View className="mt-[10px] pt-[8px] border-t border-t-[#DBEAFE]">
+                      <View className="flex-row items-center justify-between mb-[8px]">
+                        <TouchableOpacity
+                          onPress={() => handleToggleExpandPackage(idx)}
+                          activeOpacity={0.7}
+                          className="flex-row items-center gap-[6px] py-[4px]">
+                          <Feather
+                            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                            size={16}
+                            color="#1D4ED8"
+                          />
+                          <Text className="text-[12px] font-bold text-[#1D4ED8] uppercase tracking-[0.4px]">
+                            Dịch vụ trong gói ({pkgServices.length})
+                          </Text>
+                        </TouchableOpacity>
+
+                        {isExpanded && (
+                          <TouchableOpacity
+                            onPress={() => addPackageService(idx)}
+                            activeOpacity={0.7}
+                            className="flex-row items-center gap-[4px] px-[8px] py-[4px] rounded-[6px] bg-blue-100">
+                            <Feather name="plus" size={12} color="#1D4ED8" />
+                            <Text className="text-[11px] font-semibold text-[#1D4ED8]">Thêm dịch vụ</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+
+                      {/* Package Sub-Services List */}
+                      {isExpanded && (
+                        <View className="gap-[8px]">
+                          {pkgServices.map((serviceItem, sIdx) => {
+                            const foundSub = availableServices.find((s) => String(s.id) === String(serviceItem.serviceId));
+                            const briefJobs = (serviceItem.jobs || []).filter((j) => j.isBriefVideo);
+
+                            return (
+                              <View
+                                key={sIdx}
+                                className="bg-white rounded-[10px] p-[10px] border border-blue-100 gap-[8px]">
+                                <View className="flex-row items-center gap-[8px]">
+                                  <TouchableOpacity
+                                    onPress={() => setActiveServiceTarget({ type: 'package', pkgIndex: idx, serviceIndex: sIdx })}
+                                    activeOpacity={0.7}
+                                    className="flex-1 flex-row items-center justify-between bg-slate-50 rounded-[8px] px-[10px] py-[8px] border border-slate-200">
+                                    <Text
+                                      numberOfLines={1}
+                                      className={`text-[12px] font-semibold flex-1 ${foundSub ? 'text-slate-900' : 'text-slate-400 font-normal'}`}>
+                                      {foundSub ? foundSub.name : '-- Chọn dịch vụ --'}
+                                    </Text>
+                                    <Feather name="chevron-down" size={14} color="#64748B" />
+                                  </TouchableOpacity>
+
+                                  <View className="w-[48px] h-[36px] bg-white border border-slate-300 rounded-[8px] justify-center items-center">
+                                    <TextInput
+                                      keyboardType="numeric"
+                                      value={formatNumberInput(String(serviceItem.quantity || 1))}
+                                      onChangeText={(txt) =>
+                                        updatePackageService(idx, sIdx, 'quantity', parseNumberInput(txt) || 1)
+                                      }
+                                      className="w-full h-full text-center text-[13px] font-bold text-slate-900"
+                                    />
+                                  </View>
+
+                                  <TouchableOpacity
+                                    onPress={() => removePackageService(idx, sIdx)}
+                                    activeOpacity={0.7}
+                                    className="p-[6px]">
+                                    <Feather name="trash-2" size={16} color="#F87171" />
+                                  </TouchableOpacity>
+                                </View>
+
+                                {/* Brief jobs for package sub-service */}
+                                {briefJobs.map((job) => (
+                                  <View key={job.jobId} className="pt-[6px] border-t border-t-slate-100 gap-[6px]">
+                                    <TouchableOpacity
+                                      onPress={() =>
+                                        setPackageServiceJobIncluded(idx, sIdx, job.jobId, !job.included)
+                                      }
+                                      activeOpacity={0.7}
+                                      className="flex-row items-center gap-[8px]">
+                                      <Feather
+                                        name={job.included ? 'check-square' : 'square'}
+                                        size={16}
+                                        color={job.included ? '#2563EB' : '#94A3B8'}
+                                      />
+                                      <Text className="text-[12px] font-semibold text-blue-900">
+                                        Thêm công việc: {job.name}
+                                      </Text>
+                                    </TouchableOpacity>
+
+                                    {job.included && (
+                                      <View className="mt-[2px]">
+                                        <Text className="text-[11px] font-bold text-slate-700 mb-[4px]">
+                                          Brief cho {job.name} <Text className="text-[#EF4444]">*</Text>
+                                        </Text>
+                                        <TextInput
+                                          multiline
+                                          numberOfLines={3}
+                                          textAlignVertical="top"
+                                          value={job.briefVideo || ''}
+                                          onChangeText={(txt) =>
+                                            setPackageServiceJobBrief(idx, sIdx, job.jobId, txt)
+                                          }
+                                          placeholder="Nhập brief khách hàng để thực hiện video AI demo..."
+                                          placeholderTextColor="#94A3B8"
+                                          className="w-full min-h-[70px] bg-slate-50 border border-slate-200 rounded-[8px] p-[8px] text-[12px] text-slate-900"
+                                        />
+                                      </View>
+                                    )}
+                                  </View>
+                                ))}
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                );
+              })}
             </View>
 
             {/* B. DỊCH VỤ LẺ */}
@@ -1496,55 +1732,89 @@ export default function CreateOpportunityScreen() {
               <View className="flex-row items-center justify-between mb-[8px]">
                 <Text className="text-[11px] font-extrabold text-slate-400 tracking-[0.8px] mb-[8px]">DỊCH VỤ LẺ</Text>
                 <TouchableOpacity
-
-                onPress={handleAddService}
-                activeOpacity={0.7} className="flex-row items-center px-[10px] py-[6px] rounded-[8px] bg-blue-50 gap-[4px]">
-                
+                  onPress={handleAddService}
+                  activeOpacity={0.7}
+                  className="flex-row items-center px-[10px] py-[6px] rounded-[8px] bg-blue-50 gap-[4px]">
                   <Feather name="plus" size={14} color="#6366F1" />
                   <Text style={{ color: '#6366F1' }} className="text-[13px] font-semibold text-blue-600">Dịch vụ lẻ</Text>
                 </TouchableOpacity>
               </View>
 
               {services.map((row, idx) => {
-              const selectedServ = availableServices.find((s) => String(s.id) === String(row.serviceId));
-              return (
-                <View key={idx} className="flex-row items-center bg-slate-50 rounded-[10px] p-[8px] border border-slate-200 mb-[8px] gap-[8px]">
-                    <TouchableOpacity
+                const selectedServ = availableServices.find((s) => String(s.id) === String(row.serviceId));
+                const briefJobs = (row.jobs || []).filter((j) => j.isBriefVideo);
 
-                    onPress={() => setActiveServiceIndex(idx)}
-                    activeOpacity={0.7} className="flex-1 flex-row items-center justify-between bg-white rounded-[8px] px-[12px] py-[9px] border border-slate-300">
-                    
-                      <Text
+                return (
+                  <View key={idx} className="bg-slate-50 rounded-[12px] p-[10px] border border-slate-200 mb-[8px] gap-[8px]">
+                    <View className="flex-row items-center gap-[8px]">
+                      <TouchableOpacity
+                        onPress={() => setActiveServiceTarget({ type: 'standalone', index: idx })}
+                        activeOpacity={0.7}
+                        className="flex-1 flex-row items-center justify-between bg-white rounded-[8px] px-[12px] py-[9px] border border-slate-300">
+                        <Text
+                          numberOfLines={1}
+                          className={`text-[13px] font-semibold flex-1 ${selectedServ ? 'text-slate-900' : 'text-slate-400 font-normal'}`}>
+                          {selectedServ ? selectedServ.name : '-- Chọn dịch vụ --'}
+                        </Text>
+                        <Feather name="chevron-down" size={16} color="#64748B" />
+                      </TouchableOpacity>
 
+                      <View className="w-[52px] h-[38px] bg-white border border-slate-300 rounded-[8px] justify-center items-center">
+                        <TextInput
+                          keyboardType="numeric"
+                          value={formatNumberInput(String(row.quantity))}
+                          onChangeText={(txt) => handleServiceQuantityChange(idx, parseNumberInput(txt) || 1)}
+                          className="w-full h-full text-center text-[14px] font-bold text-slate-900"
+                        />
+                      </View>
 
-
-
-                      numberOfLines={1} className={["text-[13px] font-semibold text-slate-900 flex-1", !row.serviceId && "text-slate-400 font-normal"].filter(Boolean).join(" ")}>
-                      
-                        {selectedServ ? selectedServ.name : '-- Chọn dịch vụ --'}
-                      </Text>
-                      <Feather name="chevron-down" size={16} color="#64748B" />
-                    </TouchableOpacity>
-
-                    <View className="w-[52px] h-[38px] bg-white border border-slate-300 rounded-[8px] justify-center items-center">
-                      <TextInput
-
-                      keyboardType="numeric"
-                      value={formatNumberInput(String(row.quantity))}
-                      onChangeText={(txt) => handleServiceQuantityChange(idx, parseNumberInput(txt) || 1)} className="w-full h-full text-center text-[14px] font-bold text-slate-900" />
-                    
+                      <TouchableOpacity
+                        onPress={() => handleRemoveService(idx)}
+                        activeOpacity={0.7}
+                        className="p-[6px]">
+                        <Feather name="trash-2" size={18} color="#F87171" />
+                      </TouchableOpacity>
                     </View>
 
-                    <TouchableOpacity
+                    {/* Brief jobs for standalone service */}
+                    {briefJobs.map((job) => (
+                      <View key={job.jobId} className="pt-[6px] border-t border-t-slate-200 gap-[6px]">
+                        <TouchableOpacity
+                          onPress={() => setServiceJobIncluded(idx, job.jobId, !job.included)}
+                          activeOpacity={0.7}
+                          className="flex-row items-center gap-[8px]">
+                          <Feather
+                            name={job.included ? 'check-square' : 'square'}
+                            size={16}
+                            color={job.included ? '#2563EB' : '#94A3B8'}
+                          />
+                          <Text className="text-[12px] font-semibold text-slate-800">
+                            Thêm công việc: {job.name}
+                          </Text>
+                        </TouchableOpacity>
 
-                    onPress={() => handleRemoveService(idx)}
-                    activeOpacity={0.7} className="p-[6px]">
-                    
-                      <Feather name="trash-2" size={18} color="#F87171" />
-                    </TouchableOpacity>
-                  </View>);
-
-            })}
+                        {job.included && (
+                          <View className="mt-[2px]">
+                            <Text className="text-[11px] font-bold text-slate-700 mb-[4px]">
+                              Brief cho {job.name} <Text className="text-[#EF4444]">*</Text>
+                            </Text>
+                            <TextInput
+                              multiline
+                              numberOfLines={3}
+                              textAlignVertical="top"
+                              value={job.briefVideo || ''}
+                              onChangeText={(txt) => setServiceJobBrief(idx, job.jobId, txt)}
+                              placeholder="Nhập brief khách hàng để thực hiện video AI demo..."
+                              placeholderTextColor="#94A3B8"
+                              className="w-full min-h-[70px] bg-white border border-slate-300 rounded-[8px] p-[8px] text-[12px] text-slate-900"
+                            />
+                          </View>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                );
+              })}
             </View>
 
             {/* C. TỔNG GIÁ VỐN GRADIENT BANNER (Y chang bên Web) */}
@@ -1908,62 +2178,55 @@ export default function CreateOpportunityScreen() {
         </View>
       </Modal>
 
-      {/* Standalone Service Selection Modal */}
+      {/* Service Selection Modal (Supports both Standalone and Package Sub-Services) */}
       <Modal
-        visible={activeServiceIndex !== null}
+        visible={activeServiceTarget !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => setActiveServiceIndex(null)}>
+        onRequestClose={() => setActiveServiceTarget(null)}>
         
         <View className="flex-1 bg-[rgba(0,_0,_0,_0.45)] justify-center items-center p-[20px]">
           <View
-            style={
-
-            {
+            style={{
               width: isTablet ? 520 : Math.min(width * 0.94, 420),
               maxHeight: isLandscape ? height * 0.88 : '80%'
-            }} className="w-full max-h-[80%] bg-white rounded-[16px] p-[16px] shadow-lg">
-
+            }}
+            className="w-full max-h-[80%] bg-white rounded-[16px] p-[16px] shadow-lg">
             
             <View className="flex-row justify-between items-center pb-[12px] border-b border-b-slate-200">
-              <Text className="text-[16px] font-bold text-slate-900">Chọn dịch vụ lẻ</Text>
+              <Text className="text-[16px] font-bold text-slate-900">
+                {activeServiceTarget?.type === 'package' ? 'Chọn dịch vụ trong gói' : 'Chọn dịch vụ lẻ'}
+              </Text>
               <TouchableOpacity
-                onPress={() => setActiveServiceIndex(null)}
+                onPress={() => setActiveServiceTarget(null)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                
                 <Feather name="x" size={20} color="#64748B" />
               </TouchableOpacity>
             </View>
 
             <ScrollView className="my-[10px]">
               <TouchableOpacity
-
-                onPress={() => {
-                  if (activeServiceIndex !== null) handleSelectServiceItem(activeServiceIndex, '');
-                }} className="flex-row items-center justify-between py-[12px] px-[8px] border-b border-b-slate-100">
-                
+                onPress={() => handleSelectServiceFromModal('')}
+                className="flex-row items-center justify-between py-[12px] px-[8px] border-b border-b-slate-100">
                 <Text className="text-[14px] text-slate-700">-- Chọn dịch vụ --</Text>
               </TouchableOpacity>
 
-              {availableServices.map((serv) =>
-              <TouchableOpacity
-                key={serv.id}
-
-                onPress={() => {
-                  if (activeServiceIndex !== null) handleSelectServiceItem(activeServiceIndex, serv.id);
-                }} className="flex-row items-center justify-between py-[12px] px-[8px] border-b border-b-slate-100">
-                
+              {availableServices.map((serv) => (
+                <TouchableOpacity
+                  key={serv.id}
+                  onPress={() => handleSelectServiceFromModal(serv.id)}
+                  className="flex-row items-center justify-between py-[12px] px-[8px] border-b border-b-slate-100">
                   <View style={{ flex: 1 }}>
                     <Text className="text-[14px] font-semibold text-slate-900">{serv.name}</Text>
-                    {serv.costPrice ?
-                  <Text className="text-[12px] text-slate-500 mt-[2px]">
+                    {serv.costPrice ? (
+                      <Text className="text-[12px] text-slate-500 mt-[2px]">
                         Giá vốn: {formatVNDFull(serv.costPrice)}
-                      </Text> :
-                  null}
+                      </Text>
+                    ) : null}
                   </View>
                   <Feather name="chevron-right" size={16} color="#94A3B8" />
                 </TouchableOpacity>
-              )}
+              ))}
             </ScrollView>
           </View>
         </View>

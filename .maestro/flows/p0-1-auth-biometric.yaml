@@ -1,0 +1,25 @@
+appId: com.getvini.erp
+name: "P0-1 Auth Biometric Flow"
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Đăng nhập"
+- tapOn:
+    id: emailInput
+- inputText: "admin@getvini.com"
+- tapOn:
+    id: passwordInput
+- inputText: "Admin@123"
+- tapOn:
+    id: loginButton
+- waitForAnimationToEnd
+- assertVisible: "Trang Chủ"
+- tapOn:
+    id: settingsTab
+- assertVisible: "Cài đặt"
+- tapOn:
+    id: biometricToggle
+- assertVisible: "Xác thực sinh trắc học"
+- tapOn:
+    id: logoutButton
+- assertVisible: "Đăng nhập"

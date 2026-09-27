@@ -11,6 +11,7 @@
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.getvini.erp",
       "allowBackup": false,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -34,11 +35,25 @@
           "imageWidth": 76
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "78aa317e-6e4b-49f5-884d-521039422acf"
+      }
     }
   }
 }

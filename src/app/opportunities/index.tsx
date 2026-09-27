@@ -44,13 +44,7 @@ export default function OpportunitiesScreen() {
     };
 
     if (activeTab !== 'ALL') {
-      if (activeTab === 'QUOTATION') {
-        f.status = 'QUOTATION_DRAFTING';
-      } else if (activeTab === 'CONTRACT') {
-        f.status = 'CONTRACT_CREATED';
-      } else {
-        f.status = activeTab;
-      }
+      f.status = activeTab;
     }
     return f;
   }, [activeTab, searchQuery]);

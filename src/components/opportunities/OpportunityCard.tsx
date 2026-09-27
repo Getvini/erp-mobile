@@ -23,9 +23,13 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = ({ item, onPress 
       case 'OPEN':
         return { label: 'Mới tạo', color: '#64748B', bg: '#F1F5F9' };
       case 'PENDING_OPP_APPROVAL':
-        return { label: 'Chờ BOD duyệt', color: '#D97706', bg: '#FEF3C7' };
+        return { label: 'Đang chờ duyệt', color: '#D97706', bg: '#FEF3C7' };
+      case 'OPP_REJECTED':
+        return { label: 'Không duyệt', color: '#DC2626', bg: '#FEE2E2' };
       case 'OPP_APPROVED':
         return { label: 'Đã duyệt cơ hội', color: '#059669', bg: '#D1FAE5' };
+      case 'QUOTATION':
+        return { label: 'Báo giá', color: '#4F46E5', bg: '#EEF2FF' };
       case 'QUOTATION_DRAFTING':
         return { label: 'Đang làm báo giá', color: '#2563EB', bg: '#DBEAFE' };
       case 'PENDING_QUOTE_APPROVAL':
@@ -33,7 +37,9 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = ({ item, onPress 
       case 'QUOTE_APPROVED':
         return { label: 'Báo giá đã duyệt', color: '#0D9488', bg: '#CCFBF1' };
       case 'CONTRACT_CREATED':
-        return { label: 'Đã tạo hợp đồng', color: '#7C3AED', bg: '#EDE9FE' };
+        return { label: 'Đang làm hợp đồng', color: '#7C3AED', bg: '#EDE9FE' };
+      case 'CONTRACT_APPROVED':
+        return { label: 'Đã tạo hợp đồng', color: '#16A34A', bg: '#DCFCE7' };
       case 'PROJECT_ASSIGNED':
         return { label: 'Đã giao dự án', color: '#4F46E5', bg: '#EEF2FF' };
       case 'IMPLEMENTATION':

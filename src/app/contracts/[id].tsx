@@ -36,6 +36,8 @@ import {
 '@/services/contractService';
 import { formatVNDFull, formatNumber } from '@/utils/formatters';
 import { isValidUrl, normalizeUrl } from '@/utils/validators';
+import { DocumentCard } from '@/components/common/DocumentCard';
+import { DocumentPreviewModal } from '@/components/common/DocumentPreviewModal';
 import {
   ProjectItem,
   UserPMItem,
@@ -49,6 +51,10 @@ import {
 '@/hooks/queries/useProjects';
 import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { safeGoBack } from '@/utils/navigation';
+import { getProjectManagerUser, hasTeamMemberRole } from '@/utils/teamMember';
+import { MilestoneTrackerTab } from '@/components/finance/MilestoneTrackerTab';
+import { useDebtsByContractQuery } from '@/hooks/queries/useDebts';
+import { usePaymentMilestonesByContractQuery } from '@/hooks/queries/useMilestones';
 
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '—';
@@ -75,6 +81,10 @@ export default function ContractDetailScreen() {
   const { data: contractData, isLoading: isContractLoading, isFetching, refetch } = useContractDetailQuery(contractId);
   const contract: ContractItem | null = contractData || null;
 
+  // TanStack Query for Debts & Milestones (chuẩn 100% Web FinancialInfo.jsx)
+  const { data: debts = [], refetch: refetchDebts } = useDebtsByContractQuery(contractId);
+  const { data: milestonesData = [], refetch: refetchMilestones } = usePaymentMilestonesByContractQuery(contractId);
+
   // TanStack Mutations
   const approveProposalMutation = useApproveProposalMutation();
   const rejectProposalMutation = useRejectProposalMutation();
@@ -94,6 +104,17 @@ export default function ContractDetailScreen() {
   const [isRejectModalVisible, setIsRejectModalVisible] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
+  // Document Preview Modal
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [previewFileName, setPreviewFileName] = useState('');
+  const [isPreviewVisible, setIsPreviewVisible] = useState(false);
+
+  const handleOpenPreview = (url: string, fileName?: string) => {
+    setPreviewUrl(url);
+    setPreviewFileName(fileName || '');
+    setIsPreviewVisible(true);
+  };
+
   // Upload Proposal Modal State (Chuẩn 100% Web ProposalManagement.jsx)
   const [isUploadProposalModalVisible, setIsUploadProposalModalVisible] = useState(false);
   const [uploadProposalMethod, setUploadProposalMethod] = useState<'FILE' | 'LINK'>('FILE');
@@ -112,8 +133,8 @@ export default function ContractDetailScreen() {
   const { data: pmUsersData } = usePmUsersQuery();
   const pmUsers: UserPMItem[] = isAdminOrBod ? pmUsersData || [] : [];
 
-  const { data: projectData } = useProjectByContractQuery(contractId);
-  const project: ProjectItem | null = projectData || null;
+  const { data: projectData, refetch: refetchProject } = useProjectByContractQuery(contractId);
+  const project: ProjectItem | null = projectData || (contract as any)?.project || null;
 
   const assignProjectMutation = useAssignProjectMutation();
   const isAssigningPm = assignProjectMutation.isPending;
@@ -123,26 +144,32 @@ export default function ContractDetailScreen() {
 
   useEffect(() => {
     if (project) {
-      const pmMember = project.team?.members?.find((m) => m.role === 'PROJECT_MANAGER');
-      setSelectedPmId(pmMember?.user?.id || '');
+      const pmUser = getProjectManagerUser(project);
+      setSelectedPmId(pmUser?.id || '');
     } else {
       setSelectedPmId('');
     }
   }, [project]);
 
-  useSSERefresh('invalidate_Contracts', refetch);
+  useSSERefresh(['invalidate_Contracts', 'invalidate_Projects'], () => {
+    refetch();
+    refetchProject();
+  });
 
   const handleRefresh = () => {
     refetch();
+    refetchProject();
+    refetchDebts();
+    refetchMilestones();
   };
 
   const handleAssignPmSubmit = async (pmId: string) => {
     if (!contract) return;
     try {
       await assignProjectMutation.mutateAsync({ contractId: contract.id, pmId: pmId || null });
+      await Promise.all([refetch(), refetchProject()]);
       Alert.alert('Thành công', 'Phân công PM phụ trách dự án thành công!');
       setIsPmPickerVisible(false);
-      refetch();
     } catch (err: any) {
       Alert.alert('Lỗi phân công', err?.message || 'Không thể phân công PM');
     }
@@ -451,26 +478,25 @@ export default function ContractDetailScreen() {
     border: '#E2E8F0'
   };
 
-  // Financial Calculations (100% chuẩn Web ERP FinancialInfo.jsx)
-  const sellingPrice = Number(contract.sellingPrice || (contract as any).selling_price || 0);
+  const sellingPrice = Number(contract.totalWithVat || (contract as any).totalWithVat || 0);
   const costPrice = Number(contract.cost || 0);
 
-  const rawMilestones = contract.milestones || [];
-  const rawDebts = (contract as any).debts || [];
+  const rawMilestones = (milestonesData && milestonesData.length > 0) ? milestonesData : (contract.milestones || []);
+  const rawDebts = (debts && debts.length > 0) ? debts : ((contract as any).debts || []);
 
-  const processedMilestones = rawMilestones.map((m) => {
+  const processedMilestones = rawMilestones.map((m: any) => {
     const debt = rawDebts.find((d: any) => d.milestone?.id === m.id || d.milestoneId === m.id);
     let paidAmount = 0;
     if (debt) {
       const payments = debt.payments?.map((p: any) => ({ ...p, amount: Number(p.amount || 0) })) || [];
       paidAmount = payments.reduce((sum: number, p: any) => sum + p.amount, 0);
-    } else if (m.status === 'COMPLETED') {
+    } else if (m.status === 'COMPLETED' || m.status === 'PAID') {
       paidAmount = Number(m.amount || 0);
     }
 
     const amount = Number(m.amount || 0);
     const remaining = Math.max(0, amount - paidAmount);
-    const isActive = !!debt || m.status === 'COMPLETED' || m.status === 'ACTIVE';
+    const isActive = !!debt || m.status === 'COMPLETED' || m.status === 'ACTIVE' || m.status === 'PAID';
 
     return {
       paidAmount,
@@ -572,7 +598,7 @@ export default function ContractDetailScreen() {
 
         <View className="flex-1 items-center mx-[8px]">
           <Text className="text-[15px] font-extrabold text-slate-900">{contractCode !== '—' ? contractCode : 'HỢP ĐỒNG'}</Text>
-          <Text className="text-[11px] text-slate-500 mt-[1px]">Chi tiết hồ sơ hợp đồng kinh tế</Text>
+          <Text className="text-[11px] text-slate-500 mt-[1px]">Chi tiết hồ sơ hợp đồng</Text>
         </View>
 
         <TouchableOpacity
@@ -701,9 +727,11 @@ export default function ContractDetailScreen() {
 
             <View className="flex-row justify-between items-center py-[4px] gap-[10px]">
               <Text className="text-[12px] text-slate-500">Ngày tạo</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', flex: 1, gap: 5 }}>
+              <View className="flex-row items-center gap-1.5">
                 <Feather name="calendar" size={13} color="#64748B" />
-                <Text style={{ flex: 0 }} className="text-[13px] font-semibold text-slate-800 flex-1 text-right">{formatDate(contract.createdAt)}</Text>
+                <Text className="text-[13px] font-semibold text-slate-800">
+                  {formatDate(contract.createdAt)}
+                </Text>
               </View>
             </View>
 
@@ -849,44 +877,41 @@ export default function ContractDetailScreen() {
                 <Text className="text-[12px] text-slate-500">PM phụ trách</Text>
                 <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 6 }}>
                   {(() => {
-                  const pmMember = project.team?.members?.find(
-                    (m) => m.role === 'PROJECT_MANAGER'
-                  );
-                  const hasPm = !!pmMember?.user;
-                  const pmName = pmMember?.user?.fullName || 'Chưa phân công PM';
+                  const pmUser = getProjectManagerUser(project);
+                  const hasPm = !!pmUser;
+                  const pmName = pmUser?.fullName || 'Chưa phân công PM';
                   return (
                     <>
                         <Text
                         style={
-
                         { flex: 0, fontWeight: '700', color: hasPm ? '#0F172A' : '#94A3B8' }} className="text-[13px] font-semibold text-slate-800 flex-1 text-right">
-
-                        
                           {pmName}
                         </Text>
 
-                        {isAdminOrBod && !hasPm &&
+                        {isAdminOrBod &&
                       <TouchableOpacity
-
-                        onPress={() => setIsPmPickerVisible(true)}
+                        onPress={() => {
+                          setSelectedPmId(pmUser?.id || '');
+                          setIsPmPickerVisible(true);
+                        }}
                         disabled={isAssigningPm}
-                        activeOpacity={0.7} className="flex-row items-center gap-[4px] bg-blue-50 border border-[#93C5FD] px-[8px] py-[3px] rounded-[6px]">
-                        
-                            <Feather name="user-plus" size={12} color="#2563EB" />
-                            <Text className="text-[11px] font-bold text-blue-600">Phân công</Text>
+                        activeOpacity={0.7} className="flex-row items-center gap-[4px] bg-orange-100 border border-[#F38820] px-[8px] py-[3px] rounded-[6px]">
+                            <Feather name="user-plus" size={12} color="#F38820" />
+                            <Text className="text-[11px] font-bold text-[#F38820]">{hasPm ? 'Đổi PM' : 'Phân công'}</Text>
                           </TouchableOpacity>
                       }
                       </>);
-
                 })()}
                 </View>
               </View>
 
-              {/* Lead dự án */}
+              {/* Lead dự án(Account) */}
               <View className="flex-row justify-between items-center py-[4px] gap-[10px]">
-                <Text className="text-[12px] text-slate-500">Lead dự án</Text>
+                <Text className="text-[12px] text-slate-500">Account dự án</Text>
                 <Text style={{ fontWeight: '600' }} className="text-[13px] font-semibold text-slate-800 flex-1 text-right">
-                  {project.team?.teamLead?.fullName || 'PM chưa chọn lead'}
+                  {project.team?.teamLead?.fullName ||
+                    project.team?.members?.find((m: any) => hasTeamMemberRole(m, 'LEAD'))?.user?.fullName ||
+                    'PM chưa chọn account'}
                 </Text>
               </View>
             </View>
@@ -1038,83 +1063,13 @@ export default function ContractDetailScreen() {
           }
         </View>
 
-        {/* 6. CARD KẾ HOẠCH THANH TOÁN (PAYMENT MILESTONES) */}
-        <View className="bg-white rounded-[14px] p-[16px] border border-slate-100 shadow-sm">
-          <View className="flex-row items-center justify-between mb-[12px] border-b border-b-slate-50 pb-[8px]">
-            <View className="flex-row items-center gap-[8px]">
-              <View style={{ backgroundColor: '#FEF3C7' }} className="w-[28px] h-[28px] rounded-[7px] items-center justify-center">
-                <Feather name="calendar" size={16} color="#D97706" />
-              </View>
-              <Text className="text-[14px] font-bold text-slate-800">
-                Đợt thanh toán ({contract.milestones?.length || 0})
-              </Text>
-            </View>
-          </View>
-
-          {contract.milestones && contract.milestones.length > 0 ?
-          contract.milestones.map((ms, idx) => {
-            const isPaid = ms.status === MilestoneStatus.COMPLETED;
-            return (
-              <View key={ms.id || idx} className="bg-slate-50 rounded-[10px] p-[12px] border border-slate-200 mb-[8px]">
-                  <View className="flex-row justify-between items-center mb-[8px]">
-                    <View className="flex-row items-center gap-[6px]">
-                      <View
-                      style={
-
-                      { backgroundColor: isPaid ? '#ECFDF5' : '#EFF6FF' }} className="w-[22px] h-[22px] rounded-[6px] items-center justify-center">
-
-                      
-                        <Text
-                        style={
-
-                        { color: isPaid ? '#059669' : '#2563EB' }} className="text-[11px] font-extrabold">
-
-                        
-                          {idx + 1}
-                        </Text>
-                      </View>
-                      <Text className="text-[13px] font-bold text-slate-800">{ms.name}</Text>
-                    </View>
-
-                    <View
-                    style={
-
-                    { backgroundColor: isPaid ? '#ECFDF5' : '#FFFBEB' }} className="px-[8px] py-[2px] rounded-[6px]">
-
-                    
-                      <Text
-                      style={
-
-                      { color: isPaid ? '#059669' : '#D97706' }} className="text-[11px] font-bold">
-
-                      
-                        {isPaid ? 'Đã thu tiền' : 'Chờ thanh toán'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View className="flex-row justify-between items-end">
-                    <View>
-                      <Text className="text-[11px] text-slate-500">Số tiền đợt này:</Text>
-                      <Text className="text-[14px] font-extrabold text-slate-900 mt-[1px]">{formatVNDFull(ms.amount)}</Text>
-                    </View>
-                    <View className="bg-slate-200 px-[8px] py-[3px] rounded-[6px]">
-                      <Text className="text-[12px] font-extrabold text-slate-700">{Number(ms.percentage || 0)}%</Text>
-                    </View>
-                  </View>
-
-                  {ms.dueDate &&
-                <Text className="text-[11px] text-slate-400 mt-[6px]">
-                      Hạn thanh toán: {new Date(ms.dueDate).toLocaleDateString('vi-VN')}
-                    </Text>
-                }
-                </View>);
-
-          }) :
-
-          <Text className="text-[12px] text-slate-400 text-center py-[12px]">Chưa có kế hoạch thanh toán nào</Text>
-          }
-        </View>
+        {/* 6. QUẢN LÝ ĐỢT THANH TOÁN (PAYMENT MILESTONES TRACKER & MODAL) */}
+        <MilestoneTrackerTab
+          contractId={contract.id}
+          contractCode={contract.contractCode}
+          sellingPrice={sellingPrice}
+          onRefresh={handleRefresh}
+        />
 
         {/* 7. CARD QUẢN LÝ HỢP ĐỒNG (PROPOSAL & SIGNED FILES - CHUẨN 100% WEB ProposalManagement.jsx) */}
         <View className="bg-white rounded-[14px] p-[16px] border border-slate-100 shadow-sm">
@@ -1130,100 +1085,105 @@ export default function ContractDetailScreen() {
           <View className="gap-[12px]">
             {/* Box 1: Hợp đồng dự thảo (Proposal) */}
             <View className="bg-white border border-slate-200 rounded-[12px] p-[14px]">
-              <View className="flex-row items-start justify-between">
-                <View style={{ flex: 1, paddingRight: 8 }}>
-                  <Text className="text-[14px] font-bold text-slate-900">
-                    Hợp đồng{' '}
-                    <Text className="text-[12px] font-normal text-slate-400">(.docx, Excel hoặc link)</Text>
-                  </Text>
-                  <Text className="text-[12px] text-slate-500 mt-[4px]">
-                    {contract.proposal_contract ? 'Đã upload' : 'Chưa có file'}
-                  </Text>
+              {/* Title row */}
+              <View className="flex-row items-center gap-[10px] mb-[12px]">
+                <View style={{ backgroundColor: '#F3E8FF' }} className="w-[36px] h-[36px] rounded-[9px] items-center justify-center">
+                  <Feather name="file-text" size={18} color="#9333EA" />
                 </View>
-
-                {/* Proposal Action Buttons */}
-                <View className="flex-row items-center gap-[8px]">
-                  {contract.proposal_contract ?
-                  <>
-                      <TouchableOpacity
-
-                      onPress={() => handleOpenLink(contract.proposal_contract)}
-                      activeOpacity={0.7} className="flex-row items-center gap-[5px] px-[12px] py-[7px] bg-slate-100 rounded-[8px] border border-slate-200">
-                      
-                        <Feather name="file-text" size={13} color="#334155" />
-                        <Text className="text-[12px] font-semibold text-slate-700">Xem</Text>
-                      </TouchableOpacity>
-
-                      {contract.status === ContractStatus.PROPOSAL_UPLOADED && isAdminOrBod &&
-                    <View className="flex-row items-center gap-[6px]">
-                          <TouchableOpacity
-
-                        onPress={handleApproveProposal}
-                        disabled={actionLoading || isUploadingProposal || isUploadingSigned}
-                        activeOpacity={0.7} className="flex-row items-center gap-[5px] px-[12px] py-[7px] bg-[#16A34A] rounded-[8px]">
-                        
-                            <Feather name="check-circle" size={13} color="#FFFFFF" />
-                            <Text className="text-[12px] font-bold text-white">Duyệt</Text>
-                          </TouchableOpacity>
-
-                          <TouchableOpacity
-
-                        onPress={() => setIsRejectModalVisible(true)}
-                        disabled={actionLoading || isUploadingProposal || isUploadingSigned}
-                        activeOpacity={0.7} className="flex-row items-center gap-[4px] px-[10px] py-[7px] bg-red-50 border border-red-200 rounded-[8px]">
-                        
-                            <Feather name="x" size={13} color="#DC2626" />
-                            <Text className="text-[12px] font-bold text-red-600">Từ chối</Text>
-                          </TouchableOpacity>
-                        </View>
-                    }
-
-                      {contract.status === ContractStatus.PROPOSAL_REJECTED &&
-                    <TouchableOpacity
-
-                      onPress={openProposalEditor}
-                      disabled={isUploadingProposal || isUploadingSigned}
-                      activeOpacity={0.7} className="flex-row items-center gap-[5px] px-[12px] py-[7px] bg-blue-600 rounded-[8px]">
-                      
-                          {isUploadingProposal ?
-                      <ActivityIndicator size="small" color="#FFFFFF" /> :
-
-                      <Feather name="upload" size={13} color="#FFFFFF" />
-                      }
-                          <Text className="text-[12px] font-bold text-white">Upload bản mới</Text>
-                        </TouchableOpacity>
-                    }
-                    </> :
-
-                  <TouchableOpacity
-
-                    onPress={openProposalEditor}
-                    disabled={isUploadingProposal || isUploadingSigned}
-                    activeOpacity={0.7} className="flex-row items-center gap-[5px] px-[14px] py-[7px] bg-blue-600 rounded-[8px]">
-                    
-                      {isUploadingProposal ?
-                    <ActivityIndicator size="small" color="#FFFFFF" /> :
-
-                    <Feather name="upload" size={13} color="#FFFFFF" />
-                    }
-                      <Text className="text-[12px] font-bold text-white">Upload</Text>
-                    </TouchableOpacity>
-                  }
+                <View style={{ flex: 1 }}>
+                  <Text className="text-[14px] font-bold text-slate-900">
+                    Hợp đồng dự thảo
+                  </Text>
+                  <Text className="text-[12px] text-slate-500 mt-[2px]">
+                    {contract.proposal_contract
+                      ? '✓ Đã upload · .docx / Excel / link'
+                      : 'Chưa có file · .docx, Excel hoặc link'}
+                  </Text>
                 </View>
               </View>
 
-              {/* Quotation link if exists */}
-              {contract.quotation_link ?
-              <TouchableOpacity
+              {/* Action buttons row */}
+              <View className="flex-row gap-[8px]">
+                {contract.proposal_contract ? (
+                  <>
+                    {/* Nút Xem */}
+                    <TouchableOpacity
+                      onPress={() => handleOpenPreview(contract.proposal_contract!, 'Hợp đồng dự thảo')}
+                      activeOpacity={0.7}
+                      className="flex-1 flex-row items-center justify-center gap-[5px] py-[9px] bg-slate-100 rounded-[8px] border border-slate-200"
+                    >
+                      <Feather name="eye" size={14} color="#334155" />
+                      <Text className="text-[12px] font-bold text-slate-700">Xem</Text>
+                    </TouchableOpacity>
 
-                onPress={() => handleOpenLink(contract.quotation_link)}
-                activeOpacity={0.7} className="flex-row items-center gap-[6px] mt-[10px] pt-[8px] border-t border-t-slate-100">
-                
-                  <Feather name="file-text" size={14} color="#2563EB" />
-                  <Text className="text-[12px] font-semibold text-blue-600">Xem link báo giá</Text>
-                  <Feather name="external-link" size={12} color="#2563EB" />
-                </TouchableOpacity> :
-              null}
+                    {/* Nút Duyệt + Từ chối (chỉ hiện khi PROPOSAL_UPLOADED và là BOD/Admin) */}
+                    {contract.status === ContractStatus.PROPOSAL_UPLOADED && isAdminOrBod && (
+                      <>
+                        <TouchableOpacity
+                          onPress={handleApproveProposal}
+                          disabled={actionLoading || isUploadingProposal || isUploadingSigned}
+                          activeOpacity={0.7}
+                          className="flex-1 flex-row items-center justify-center gap-[5px] py-[9px] bg-[#16A34A] rounded-[8px]"
+                        >
+                          <Feather name="check-circle" size={14} color="#FFFFFF" />
+                          <Text className="text-[12px] font-bold text-white">Duyệt</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          onPress={() => setIsRejectModalVisible(true)}
+                          disabled={actionLoading || isUploadingProposal || isUploadingSigned}
+                          activeOpacity={0.7}
+                          className="flex-1 flex-row items-center justify-center gap-[4px] py-[9px] bg-red-50 border border-red-200 rounded-[8px]"
+                        >
+                          <Feather name="x" size={14} color="#DC2626" />
+                          <Text className="text-[12px] font-bold text-red-600">Từ chối</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+
+                    {/* Nút Upload bản mới khi bị từ chối */}
+                    {contract.status === ContractStatus.PROPOSAL_REJECTED && (
+                      <TouchableOpacity
+                        onPress={openProposalEditor}
+                        disabled={isUploadingProposal || isUploadingSigned}
+                        activeOpacity={0.7}
+                        className="flex-1 flex-row items-center justify-center gap-[5px] py-[9px] bg-blue-600 rounded-[8px]"
+                      >
+                        {isUploadingProposal
+                          ? <ActivityIndicator size="small" color="#FFFFFF" />
+                          : <Feather name="upload" size={14} color="#FFFFFF" />
+                        }
+                        <Text className="text-[12px] font-bold text-white">Upload mới</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                ) : (
+                  /* Chưa có file → chỉ nút Upload */
+                  <TouchableOpacity
+                    onPress={openProposalEditor}
+                    disabled={isUploadingProposal || isUploadingSigned}
+                    activeOpacity={0.7}
+                    className="flex-1 flex-row items-center justify-center gap-[5px] py-[9px] bg-blue-600 rounded-[8px]"
+                  >
+                    {isUploadingProposal
+                      ? <ActivityIndicator size="small" color="#FFFFFF" />
+                      : <Feather name="upload" size={14} color="#FFFFFF" />
+                    }
+                    <Text className="text-[12px] font-bold text-white">Upload hợp đồng</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Quotation link if exists */}
+              {contract.quotation_link ? (
+                <View className="mt-[10px] pt-[8px] border-t border-t-slate-100">
+                  <DocumentCard
+                    url={contract.quotation_link}
+                    fileName="Báo giá hợp đồng"
+                    onPreview={handleOpenPreview}
+                  />
+                </View>
+              ) : null}
 
               {/* Rejection callout box if PROPOSAL_REJECTED */}
               {contract.status === ContractStatus.PROPOSAL_REJECTED && (
@@ -1269,11 +1229,11 @@ export default function ContractDetailScreen() {
                   {contract.signed_contract ?
                   <TouchableOpacity
 
-                    onPress={() => handleOpenLink(contract.signed_contract)}
-                    activeOpacity={0.7} className="flex-row items-center gap-[5px] px-[12px] py-[7px] bg-slate-100 rounded-[8px] border border-slate-200">
+                    onPress={() => handleOpenPreview(contract.signed_contract!, 'Hợp đồng đã ký')}
+                    activeOpacity={0.7} className="flex-row items-center gap-[5px] px-[12px] py-[7px] bg-emerald-50 rounded-[8px] border border-emerald-200">
                     
-                      <Feather name="check-circle" size={13} color="#16A34A" />
-                      <Text style={{ color: '#16A34A' }} className="text-[12px] font-semibold text-slate-700">Xem</Text>
+                      <Feather name="eye" size={13} color="#16A34A" />
+                      <Text style={{ color: '#16A34A' }} className="text-[12px] font-semibold">Xem</Text>
                     </TouchableOpacity> :
 
                   <TouchableOpacity
@@ -1316,6 +1276,14 @@ export default function ContractDetailScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Document Preview Modal */}
+      <DocumentPreviewModal
+        visible={isPreviewVisible}
+        url={previewUrl}
+        fileName={previewFileName}
+        onClose={() => setIsPreviewVisible(false)}
+      />
 
       {/* 8. BOD / ADMIN ACTION BAR CHO PROPOSAL NẾU ĐANG CHỜ DUYỆT */}
       {isAdminOrBod && isProposalAwaiting &&
@@ -1495,12 +1463,12 @@ export default function ContractDetailScreen() {
                 <View className="flex-row items-center justify-between bg-blue-50 border border-blue-200 rounded-[8px] p-[10px]">
                       <View style={{ flex: 1, paddingRight: 8 }}>
                         <Text numberOfLines={1} className="text-[12px] font-bold text-[#1E40AF]">
-                          {proposalFile.name}
+                          {proposalFile!.name}
                         </Text>
                         <Text className="text-[11px] text-[#3B82F6] mt-[2px]">
-                          {proposalFile.size ?
-                      `${(proposalFile.size / 1024).toFixed(1)} KB` :
-                      'Đã sẵn sàng tải lên'}
+                          {proposalFile?.size
+                      ? `${(proposalFile.size / 1024).toFixed(1)} KB`
+                      : 'Đã sẵn sàng tải lên'}
                         </Text>
                       </View>
                       <TouchableOpacity
@@ -1619,12 +1587,12 @@ export default function ContractDetailScreen() {
                 <View className="flex-row items-center justify-between bg-blue-50 border border-blue-200 rounded-[8px] p-[10px]">
                       <View style={{ flex: 1, paddingRight: 8 }}>
                         <Text numberOfLines={1} className="text-[12px] font-bold text-[#1E40AF]">
-                          {quotationFile.name}
+                          {quotationFile!.name}
                         </Text>
                         <Text className="text-[11px] text-[#3B82F6] mt-[2px]">
-                          {quotationFile.size ?
-                      `${(quotationFile.size / 1024).toFixed(1)} KB` :
-                      'Đã sẵn sàng tải lên'}
+                          {quotationFile?.size
+                      ? `${(quotationFile.size / 1024).toFixed(1)} KB`
+                      : 'Đã sẵn sàng tải lên'}
                         </Text>
                       </View>
                       <TouchableOpacity
@@ -1724,58 +1692,79 @@ export default function ContractDetailScreen() {
             </Text>
 
             <ScrollView style={{ maxHeight: 250 }} showsVerticalScrollIndicator={false}>
-              {pmUsers.length > 0 ?
-              pmUsers.map((pm) => {
-                const isSelected = selectedPmId === pm.id;
-                return (
-                  <TouchableOpacity
-                    key={pm.id}
-
-                    onPress={() => {
-                      setSelectedPmId(pm.id);
-                      handleAssignPmSubmit(pm.id);
-                    }}
-                    disabled={isAssigningPm}
-                    activeOpacity={0.7} className={["flex-row items-center gap-[10px] p-[10px] rounded-[10px] border border-slate-200 mb-[8px] bg-white", isSelected && "border-[#3B82F6] bg-blue-50"].filter(Boolean).join(" ")}>
-                    
+              {pmUsers.length > 0 ? (
+                pmUsers.map((pm) => {
+                  const isSelected = selectedPmId === pm.id;
+                  return (
+                    <TouchableOpacity
+                      key={pm.id}
+                      onPress={() => setSelectedPmId(pm.id)}
+                      disabled={isAssigningPm}
+                      activeOpacity={0.7}
+                      className={[
+                        "flex-row items-center gap-[10px] p-[10px] rounded-[10px] border border-slate-200 mb-[8px] bg-white",
+                        isSelected && "border-[#F38820] bg-orange-100"
+                      ].filter(Boolean).join(" ")}
+                    >
                       <View
-                      style={isSelected && { backgroundColor: '#2563EB' }} className="w-[32px] h-[32px] rounded-[16px] bg-slate-100 items-center justify-center">
-                      
+                        style={isSelected && { backgroundColor: '#F38820' }}
+                        className="w-[32px] h-[32px] rounded-[16px] bg-slate-100 items-center justify-center"
+                      >
                         <Text
-                        style={
-
-                        isSelected && { color: '#FFFFFF' }} className="text-[13px] font-extrabold text-slate-600">
-
-                        
+                          style={isSelected && { color: '#FFFFFF' }}
+                          className="text-[13px] font-extrabold text-slate-600"
+                        >
                           {pm.fullName?.substring(0, 1).toUpperCase() || 'P'}
                         </Text>
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text
-                        style={
-
-                        isSelected && { color: '#1D4ED8', fontWeight: '700' }} className="text-[13px] font-semibold text-slate-900">
-
-                        
+                          style={isSelected && { color: '#F38820', fontWeight: '700' }}
+                          className="text-[13px] font-semibold text-slate-900"
+                        >
                           {pm.fullName}
                         </Text>
-                        {pm.email ? <Text className="text-[11px] text-slate-500">{pm.email}</Text> : null}
+                        {pm.email ? (
+                          <Text className="text-[11px] text-slate-500">{pm.email}</Text>
+                        ) : null}
                       </View>
-                      {isSelected ? <Feather name="check-circle" size={18} color="#2563EB" /> : null}
-                    </TouchableOpacity>);
-
-              }) :
-
-              <Text className="text-[12px] text-slate-400 text-center py-[12px]">Không tìm thấy tài khoản PM nào</Text>
-              }
+                      {isSelected ? (
+                        <Feather name="check-circle" size={18} color="#F38820" />
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                })
+              ) : (
+                <Text className="text-[12px] text-slate-400 text-center py-[12px]">
+                  Không tìm thấy tài khoản PM nào
+                </Text>
+              )}
             </ScrollView>
 
-            <View style={{ marginTop: 16 }} className="flex-row justify-end gap-[10px]">
+            <View style={{ marginTop: 16 }} className="flex-row justify-end items-center gap-[10px]">
               <TouchableOpacity
-
-                onPress={() => setIsPmPickerVisible(false)} className="px-[14px] py-[8px] rounded-[8px] bg-slate-100">
-                
+                onPress={() => setIsPmPickerVisible(false)}
+                className="px-[14px] py-[8px] rounded-[8px] bg-slate-100"
+              >
                 <Text className="text-[13px] font-semibold text-slate-600">Đóng</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => handleAssignPmSubmit(selectedPmId)}
+                disabled={!selectedPmId || isAssigningPm}
+                className={`flex-row items-center gap-1.5 px-[16px] py-[8px] rounded-[8px] ${
+                  !selectedPmId || isAssigningPm ? 'bg-orange-200' : 'bg-orange-600'
+                }`}
+                activeOpacity={0.8}
+              >
+                {isAssigningPm ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Feather name="user-check" size={14} color="#FFFFFF" />
+                    <Text className="text-[13px] font-bold text-white">Phân công</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           </View>

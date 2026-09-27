@@ -21,13 +21,15 @@ import AcceptanceReviewModal from '@/components/projects/AcceptanceReviewModal';
 import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { useAcceptancesQuery } from '@/hooks/queries/useAcceptances';
 
-type StatusFilter = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED';
+type StatusFilter = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'PROCESSED' | 'CANCELLED';
 
 const STATUS_TABS: Array<{ id: StatusFilter; label: string }> = [
   { id: 'ALL', label: 'Tất cả' },
   { id: 'PENDING', label: 'Chờ duyệt' },
   { id: 'APPROVED', label: 'Đã duyệt' },
   { id: 'REJECTED', label: 'Từ chối' },
+  { id: 'PROCESSED', label: 'Đã xử lý' },
+  { id: 'CANCELLED', label: 'Đã hủy' },
 ];
 
 export default function AcceptancesScreen() {

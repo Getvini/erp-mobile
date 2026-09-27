@@ -9,25 +9,44 @@ export interface AttachedFile {
   mimeType?: string;
 }
 
+export interface ServiceJobBrief {
+  jobId: string;
+  name: string;
+  isBriefVideo: boolean;
+  included: boolean;
+  briefVideo: string;
+}
+
+export interface PackageServiceItem {
+  serviceId: string;
+  quantity: number;
+  sellingPrice?: number;
+  jobs?: ServiceJobBrief[];
+}
+
 export interface SelectedPackage {
   servicePackageId: string;
   name?: string;
   description?: string;
   quantity: number;
-  services?: Array<{
-    serviceId: string;
-    quantity: number;
-    sellingPrice?: number;
-  }>;
+  services?: PackageServiceItem[];
 }
 
 export interface SelectedService {
   serviceId: string;
   quantity: number;
+  jobs?: ServiceJobBrief[];
+}
+
+export interface OpportunityNameParts {
+  customerName: string;
+  brandName: string;
+  monthYear: string;
 }
 
 export interface OpportunityFormData {
   name: string;
+  nameParts: OpportunityNameParts;
   description: string;
   field: string;
   expectedRevenue: number;
@@ -47,6 +66,11 @@ export interface OpportunityFormData {
 
 export const INITIAL_OPPORTUNITY_FORM_DATA: OpportunityFormData = {
   name: '',
+  nameParts: {
+    customerName: '',
+    brandName: '',
+    monthYear: '',
+  },
   description: '',
   field: '',
   expectedRevenue: 0,
@@ -78,6 +102,7 @@ interface OpportunityFormStore {
   setLastSavedTime: (time: string) => void;
 
   // Specialized helpers
+  setNameParts: (parts: Partial<OpportunityNameParts>) => void;
   toggleRegion: (region: string) => void;
   setRegions: (regions: string[]) => void;
   
@@ -86,12 +111,25 @@ interface OpportunityFormStore {
   removePackage: (index: number) => void;
   selectPackageTemplate: (index: number, template: any) => void;
   setPackageQuantity: (index: number, qty: number) => void;
+  addPackageService: (pkgIndex: number) => void;
+  removePackageService: (pkgIndex: number, serviceIndex: number) => void;
+  updatePackageService: (
+    pkgIndex: number,
+    serviceIndex: number,
+    fieldOrItem: 'serviceId' | 'quantity' | Partial<PackageServiceItem>,
+    value?: any,
+    serviceObj?: any
+  ) => void;
+  setPackageServiceJobIncluded: (pkgIndex: number, serviceIndex: number, jobId: string, included: boolean) => void;
+  setPackageServiceJobBrief: (pkgIndex: number, serviceIndex: number, jobId: string, briefVideo: string) => void;
 
   // Services Actions
   addService: () => void;
   removeService: (index: number) => void;
-  selectServiceItem: (index: number, serviceId: string) => void;
+  selectServiceItem: (index: number, serviceId: string, serviceObj?: any) => void;
   setServiceQuantity: (index: number, qty: number) => void;
+  setServiceJobIncluded: (serviceIndex: number, jobId: string, included: boolean) => void;
+  setServiceJobBrief: (serviceIndex: number, jobId: string, briefVideo: string) => void;
 
   // Links Actions
   addLink: () => void;
@@ -114,15 +152,75 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
       dateError: '',
       isSubmitting: false,
 
+      setNameParts: (parts) =>
+        set((state) => {
+          const currentParts = state.formData.nameParts || {
+            customerName: '',
+            brandName: '',
+            monthYear: '',
+          };
+          const nextParts = { ...currentParts, ...parts };
+          const nextName = [
+            nextParts.customerName.trim(),
+            nextParts.brandName.trim(),
+            nextParts.monthYear.trim(),
+          ]
+            .filter(Boolean)
+            .join('_');
+          return {
+            formData: {
+              ...state.formData,
+              nameParts: nextParts,
+              name: nextName,
+            },
+          };
+        }),
+
       updateField: (key, value) =>
         set((state) => ({
           formData: { ...state.formData, [key]: value },
         })),
 
       updateFormData: (partial) =>
-        set((state) => ({
-          formData: { ...state.formData, ...partial },
-        })),
+        set((state) => {
+          const currentParts = state.formData.nameParts || {
+            customerName: '',
+            brandName: '',
+            monthYear: '',
+          };
+          let updatedNameParts = partial.nameParts
+            ? { ...currentParts, ...partial.nameParts }
+            : currentParts;
+          let updatedName = partial.name ?? state.formData.name;
+
+          if (partial.name && !partial.nameParts) {
+            const rawParts = String(partial.name).split('_');
+            if (rawParts.length >= 2) {
+              updatedNameParts = {
+                customerName: rawParts[0]?.trim() || '',
+                brandName: rawParts.length >= 3 ? rawParts.slice(1, -1).join('_').trim() : rawParts[1]?.trim() || '',
+                monthYear: rawParts.length >= 2 ? rawParts[rawParts.length - 1]?.trim() || '' : '',
+              };
+            }
+          } else if (partial.nameParts && !partial.name) {
+            updatedName = [
+              updatedNameParts.customerName.trim(),
+              updatedNameParts.brandName.trim(),
+              updatedNameParts.monthYear.trim(),
+            ]
+              .filter(Boolean)
+              .join('_');
+          }
+
+          return {
+            formData: {
+              ...state.formData,
+              ...partial,
+              nameParts: updatedNameParts,
+              name: updatedName,
+            },
+          };
+        }),
 
       setDateError: (dateError) => set({ dateError }),
       setIsSubmitting: (isSubmitting) => set({ isSubmitting }),
@@ -165,12 +263,19 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
         set((state) => {
           const next = [...state.formData.packages];
           if (!template) {
-            next[index] = { servicePackageId: '', quantity: 1 };
+            next[index] = { servicePackageId: '', quantity: 1, services: [] };
           } else {
             const pkgServices = (template.items || []).map((item: any) => ({
               serviceId: item.service?.id || item.serviceId,
               quantity: item.defaultQuantity || 1,
               sellingPrice: item.service?.costPrice || 0,
+              jobs: (item.service?.serviceJobs || []).map((serviceJob: any) => ({
+                jobId: serviceJob.job?.id || serviceJob.jobId,
+                name: serviceJob.job?.name || 'Hạng mục',
+                isBriefVideo: Boolean(serviceJob.job?.isBriefVideo),
+                included: !Boolean(serviceJob.job?.isBriefVideo),
+                briefVideo: '',
+              })),
             }));
             next[index] = {
               servicePackageId: String(template.id),
@@ -192,11 +297,110 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
           return { formData: { ...state.formData, packages: next } };
         }),
 
+      addPackageService: (pkgIndex) =>
+        set((state) => {
+          const next = [...state.formData.packages];
+          if (next[pkgIndex]) {
+            const curServices = next[pkgIndex].services || [];
+            next[pkgIndex] = {
+              ...next[pkgIndex],
+              services: [
+                ...curServices,
+                { serviceId: '', quantity: 1, sellingPrice: 0, jobs: [] },
+              ],
+            };
+          }
+          return { formData: { ...state.formData, packages: next } };
+        }),
+
+      removePackageService: (pkgIndex, serviceIndex) =>
+        set((state) => {
+          const next = [...state.formData.packages];
+          if (next[pkgIndex] && next[pkgIndex].services) {
+            next[pkgIndex] = {
+              ...next[pkgIndex],
+              services: next[pkgIndex].services!.filter((_, i) => i !== serviceIndex),
+            };
+          }
+          return { formData: { ...state.formData, packages: next } };
+        }),
+
+      updatePackageService: (pkgIndex, serviceIndex, fieldOrItem, value, serviceObj) =>
+        set((state) => {
+          const next = [...state.formData.packages];
+          if (next[pkgIndex] && next[pkgIndex].services && next[pkgIndex].services![serviceIndex]) {
+            const pServices = [...next[pkgIndex].services!];
+            if (typeof fieldOrItem === 'object') {
+              pServices[serviceIndex] = {
+                ...pServices[serviceIndex],
+                ...fieldOrItem,
+              };
+            } else if (fieldOrItem === 'serviceId') {
+              const jobs = (serviceObj?.serviceJobs || []).map((serviceJob: any) => ({
+                jobId: serviceJob.job?.id || serviceJob.jobId,
+                name: serviceJob.job?.name || 'Hạng mục',
+                isBriefVideo: Boolean(serviceJob.job?.isBriefVideo),
+                included: !Boolean(serviceJob.job?.isBriefVideo),
+                briefVideo: '',
+              }));
+              pServices[serviceIndex] = {
+                ...pServices[serviceIndex],
+                serviceId: value,
+                sellingPrice: serviceObj?.costPrice || 0,
+                jobs,
+              };
+            } else if (fieldOrItem === 'quantity') {
+              pServices[serviceIndex] = {
+                ...pServices[serviceIndex],
+                quantity: Math.max(1, Number(value) || 1),
+              };
+            }
+            next[pkgIndex] = { ...next[pkgIndex], services: pServices };
+          }
+          return { formData: { ...state.formData, packages: next } };
+        }),
+
+      setPackageServiceJobIncluded: (pkgIndex, serviceIndex, jobId, included) =>
+        set((state) => {
+          const next = [...state.formData.packages];
+          if (next[pkgIndex]?.services?.[serviceIndex]?.jobs) {
+            const pServices = [...next[pkgIndex].services!];
+            pServices[serviceIndex] = {
+              ...pServices[serviceIndex],
+              jobs: pServices[serviceIndex].jobs!.map((job) =>
+                String(job.jobId) === String(jobId)
+                  ? { ...job, included, briefVideo: included ? job.briefVideo : '' }
+                  : job
+              ),
+            };
+            next[pkgIndex] = { ...next[pkgIndex], services: pServices };
+          }
+          return { formData: { ...state.formData, packages: next } };
+        }),
+
+      setPackageServiceJobBrief: (pkgIndex, serviceIndex, jobId, briefVideo) =>
+        set((state) => {
+          const next = [...state.formData.packages];
+          if (next[pkgIndex]?.services?.[serviceIndex]?.jobs) {
+            const pServices = [...next[pkgIndex].services!];
+            pServices[serviceIndex] = {
+              ...pServices[serviceIndex],
+              jobs: pServices[serviceIndex].jobs!.map((job) =>
+                String(job.jobId) === String(jobId)
+                  ? { ...job, briefVideo }
+                  : job
+              ),
+            };
+            next[pkgIndex] = { ...next[pkgIndex], services: pServices };
+          }
+          return { formData: { ...state.formData, packages: next } };
+        }),
+
       addService: () =>
         set((state) => ({
           formData: {
             ...state.formData,
-            services: [...state.formData.services, { serviceId: '', quantity: 1 }],
+            services: [...state.formData.services, { serviceId: '', quantity: 1, jobs: [] }],
           },
         })),
 
@@ -206,16 +410,23 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
           return {
             formData: {
               ...state.formData,
-              services: filtered.length > 0 ? filtered : [{ serviceId: '', quantity: 1 }],
+              services: filtered.length > 0 ? filtered : [{ serviceId: '', quantity: 1, jobs: [] }],
             },
           };
         }),
 
-      selectServiceItem: (index, serviceId) =>
+      selectServiceItem: (index, serviceId, serviceObj) =>
         set((state) => {
           const next = [...state.formData.services];
           if (next[index]) {
-            next[index] = { ...next[index], serviceId };
+            const jobs = (serviceObj?.serviceJobs || []).map((serviceJob: any) => ({
+              jobId: serviceJob.job?.id || serviceJob.jobId,
+              name: serviceJob.job?.name || 'Hạng mục',
+              isBriefVideo: Boolean(serviceJob.job?.isBriefVideo),
+              included: !Boolean(serviceJob.job?.isBriefVideo),
+              briefVideo: '',
+            }));
+            next[index] = { ...next[index], serviceId, jobs };
           }
           return { formData: { ...state.formData, services: next } };
         }),
@@ -225,6 +436,38 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
           const next = [...state.formData.services];
           if (next[index]) {
             next[index] = { ...next[index], quantity: qty };
+          }
+          return { formData: { ...state.formData, services: next } };
+        }),
+
+      setServiceJobIncluded: (serviceIndex, jobId, included) =>
+        set((state) => {
+          const next = [...state.formData.services];
+          if (next[serviceIndex] && next[serviceIndex].jobs) {
+            next[serviceIndex] = {
+              ...next[serviceIndex],
+              jobs: next[serviceIndex].jobs!.map((job) =>
+                String(job.jobId) === String(jobId)
+                  ? { ...job, included, briefVideo: included ? job.briefVideo : '' }
+                  : job
+              ),
+            };
+          }
+          return { formData: { ...state.formData, services: next } };
+        }),
+
+      setServiceJobBrief: (serviceIndex, jobId, briefVideo) =>
+        set((state) => {
+          const next = [...state.formData.services];
+          if (next[serviceIndex] && next[serviceIndex].jobs) {
+            next[serviceIndex] = {
+              ...next[serviceIndex],
+              jobs: next[serviceIndex].jobs!.map((job) =>
+                String(job.jobId) === String(jobId)
+                  ? { ...job, briefVideo }
+                  : job
+              ),
+            };
           }
           return { formData: { ...state.formData, services: next } };
         }),

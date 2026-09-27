@@ -120,6 +120,18 @@ export default function ProfileScreen() {
           <TouchableOpacity
             className="flex-row items-center justify-between py-1"
             activeOpacity={0.7}
+            onPress={() => router.push('/settings' as any)}
+          >
+            <View className="flex-row items-center gap-2.5">
+              <Feather name="settings" size={16} color={BrandColors.primary} />
+              <Text className="text-sm font-medium text-slate-700">Cài đặt hệ thống & QC</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color="#CBD5E1" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className="flex-row items-center justify-between py-1"
+            activeOpacity={0.7}
             onPress={() => Alert.alert('Thông tin phiên bản', 'Getvini ERP Mobile v1.0.0 (Build 2026)')}
           >
             <View className="flex-row items-center gap-2.5">

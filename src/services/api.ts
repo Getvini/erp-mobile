@@ -57,10 +57,23 @@ class ApiService {
   private cookieInitPromise: Promise<void>;
   private refreshPromise: Promise<boolean> | null = null;
   private configurationError: string | null = null;
+  private onUnauthorizedCallback: (() => void) | null = null;
 
   constructor() {
     this.configurationError = this.validateApiUrl();
     this.cookieInitPromise = this.initCookies();
+  }
+
+  setOnUnauthorized(callback: () => void) {
+    this.onUnauthorizedCallback = callback;
+  }
+
+  handleUnauthorized() {
+    this.saveCookies({});
+    privateStorage.removeItem(STORAGE_USER_KEY).catch(() => undefined);
+    if (this.onUnauthorizedCallback) {
+      this.onUnauthorizedCallback();
+    }
   }
 
   private validateApiUrl() {
@@ -167,7 +180,7 @@ class ApiService {
     );
   }
 
-  private async refreshSession() {
+  private async refreshSession(): Promise<boolean> {
     if (!this.refreshPromise) {
       this.refreshPromise = this.request<{ message: string }>(
         '/auth/refresh',
@@ -176,8 +189,8 @@ class ApiService {
       )
         .then(async (result) => {
           const refreshed = !result.error && result.status >= 200 && result.status < 300;
-          if (!refreshed && result.status === 401) {
-            await this.saveCookies({});
+          if (!refreshed) {
+            this.handleUnauthorized();
           }
           return refreshed;
         })
@@ -264,6 +277,8 @@ class ApiService {
           const refreshed = await this.refreshSession();
           if (refreshed) {
             return this.request<T>(endpoint, options, false);
+          } else {
+            this.handleUnauthorized();
           }
         }
 

@@ -1,0 +1,19 @@
+appId: com.getvini.erp
+---
+- launchApp
+- waitForAnimationToEnd
+- tapOn:
+    id: emailInput
+- inputText: "test@example.com"
+- tapOn:
+    id: passwordInput
+- inputText: "password123"
+- tapOn:
+    id: loginButton
+- waitForAnimationToEnd
+- assertVisible: "Trang Chủ"
+- tapOn:
+    id: permissionButton
+- waitForAnimationToEnd
+- assertVisible:
+    id: unlockDebtButton

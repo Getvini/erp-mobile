@@ -1,0 +1,39 @@
+appId: com.getvini.erp
+name: "P0-6 Opportunities Quotations Flow"
+---
+- launchApp
+- waitForAnimationToEnd
+- tapOn:
+    id: opportunitiesTab
+- assertVisible:
+    id: opportunityPipeline
+- tapOn:
+    index: 0
+    id: opportunityPipeline
+- assertVisible:
+    id: opportunityDetailScreen
+- tapOn:
+    text: "Tiềm năng"
+- tapOn:
+    text: "Tài chính"
+- tapOn:
+    text: "Báo giá"
+- tapOn:
+    id: createQuotationButton
+- assertVisible:
+    id: quotationModal
+- tapOn:
+    id: vatRateInput
+- inputText: "8"
+- tapOn:
+    id: discountInput
+- inputText: "5"
+- tapOn:
+    id: previewQuotationButton
+- assertVisible:
+    id: quotationDetailModal
+- tapOn:
+    id: approveQuotationButton
+- waitForAnimationToEnd
+- assertVisible:
+    id: contractId

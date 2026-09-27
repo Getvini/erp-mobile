@@ -163,6 +163,8 @@ export interface ContractItem {
   status: ContractStatus | string;
   cost: number;
   sellingPrice: number;
+  totalWithVat: number;
+  vatAmount: number;
   customer?: ContractCustomer;
   opportunity?: ContractOpportunity;
   proposal_contract?: string;

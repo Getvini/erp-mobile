@@ -56,7 +56,7 @@ const MODULES = [
   {
     id: 'contracts',
     title: 'Hợp đồng & Phụ lục',
-    desc: 'Quản lý danh sách hợp đồng kinh tế, điều khoản thanh toán và phụ lục phát sinh.',
+    desc: 'Quản lý danh sách hợp đồng, điều khoản thanh toán và phụ lục phát sinh.',
     icon: 'document-text-outline' as const,
     color: '#3B82F6',
     badge: 'Pháp lý',
@@ -92,6 +92,14 @@ const MODULES = [
     icon: 'notifications-outline' as const,
     color: '#6366F1',
     badge: 'Real-time',
+  },
+  {
+    id: 'settings',
+    title: 'Cài đặt hệ thống & QC',
+    desc: 'Cấu hình bảo mật sinh trắc học, thông báo, AI QC đối chiếu sản phẩm và xóa bộ nhớ cache.',
+    icon: 'settings-outline' as const,
+    color: '#EA580C',
+    badge: 'Hệ thống',
   },
   {
     id: 'profile',
@@ -188,6 +196,10 @@ export default function ExploreScreen() {
 
       case 'notifications':
         router.push('/notifications' as any);
+        break;
+
+      case 'settings':
+        router.push('/settings' as any);
         break;
 
       case 'profile':

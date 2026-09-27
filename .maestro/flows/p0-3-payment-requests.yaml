@@ -1,0 +1,27 @@
+appId: com.getvini.erp
+name: "P0-3 Payment Requests Flow"
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: emailInput
+- inputText: "sale@getvini.com"
+- tapOn:
+    id: passwordInput
+- inputText: "Sale@123"
+- tapOn:
+    id: loginButton
+- waitForAnimationToEnd
+- tapOn:
+    id: paymentRequestsTab
+- tapOn:
+    id: createPaymentRequestButton
+- assertVisible:
+    id: paymentRequestForm
+- tapOn:
+    id: amountInput
+- inputText: "15000000"
+- assertVisible: "15.000.000"
+- tapOn:
+    id: submitPaymentRequestButton
+- assertVisible: "Chờ duyệt"

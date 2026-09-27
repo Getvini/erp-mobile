@@ -13,6 +13,7 @@ import { AuthProvider } from '@/context/AuthContext';
 import { useSSE } from '@/hooks/useSSE';
 import { useSSEQueryBridge } from '@/hooks/useSSEQueryBridge';
 import { QueryProvider } from '@/providers/QueryProvider';
+import { ScreenErrorBoundary } from '@/components/common/ErrorBoundary';
 
 // Polyfill for Hermes Symbol.description compatibility
 if (typeof Symbol !== 'undefined' && !('description' in Symbol.prototype)) {
@@ -24,8 +25,6 @@ if (typeof Symbol !== 'undefined' && !('description' in Symbol.prototype)) {
     },
   });
 }
-
-import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -39,36 +38,35 @@ export default function RootLayout() {
   }, [colors.background]);
 
   return (
-    <ErrorBoundary>
-      <QueryProvider>
-        <AuthProvider>
-          <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
-            <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-            <SSEManager />
-            <AnimatedSplashOverlay />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                animation: 'fade',
-              }}
-            >
-              <Stack.Screen name="index" options={{ headerShown: false }} />
-              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-              <Stack.Screen name="explore" options={{ headerShown: false }} />
-              <Stack.Screen name="customers" options={{ headerShown: false }} />
-              <Stack.Screen name="opportunities" options={{ headerShown: false }} />
-              <Stack.Screen name="projects" options={{ headerShown: false }} />
-              <Stack.Screen name="contracts" options={{ headerShown: false }} />
-              <Stack.Screen name="tasks" options={{ headerShown: false }} />
-              <Stack.Screen name="acceptances" options={{ headerShown: false }} />
-              <Stack.Screen name="finance" options={{ headerShown: false }} />
-              <Stack.Screen name="notifications" options={{ headerShown: false }} />
-              <Stack.Screen name="profile" options={{ headerShown: false }} />
-            </Stack>
-          </ThemeProvider>
-        </AuthProvider>
-      </QueryProvider>
-    </ErrorBoundary>
+    <QueryProvider>
+      <AuthProvider>
+        <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+          <SSEManager />
+          <AnimatedSplashOverlay />
+          <Stack
+            unstable_screenErrorBoundary={ScreenErrorBoundary}
+            screenOptions={{
+              headerShown: false,
+              animation: 'fade',
+            }}
+          >
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="explore" options={{ headerShown: false }} />
+            <Stack.Screen name="customers" options={{ headerShown: false }} />
+            <Stack.Screen name="opportunities" options={{ headerShown: false }} />
+            <Stack.Screen name="projects" options={{ headerShown: false }} />
+            <Stack.Screen name="contracts" options={{ headerShown: false }} />
+            <Stack.Screen name="tasks" options={{ headerShown: false }} />
+            <Stack.Screen name="acceptances" options={{ headerShown: false }} />
+            <Stack.Screen name="finance" options={{ headerShown: false }} />
+            <Stack.Screen name="notifications" options={{ headerShown: false }} />
+            <Stack.Screen name="profile" options={{ headerShown: false }} />
+          </Stack>
+        </ThemeProvider>
+      </AuthProvider>
+    </QueryProvider>
   );
 }
 

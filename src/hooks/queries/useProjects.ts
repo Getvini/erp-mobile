@@ -1,14 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  projectService,
-  ProjectItem,
-  ProjectDetailItem,
-  UserPMItem,
-} from '@/services/projectService';
-import {
-  productDescriptionService,
-  ProductDescriptionSubmission,
-} from '@/services/productDescriptionService';
+import { projectService } from '@/services/projectService';
+import { productDescriptionService } from '@/services/productDescriptionService';
 import { teamService } from '@/services/teamService';
 import { queryKeys } from '@/services/queryKeys';
 
@@ -107,9 +99,28 @@ export function useAssignProjectMutation() {
 }
 
 /**
+ * Hook to update general project fields (plannedStartDate, plannedEndDate, etc.)
+ */
+export function useUpdateProjectMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...payload }: { id: string; plannedStartDate?: string | null; plannedEndDate?: string | null }) => {
+      const res = await projectService.updateProject(id, payload);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(variables.id) });
+    },
+  });
+}
+
+/**
  * Hook to update project status
  */
 export function useUpdateProjectStatusMutation() {
+
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -322,6 +333,71 @@ export function useRejectProductDescriptionMutation() {
 }
 
 /**
+ * Hook to extract text from file via backend AI
+ */
+export function useExtractProductDescriptionFileMutation() {
+  return useMutation({
+    mutationFn: async ({ projectId, fileUrl }: { projectId: string; fileUrl: string }) => {
+      const res = await productDescriptionService.extractFile(projectId, fileUrl);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data;
+    },
+  });
+}
+
+/**
+ * Hook to format product description text via backend AI
+ */
+export function useAiFormatProductDescriptionMutation() {
+  return useMutation({
+    mutationFn: async ({
+      projectId,
+      text,
+      productName,
+    }: {
+      projectId: string;
+      text: string;
+      productName?: string;
+    }) => {
+      const res = await productDescriptionService.aiFormat(projectId, text, productName);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data;
+    },
+  });
+}
+
+/**
+ * Hook to update working files for a project
+ */
+export function useUpdateWorkingFilesMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      projectId,
+      workingFiles,
+    }: {
+      projectId: string;
+      workingFiles: import('@/services/projectService').WorkingFileItem[];
+    }) => {
+      const res = await projectService.updateWorkingFiles(projectId, workingFiles);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(variables.projectId) });
+    },
+  });
+}
+
+/**
  * Hook to fetch team members for a team
  */
 export function useTeamMembersQuery(teamId?: string) {
@@ -329,7 +405,10 @@ export function useTeamMembersQuery(teamId?: string) {
     queryKey: ['teams', 'members', teamId],
     queryFn: async () => {
       if (!teamId) return [];
-      const res = await teamService.getTeamMembers(teamId);
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const year = now.getFullYear();
+      const res = await teamService.getTeamMembers(teamId, month, year);
       if (res.error) {
         throw new Error(res.error);
       }
@@ -369,13 +448,17 @@ export function useUpdateTeamMemberRoleMutation() {
 }
 
 /**
- * Hook to fetch available company users for project team
+ * Hook to fetch available company users for project team with workload
  */
 export function useAvailableUsersQuery() {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+
   return useQuery({
-    queryKey: ['users', 'available'],
+    queryKey: ['users', 'available', month, year],
     queryFn: async () => {
-      const res = await teamService.getAvailableUsers();
+      const res = await teamService.getAvailableUsers(month, year);
       if (res.error) {
         throw new Error(res.error);
       }
@@ -395,12 +478,43 @@ export function useAddTeamMemberMutation() {
       teamId,
       userId,
       role,
+      roles,
     }: {
       teamId: string;
       userId: string;
-      role: string;
+      role?: string;
+      roles?: string[];
     }) => {
-      const res = await teamService.addTeamMember(teamId, userId, role);
+      const res = await teamService.addTeamMember(teamId, userId, role, roles);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+      queryClient.invalidateQueries({ queryKey: ['teams', 'members', variables.teamId] });
+    },
+  });
+}
+
+/**
+ * Hook to update team member roles (multi-role)
+ */
+export function useUpdateTeamMemberRolesMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      teamId,
+      userId,
+      roles,
+    }: {
+      teamId: string;
+      userId: string;
+      roles: string[];
+    }) => {
+      const res = await teamService.updateTeamMemberRoles(teamId, userId, roles);
       if (res.error) {
         throw new Error(res.error);
       }

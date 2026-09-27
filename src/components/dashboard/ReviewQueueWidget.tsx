@@ -34,47 +34,51 @@ export const ReviewQueueWidget: React.FC<ReviewQueueWidgetProps> = ({
       </View>
 
       <View className="gap-2.5">
-        {tasks.slice(0, 4).map((task) => (
-          <TouchableOpacity
-            key={task.id}
-            className="flex-row items-center p-3 rounded-xl bg-background border border-slate-100"
-            onPress={() => onTaskPress && onTaskPress(task)}
-            activeOpacity={0.7}
-          >
-            <View className="flex-1">
-              <View className="flex-row items-center gap-1.5 mb-1">
-                <View className="bg-amber-100 px-1.5 py-0.5 rounded-sm">
-                  <Text className="text-[10px] font-bold text-amber-700">Chờ duyệt</Text>
+        {tasks?.length === 0 ? (
+          <Text className="text-sm text-text-secondary">Không có công việc cần xét duyệt</Text>
+        ) : (
+          tasks.slice(0, 4).map((task) => (
+            <TouchableOpacity
+              key={task.id}
+              className="flex-row items-center p-3 rounded-xl bg-background border border-slate-100"
+              onPress={() => onTaskPress && onTaskPress(task)}
+              activeOpacity={0.7}
+            >
+              <View className="flex-1">
+                <View className="flex-row items-center gap-1.5 mb-1">
+                  <View className="bg-amber-100 px-1.5 py-0.5 rounded-sm">
+                    <Text className="text-[10px] font-bold text-amber-700">Chờ duyệt</Text>
+                  </View>
+                  {task.code && <Text className="text-[11px] font-semibold text-text-secondary">#{task.code}</Text>}
                 </View>
-                {task.code && <Text className="text-[11px] font-semibold text-text-secondary">#{task.code}</Text>}
+                <Text className="text-xs font-semibold text-text-primary leading-5 mb-1.5" numberOfLines={2}>
+                  {task.name}
+                </Text>
+                <View className="flex-row items-center flex-wrap gap-3">
+                  {task.project?.name && (
+                    <View className="flex-row items-center gap-1">
+                      <Feather name="folder" size={12} color="#64748B" />
+                      <Text className="text-[11px] text-text-secondary max-w-[140px]" numberOfLines={1}>
+                        {task.project.name}
+                      </Text>
+                    </View>
+                  )}
+                  {task.assignee?.fullName && (
+                    <View className="flex-row items-center gap-1">
+                      <Feather name="user" size={12} color="#64748B" />
+                      <Text className="text-[11px] text-text-secondary max-w-[140px]" numberOfLines={1}>
+                        {task.assignee.fullName}
+                      </Text>
+                    </View>
+                  )}
+                </View>
               </View>
-              <Text className="text-xs font-semibold text-text-primary leading-5 mb-1.5" numberOfLines={2}>
-                {task.name}
-              </Text>
-              <View className="flex-row items-center flex-wrap gap-3">
-                {task.project?.name && (
-                  <View className="flex-row items-center gap-1">
-                    <Feather name="folder" size={12} color="#64748B" />
-                    <Text className="text-[11px] text-text-secondary max-w-[140px]" numberOfLines={1}>
-                      {task.project.name}
-                    </Text>
-                  </View>
-                )}
-                {task.assignee?.fullName && (
-                  <View className="flex-row items-center gap-1">
-                    <Feather name="user" size={12} color="#64748B" />
-                    <Text className="text-[11px] text-text-secondary max-w-[140px]" numberOfLines={1}>
-                      {task.assignee.fullName}
-                    </Text>
-                  </View>
-                )}
+              <View className="ml-2">
+                <Feather name="chevron-right" size={18} color="#94A3B8" />
               </View>
-            </View>
-            <View className="ml-2">
-              <Feather name="chevron-right" size={18} color="#94A3B8" />
-            </View>
-          </TouchableOpacity>
-        ))}
+            </TouchableOpacity>
+          )))
+        }
       </View>
     </View>
   );

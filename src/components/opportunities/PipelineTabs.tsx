@@ -15,10 +15,19 @@ interface PipelineTabsProps {
 
 export const PIPELINE_TABS: PipelineTabItem[] = [
   { id: 'ALL', title: 'Tất cả' },
-  { id: 'PENDING_OPP_APPROVAL', title: 'Chờ BOD duyệt' },
-  { id: 'QUOTATION', title: 'Làm báo giá' },
-  { id: 'CONTRACT', title: 'Hợp đồng & DA' },
+  { id: 'OPEN', title: 'Mới' },
+  { id: 'PENDING_OPP_APPROVAL', title: 'Đang chờ duyệt' },
+  { id: 'OPP_REJECTED', title: 'Không duyệt' },
+  { id: 'OPP_APPROVED', title: 'Đã duyệt' },
+  { id: 'QUOTATION_DRAFTING', title: 'Đang làm báo giá' },
+  { id: 'PENDING_QUOTE_APPROVAL', title: 'Chờ duyệt báo giá' },
+  { id: 'QUOTE_APPROVED', title: 'Đã duyệt báo giá' },
+  { id: 'CONTRACT_CREATED', title: 'Đang làm hợp đồng' },
+  { id: 'CONTRACT_APPROVED', title: 'Đã tạo hợp đồng' },
+  { id: 'PROJECT_ASSIGNED', title: 'Đã giao dự án' },
+  { id: 'IMPLEMENTATION', title: 'Triển khai' },
   { id: 'COMPLETED', title: 'Hoàn thành' },
+  { id: 'CANCELLED', title: 'Đã hủy' },
 ];
 
 export const PipelineTabs: React.FC<PipelineTabsProps> = ({
@@ -42,9 +51,20 @@ export const PipelineTabs: React.FC<PipelineTabsProps> = ({
               key={tab.id}
               className={`flex-row items-center px-3.5 py-2 rounded-full border gap-1.5 ${
                 isActive
-                  ? 'bg-primary border-primary shadow-xs'
+                  ? 'bg-primary border-primary'
                   : 'bg-background border-border'
               }`}
+              style={
+                isActive
+                  ? {
+                      shadowColor: '#F38820',
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowOpacity: 0.15,
+                      shadowRadius: 2,
+                      elevation: 2,
+                    }
+                  : undefined
+              }
               onPress={() => onSelectTab(tab.id)}
               activeOpacity={0.75}
             >

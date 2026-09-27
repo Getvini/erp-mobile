@@ -23,16 +23,24 @@ import { canAccessCustomers } from '@/utils/rbac';
 import CreateCustomerModal from '@/components/customers/CreateCustomerModal';
 import { safeGoBack } from '@/utils/navigation';
 
+const SOURCE_TABS = [
+  { key: 'ALL', label: 'Tất cả' },
+  { key: 'INTERNAL', label: 'Nội bộ' },
+  { key: 'REFERRAL_PARTNER', label: 'Đối tác giới thiệu' },
+];
+
 export default function CustomersScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const hasAccess = canAccessCustomers(user?.role);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeSourceTab, setActiveSourceTab] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // TanStack Query for customer list
   const { data: customers = [], isLoading, isFetching, refetch } = useCustomersQuery({
     search: searchQuery,
+    source: activeSourceTab !== 'ALL' ? activeSourceTab : undefined,
   });
 
   useSSERefresh('invalidate_Customers', refetch);
@@ -58,6 +66,10 @@ export default function CustomersScreen() {
   };
 
   const filteredCustomers = customers.filter((c) => {
+    if (activeSourceTab !== 'ALL') {
+      const matchSource = (c as any).source === activeSourceTab;
+      if (!matchSource) return false;
+    }
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -198,6 +210,31 @@ export default function CustomersScreen() {
               <Feather name="x" size={16} color="#94A3B8" />
             </TouchableOpacity>
           )}
+        </View>
+
+        {/* Source Filter Tabs */}
+        <View className="flex-row gap-2 mt-2.5">
+          {SOURCE_TABS.map((tab) => {
+            const isActive = activeSourceTab === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                className={`px-3 py-1.5 rounded-full border ${
+                  isActive ? 'bg-primary border-primary' : 'bg-slate-100 border-slate-200'
+                }`}
+                onPress={() => setActiveSourceTab(tab.key)}
+                activeOpacity={0.75}
+              >
+                <Text
+                  className={`text-xs ${
+                    isActive ? 'font-bold text-white' : 'font-semibold text-slate-600'
+                  }`}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
 

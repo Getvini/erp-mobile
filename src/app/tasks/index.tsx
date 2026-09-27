@@ -23,6 +23,7 @@ import { isManagementRole, isProjectManagerRole, isSalesRole } from '@/utils/rba
 
 type StatusFilter =
   | 'ALL'
+  | 'NOT_STARTED'
   | 'PENDING'
   | 'DOING'
   | 'AWAITING_REVIEW'
@@ -32,12 +33,17 @@ type StatusFilter =
   | 'COMPLETED'
   | 'REWORKING'
   | 'REJECTED'
+  | 'AWAITING_PRICING'
+  | 'AWAITING_SUPPORT'
+  | 'OVERDUE'
+  | 'ON_HOLD'
   | 'CANCELLED';
 
 type ScopeFilter = 'MINE' | 'ALL';
 
 const STATUS_TABS: Array<{ id: StatusFilter; label: string }> = [
   { id: 'ALL', label: 'Tất cả' },
+  { id: 'NOT_STARTED', label: 'Chưa thực hiện' },
   { id: 'DOING', label: 'Đang thực hiện' },
   { id: 'PENDING', label: 'Chờ phân công' },
   { id: 'AWAITING_REVIEW', label: 'Chờ duyệt' },
@@ -47,6 +53,10 @@ const STATUS_TABS: Array<{ id: StatusFilter; label: string }> = [
   { id: 'INTERNAL_COMPLETED', label: 'HT nội bộ' },
   { id: 'ACCEPTED', label: 'Đã nghiệm thu' },
   { id: 'COMPLETED', label: 'Hoàn thành' },
+  { id: 'AWAITING_PRICING', label: 'Chờ định giá' },
+  { id: 'AWAITING_SUPPORT', label: 'Nhờ hỗ trợ' },
+  { id: 'OVERDUE', label: 'Quá hạn' },
+  { id: 'ON_HOLD', label: 'Tạm dừng' },
   { id: 'CANCELLED', label: 'Đã hủy' },
 ];
 

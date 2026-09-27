@@ -1,11 +1,16 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, TouchableOpacity, ActivityIndicator, Linking, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { ProjectDetailItem } from '@/services/projectService';
 import { TeamMember, TEAM_MEMBER_ROLE_LABELS, USER_ROLE } from '@/services/teamService';
 import { BrandColors } from '@/constants/colors';
-import { formatNumber } from '@/utils/formatters';
+import { formatNumber, formatDateToDDMMYYYY } from '@/utils/formatters';
+import { getProjectManagerUser, hasTeamMemberRole, groupTeamMembers, getUserAccountRole } from '@/utils/teamMember';
+import { WorkloadBadge } from '@/components/common/WorkloadBadge';
+import { ProjectWorkingFilesSection } from '@/components/projects/ProjectWorkingFilesSection';
+import { DatePickerModal } from '@/components/common/DatePickerModal';
+import { useUpdateProjectMutation } from '@/hooks/queries/useProjects';
 
 
 interface ProjectOverviewTabProps {
@@ -51,21 +56,27 @@ export default function ProjectOverviewTab({
   const router = useRouter();
   const effectiveMembers = (teamMembers && teamMembers.length > 0) ? teamMembers : (project.team?.members || []);
 
-  const pmUser =
-    project.projectManager ||
-    effectiveMembers.find((m) => m.role === 'PROJECT_MANAGER' || m.role === 'PM')?.user;
-  const pm = pmUser;
 
+  const pmUser = getProjectManagerUser(project, effectiveMembers);
+  const pm = pmUser;
   const leadUser =
     project.team?.teamLead ||
     effectiveMembers.find(
-      (m) => (m.role === 'LEAD' || m.role === 'ACCOUNT' || m.role === 'TEAM_LEAD') && m.user?.id !== pmUser?.id
+      (m) => hasTeamMemberRole(m, 'LEAD') && m.user?.id !== pmUser?.id
     )?.user;
   const saleorAdminSale = user?.role === 'BD' || user?.role === 'SALE' || user?.role === 'ADMIN_SALE';
   const isBODOrAdminSaleOrAdmin = user?.role === 'BOD' || user?.role === 'ADMIN_SALE' || user?.role === 'ADMIN';
   const team = project.team;
   const contract = project.contract;
   const progress = project.progress ?? 0;
+
+  const startDateStr =
+    project.plannedStartDate ||
+    (project.contract as any)?.plannedStartDate;
+  const endDateStr =
+    project.plannedEndDate ||
+    (project.contract as any)?.plannedEndDate;
+
 
   const handleOpenAttachment = (url?: string) => {
     if (url) {
@@ -75,30 +86,79 @@ export default function ProjectOverviewTab({
     }
   };
 
-  return (
-    <View className="p-4 gap-3.5">
-      {/* 0. Create Monthly Work CTA Card */}
-      {canCreateMonthlyWork && (
-        <TouchableOpacity
-          className="flex-row items-center justify-between bg-purple-700 p-4 rounded-2xl shadow-sm border border-purple-800"
-          onPress={onOpenCreateMonthlyWork}
-          activeOpacity={0.85}
-        >
-          <View className="flex-row items-center gap-3 flex-1">
-            <View className="w-10 h-10 rounded-xl bg-white/20 items-center justify-center">
-              <Feather name="calendar" size={20} color="#FFFFFF" />
-            </View>
-            <View className="flex-1">
-              <Text className="text-sm font-bold text-white">Tạo công việc tháng mới</Text>
-              <Text className="text-xs text-purple-100 mt-0.5">
-                Tự động khởi tạo phụ lục & công việc mẫu theo tháng
-              </Text>
-            </View>
-          </View>
-          <Feather name="chevron-right" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
-      )}
+  const isClosed = ['COMPLETED', 'CANCELLED'].includes(project.status);
+  const isOnHold = project.status === 'ON_HOLD' || Boolean((project as any).isOnHold);
+  const isAssignedPm = pmUser?.id === user?.id && getUserAccountRole(user) === 'PM';
+  const canEditTimeline = !isClosed && !isOnHold && (getUserAccountRole(user) === 'ADMIN' || isAssignedPm);
 
+  // Timeline edit state
+  const [editingTimeline, setEditingTimeline] = useState(false);
+  const [timelineForm, setTimelineForm] = useState({
+    plannedStartDate: startDateStr || '',
+    plannedEndDate: endDateStr || '',
+  });
+  const [datePickerField, setDatePickerField] = useState<'plannedStartDate' | 'plannedEndDate' | null>(null);
+  const updateProjectMutation = useUpdateProjectMutation();
+
+  const hasTimelineChanges =
+    timelineForm.plannedStartDate !== (startDateStr || '') ||
+    timelineForm.plannedEndDate !== (endDateStr || '');
+
+  const handleSaveTimeline = async () => {
+    if (!canEditTimeline || !project.id) return;
+
+    if(!timelineForm.plannedStartDate || !timelineForm.plannedEndDate){
+      Alert.alert('Lỗi', 'Ngày bắt đầu và ngày kết thúc không được để trống');
+      return;
+    }
+
+    if(timelineForm.plannedStartDate > timelineForm.plannedEndDate){
+      Alert.alert('Lỗi', 'Ngày bắt đầu phải nhỏ hơn ngày kết thúc');
+      return;
+    }
+
+    try {
+      await updateProjectMutation.mutateAsync({
+        id: project.id,
+        plannedStartDate: timelineForm.plannedStartDate || null,
+        plannedEndDate: timelineForm.plannedEndDate || null,
+      });
+      setEditingTimeline(false);
+      Alert.alert('Thành công', 'Đã cập nhật tiến trình dự án');
+    } catch (err: any) {
+      Alert.alert('Lỗi', err?.message || 'Không thể cập nhật tiến trình dự án');
+    }
+  };
+
+  const [currentTimestamp] = useState(() => Date.now());
+
+
+  const timeline = useMemo(() => {
+    if (!startDateStr || !endDateStr) return null;
+    const start = new Date(startDateStr).getTime();
+    const end = new Date(endDateStr).getTime();
+    if (isNaN(start) || isNaN(end) || end <= start) return null;
+
+    const totalDays = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)));
+    const elapsedDays = Math.max(0, Math.round((currentTimestamp - start) / (1000 * 60 * 60 * 24)));
+    const diffFromEnd = Math.round((end - currentTimestamp) / (1000 * 60 * 60 * 24));
+    const percentElapsed = Math.min(100, Math.max(0, Math.round((elapsedDays / totalDays) * 100)));
+    const isOverdue = diffFromEnd < 0;
+
+    return {
+      startDateFormatted: formatDateToDDMMYYYY(startDateStr),
+      endDateFormatted: formatDateToDDMMYYYY(endDateStr),
+      totalDays,
+      elapsedDays,
+      diffDays: Math.abs(diffFromEnd),
+      percentElapsed,
+      isOverdue,
+    };
+  }, [startDateStr, endDateStr, currentTimestamp]);
+
+  return (
+    <>
+    <View className="p-4 gap-3.5">
       {/* 1. Missing PM Banner */}
       {!pm && (
         <View className="bg-amber-100 border border-amber-300 rounded-2xl p-4 gap-3">
@@ -130,7 +190,7 @@ export default function ProjectOverviewTab({
           <View className="flex-row items-start gap-2.5">
             <Feather name="clock" size={20} color="#C2410C" />
             <View className="flex-1">
-              <Text className="text-[15px] font-bold text-orange-800 mb-0.5">Dự án đang chờ Lead xác nhận</Text>
+              <Text className="text-[15px] font-bold text-orange-800 mb-0.5">Dự án đang chờ Account xác nhận</Text>
             </View>
           </View>
 
@@ -154,7 +214,7 @@ export default function ProjectOverviewTab({
             <View className="flex-row items-center gap-1.5 bg-orange-100 px-3 py-2 rounded-lg">
               <Feather name="lock" size={13} color="#9A3412" />
               <Text className="text-xs text-orange-950 font-semibold flex-1">
-                Chỉ Lead phụ trách mới có quyền chấp nhận dự án.
+                Chỉ Account phụ trách mới có quyền chấp nhận dự án.
               </Text>
             </View>
           )}
@@ -164,7 +224,9 @@ export default function ProjectOverviewTab({
       {/* Project Info Card */}
       <View className="bg-surface rounded-2xl p-4 border border-border gap-3">
         <View className="flex-row items-center gap-2">
-          <Feather name="calendar" size={16} color={BrandColors.primary} />
+          <View className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 items-center justify-center mr-2.5">
+            <Feather name="calendar" size={16} color={BrandColors.primary} />
+          </View>
           <Text className="text-[15px] font-bold text-text-primary">Thông tin dự án</Text>
         </View>
 
@@ -189,6 +251,134 @@ export default function ProjectOverviewTab({
           <Text className="text-xs text-text-secondary italic leading-5">
             {contract?.description || (project as any).description || 'Chưa có mô tả chi tiết từ khách hàng.'}
           </Text>
+        </View>
+
+        {/* TIẾN TRÌNH DỰ ÁN — inside Project Info card */}
+        <View className="border-t border-slate-100 pt-3 gap-2">
+          {/* Row 1: Label */}
+          <Text className="text-[10px] font-extrabold text-text-muted tracking-wider">
+            TIẾN TRÌNH DỰ ÁN
+          </Text>
+
+          {/* Row 2: Badge + Edit button */}
+          <View className="flex-row items-center justify-between">
+            {timeline ? (
+              <View className="flex-row items-center gap-1.5 bg-primary/10 px-3 py-1.5 rounded-full">
+                <Feather
+                  name={timeline.isOverdue ? 'alert-circle' : 'clock'}
+                  size={11}
+                  color={timeline.isOverdue ? '#E11D48' : BrandColors.primary}
+                />
+                <Text className={`text-[11px] font-bold ${
+                  timeline.isOverdue ? 'text-rose-600' : 'text-primary'
+                }`}>
+                  {timeline.isOverdue
+                    ? `Quá hạn ${timeline.diffDays} ngày`
+                    : `Còn ${timeline.diffDays} ngày`}
+                </Text>
+              </View>
+            ) : (
+              <Text className="text-[11px] text-text-muted italic">Chưa thiết lập</Text>
+            )}
+            {canEditTimeline && !editingTimeline && (
+              <TouchableOpacity
+                className="flex-row items-center gap-1 bg-primary/10 border border-primary/20 px-2.5 py-1.5 rounded-lg"
+                onPress={() => {
+                  setTimelineForm({ plannedStartDate: startDateStr || '', plannedEndDate: endDateStr || '' });
+                  setEditingTimeline(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <Feather name="edit-2" size={11} color={BrandColors.primary} />
+                <Text className="text-[11px] font-bold text-primary">Sửa tiến trình</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {editingTimeline ? (
+            /* Edit mode */
+            <View className="gap-2">
+              <View className="flex-row gap-3">
+                <TouchableOpacity
+                  className="flex-1 bg-background border border-primary/40 rounded-xl px-3 py-2.5 gap-1"
+                  onPress={() => setDatePickerField('plannedStartDate')}
+                  activeOpacity={0.7}
+                >
+                  <Text className="text-[10px] font-bold text-text-muted">Ngày dự kiến bắt đầu</Text>
+                  <View className="flex-row items-center gap-1.5">
+                    <Feather name="calendar" size={12} color={BrandColors.primary} />
+                    <Text className="text-xs font-semibold text-primary">
+                      {timelineForm.plannedStartDate
+                        ? formatDateToDDMMYYYY(timelineForm.plannedStartDate)
+                        : 'Chọn ngày'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className="flex-1 bg-background border border-primary/40 rounded-xl px-3 py-2.5 gap-1"
+                  onPress={() => setDatePickerField('plannedEndDate')}
+                  activeOpacity={0.7}
+                >
+                  <Text className="text-[10px] font-bold text-text-muted">Ngày dự kiến kết thúc</Text>
+                  <View className="flex-row items-center gap-1.5">
+                    <Feather name="calendar" size={12} color={BrandColors.primary} />
+                    <Text className="text-xs font-semibold text-primary">
+                      {timelineForm.plannedEndDate
+                        ? formatDateToDDMMYYYY(timelineForm.plannedEndDate)
+                        : 'Chọn ngày'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+              <View className="flex-row gap-2">
+                <TouchableOpacity
+                  className="flex-1 border border-border rounded-xl py-2 items-center"
+                  onPress={() => setEditingTimeline(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text className="text-xs font-bold text-text-secondary">Hủy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className={`flex-1 rounded-xl py-2 items-center ${
+                    hasTimelineChanges && !updateProjectMutation.isPending ? 'bg-primary' : 'bg-slate-200'
+                  }`}
+                  onPress={handleSaveTimeline}
+                  disabled={!hasTimelineChanges || updateProjectMutation.isPending}
+                  activeOpacity={0.8}
+                >
+                  {updateProjectMutation.isPending ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <Text className={`text-xs font-bold ${
+                      hasTimelineChanges ? 'text-white' : 'text-slate-400'
+                    }`}>Lưu tiến trình</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            /* View mode */
+            <View className="flex-row gap-3">
+              <View className="flex-1 bg-background border border-border rounded-xl px-3 py-2.5 gap-1">
+                <Text className="text-[10px] font-bold text-text-muted">Ngày dự kiến bắt đầu</Text>
+                <View className="flex-row items-center gap-1.5">
+                  <Feather name="calendar" size={12} color={BrandColors.primary} />
+                  <Text className="text-xs font-semibold text-text-primary">
+                    {startDateStr ? formatDateToDDMMYYYY(startDateStr) : 'Chưa cập nhật'}
+                  </Text>
+                </View>
+              </View>
+              <View className="flex-1 bg-background border border-border rounded-xl px-3 py-2.5 gap-1">
+                <Text className="text-[10px] font-bold text-text-muted">Ngày dự kiến kết thúc</Text>
+                <View className="flex-row items-center gap-1.5">
+                  <Feather name="calendar" size={12} color={BrandColors.primary} />
+                  <Text className="text-xs font-semibold text-text-primary">
+                    {endDateStr ? formatDateToDDMMYYYY(endDateStr) : 'Chưa cập nhật'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
         </View>
 
         <View className="gap-2 mt-1">
@@ -225,21 +415,32 @@ export default function ProjectOverviewTab({
       </View>
 
 
-      {/* Task Progress Stat Card */}
+      {/* Task & Timeline Progress Stat Card */}
       <View className="bg-surface rounded-2xl p-4 border border-border gap-3">
         <View className="flex-row items-center gap-2">
-          <Feather name="pie-chart" size={16} color={BrandColors.primary} />
-          <Text className="text-[15px] font-bold text-text-primary">Thống kê tiến độ công việc</Text>
+          <View className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 items-center justify-center mr-2.5">
+            <Feather name="pie-chart" size={16} color={BrandColors.primary} />
+          </View>
+          <Text className="text-[15px] font-bold text-text-primary">Tiến độ công việc & Thời gian</Text>
         </View>
 
-        <View className="flex-row items-baseline gap-2">
-          <Text className="text-3xl font-extrabold text-primary">{progress}%</Text>
-          <Text className="text-xs text-text-secondary font-medium">Tổng thể dự án</Text>
+        {/* Task Completion Progress */}
+        <View>
+          <View className="flex-row items-baseline justify-between mb-1.5">
+            <View className="flex-row items-baseline gap-2">
+              <Text className="text-2xl font-extrabold text-primary">{progress}%</Text>
+              <Text className="text-xs text-text-secondary font-medium">Hoàn thành công việc</Text>
+            </View>
+            <Text className="text-xs font-semibold text-text-muted">
+              {taskStats.completed}/{taskStats.total} việc
+            </Text>
+          </View>
+          <View className="h-2 bg-slate-100 rounded-full overflow-hidden">
+            <View className="h-full bg-primary rounded-full" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
+          </View>
         </View>
 
-        <View className="h-2 bg-slate-200 rounded-full overflow-hidden">
-          <View className="h-full bg-primary rounded-full" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
-        </View>
+
 
         <View className="flex-row justify-between bg-background rounded-xl p-3">
           <View className="items-center gap-0.5">
@@ -261,11 +462,16 @@ export default function ProjectOverviewTab({
         </View>
       </View>
 
+      {/* Working Files Section */}
+      <ProjectWorkingFilesSection project={project} />
+
       {/* Project Manager Card */}
       <View className="bg-surface rounded-2xl p-4 border border-border gap-3">
         <View className="flex-row justify-between items-center">
           <View className="flex-row items-center gap-2">
-            <Feather name="user-check" size={16} color={BrandColors.primary} />
+            <View className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 items-center justify-center mr-2.5">
+              <Feather name="user-check" size={16} color={BrandColors.primary} />
+            </View>
             <Text className="text-[15px] font-bold text-text-primary">Quản lý dự án (PM)</Text>
           </View>
           {canAssignPm && (
@@ -298,7 +504,9 @@ export default function ProjectOverviewTab({
       <View className="bg-surface rounded-2xl p-4 border border-border gap-3">
         <View className="flex-row justify-between items-center">
           <View className="flex-row items-center gap-2">
-            <Feather name="users" size={16} color={BrandColors.primary} />
+            <View className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 items-center justify-center mr-2.5">
+              <Feather name="users" size={16} color={BrandColors.primary} />
+            </View>
             <Text className="text-[15px] font-bold text-text-primary">Đội ngũ thực hiện</Text>
           </View>
           {canManageTeam && pmUser && (
@@ -311,9 +519,9 @@ export default function ProjectOverviewTab({
 
         <Text className="text-sm font-bold text-text-primary">{team?.name || 'Đội dự án'}</Text>
         <Text className="text-xs text-text-secondary">
-          Trưởng nhóm (Lead dự án):{' '}
+          Trưởng nhóm (Account dự án):{' '}
           <Text className={`font-bold ${leadUser ? 'text-emerald-700' : 'text-text-muted'}`}>
-            {leadUser?.fullName || 'Chưa chọn Lead dự án'}
+            {leadUser?.fullName || 'Chưa chọn Account dự án'}
           </Text>
         </Text>
 
@@ -326,52 +534,96 @@ export default function ProjectOverviewTab({
           </View>
         ) : (
           <View className="gap-2 mt-1">
-            {effectiveMembers && effectiveMembers.length > 0 ? (
-              effectiveMembers.map((m) => {
-                const isPmRole = !!pmUser?.id && m.user?.id === pmUser.id;
-                const isLeadRole = !isPmRole && !!leadUser?.id && m.user?.id === leadUser.id;
+            {(() => {
+              const grouped = groupTeamMembers(effectiveMembers, team?.teamLead?.id || leadUser?.id);
+              if (!grouped || grouped.length === 0) {
+                return <Text className="text-xs text-text-muted italic">Chưa có thành viên bổ sung trong đội.</Text>;
+              }
+
+              return grouped.map((group) => {
+                const isPmRole = group.roles.includes('PROJECT_MANAGER') || (!!pmUser?.id && group.userId === pmUser.id);
+                const isTeamLead = !isPmRole && (!!leadUser?.id && group.userId === leadUser.id);
+                const hasAccount = !isPmRole && group.roles.includes('ACCOUNT');
 
                 return (
-                  <View key={m.id} className="flex-row items-center justify-between bg-background rounded-xl p-2.5 border border-border gap-2.5">
+                  <View key={group.userId} className="flex-row items-center justify-between bg-background rounded-xl p-2.5 border border-border gap-2.5">
                     <View className="w-8 h-8 rounded-full bg-primary justify-center items-center">
                       <Text className="text-xs font-bold text-white">
-                        {m.user?.fullName ? m.user.fullName.charAt(0).toUpperCase() : 'M'}
+                        {group.user?.fullName ? group.user.fullName.charAt(0).toUpperCase() : 'M'}
                       </Text>
                     </View>
 
-                    <View className="flex-1 gap-0.5">
+                    <View className="flex-1 gap-1">
                       <View className="flex-row items-center gap-1.5 flex-wrap">
-                        <Text className="text-xs font-bold text-text-primary">{m.user?.fullName || 'Thành viên'}</Text>
-                        {isPmRole ? (
-                          <View className="bg-blue-50 px-1.5 py-0.5 rounded">
+                        <Text className="text-xs font-bold text-text-primary">{group.user?.fullName || 'Thành viên'}</Text>
+                        {isPmRole && (
+                          <View className="bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
                             <Text className="text-[10px] font-bold text-blue-700">PM/Manager</Text>
                           </View>
-                        ) : isLeadRole ? (
-                          <View className="bg-emerald-50 px-1.5 py-0.5 rounded">
-                            <Text className="text-[10px] font-bold text-emerald-700">Lead dự án</Text>
-                          </View>
-                        ) : (
-                          <View className="bg-purple-100 px-1.5 py-0.5 rounded">
-                            <Text className="text-[10px] font-bold text-purple-700">
-                              {TEAM_MEMBER_ROLE_LABELS[m.role] || m.role || 'Thành viên'}
-                            </Text>
+                        )}
+                        {isTeamLead && (
+                          <View className="bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            <Text className="text-[10px] font-bold text-emerald-700">Account dự án</Text>
                           </View>
                         )}
+                        {!isTeamLead && hasAccount && (
+                          <View className="bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            <Text className="text-[10px] font-bold text-emerald-700">Account dự án</Text>
+                          </View>
+                        )}
+                        {group.roles
+                          .filter((r) => r !== 'PROJECT_MANAGER' && r !== 'ACCOUNT')
+                          .map((role) => (
+                            <View key={role} className="bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200">
+                              <Text className="text-[10px] font-bold text-primary">
+                                {TEAM_MEMBER_ROLE_LABELS[role] || role}
+                              </Text>
+                            </View>
+                          ))}
+                        <WorkloadBadge workload={group.user?.workload} />
                       </View>
-                      <Text className="text-[11px] text-text-secondary">
-                        {(m.user as any)?.role
-                          ? USER_ROLE[(m.user as any).role] || (m.user as any).role
-                          : m.user?.email || 'Nhân sự'}
-                      </Text>
+                      {(() => {
+                        const accountRole = getUserAccountRole(group.user);
+                        const roleLabel =
+                          (accountRole && USER_ROLE[accountRole]) || accountRole || group.user?.email || 'Nhân sự';
+                        return (
+                          <Text className="text-[11px] text-text-secondary">
+                            {roleLabel}
+                          </Text>
+                        );
+                      })()}
                     </View>
 
-                    {canManageTeam && !isPmRole && !isLeadRole && (
+                    {canManageTeam && !isPmRole && (
                       <View className="flex-row items-center gap-1.5">
-                        <TouchableOpacity className="p-1.5 rounded-lg bg-teal-50 border border-teal-100" onPress={() => onEditMemberRole?.(m)} activeOpacity={0.7}>
+                        <TouchableOpacity
+                          className="p-1.5 rounded-lg bg-orange-50 border border-orange-200"
+                          onPress={() => onEditMemberRole?.(group)}
+                          activeOpacity={0.7}
+                        >
                           <Feather name="edit-2" size={13} color={BrandColors.primary} />
                         </TouchableOpacity>
-                        {onRemoveMember && (
-                          <TouchableOpacity className="p-1.5 rounded-lg bg-rose-100" onPress={() => onRemoveMember(m.id)} activeOpacity={0.7}>
+                        {onRemoveMember && !isTeamLead && group.memberships?.[0]?.id && (
+                          <TouchableOpacity
+                            className="p-1.5 rounded-lg bg-rose-100"
+                            onPress={() => {
+                              const isAccountMember = group.roles.includes('ACCOUNT') || group.userId === leadUser?.id;
+                              if (isAccountMember) {
+                                const otherAccounts = grouped.filter(
+                                  (g) => g.userId !== group.userId && (g.roles.includes('ACCOUNT') || g.userId === leadUser?.id)
+                                );
+                                if (otherAccounts.length === 0) {
+                                  Alert.alert(
+                                    'Không thể xóa',
+                                    'Không thể xóa nhân sự này vì đây là người duy nhất giữ vai trò Account/Lead trong đội dự án. Vui lòng phân công nhân sự khác giữ vai trò này trước khi xóa.'
+                                  );
+                                  return;
+                                }
+                              }
+                              onRemoveMember(group.memberships[0].id);
+                            }}
+                            activeOpacity={0.7}
+                          >
                             <Feather name="trash-2" size={14} color="#EF4444" />
                           </TouchableOpacity>
                         )}
@@ -379,13 +631,11 @@ export default function ProjectOverviewTab({
                     )}
                   </View>
                 );
-              })
-            ) : (
-              <Text className="text-xs text-text-muted italic">Chưa có thành viên bổ sung trong đội.</Text>
-            )}
+              });
+            })()}
 
             {canManageTeam && (
-              <TouchableOpacity className="flex-row items-center justify-center gap-1.5 bg-teal-50 border border-teal-100 py-2.5 rounded-xl mt-1" onPress={onOpenAddMember} activeOpacity={0.8}>
+              <TouchableOpacity className="flex-row items-center justify-center gap-1.5 bg-orange-50 border border-orange-200 py-2.5 rounded-xl mt-1" onPress={onOpenAddMember} activeOpacity={0.8}>
                 <Feather name="plus-circle" size={15} color={BrandColors.primary} />
                 <Text className="text-xs font-bold text-primary">Thêm thành viên vào đội dự án</Text>
               </TouchableOpacity>
@@ -425,5 +675,28 @@ export default function ProjectOverviewTab({
         </View>
       )}
     </View>
+
+      {/* DatePicker for timeline edit */}
+      <DatePickerModal
+        visible={datePickerField !== null}
+        onClose={() => setDatePickerField(null)}
+        onConfirm={(_ddmmyyyy, yyyymmdd) => {
+          if (datePickerField) {
+            setTimelineForm(prev => ({ ...prev, [datePickerField]: yyyymmdd }));
+          }
+          setDatePickerField(null);
+        }}
+        initialDate={
+          datePickerField === 'plannedStartDate'
+            ? timelineForm.plannedStartDate || undefined
+            : timelineForm.plannedEndDate || undefined
+        }
+        title={
+          datePickerField === 'plannedStartDate'
+            ? 'Ngày dự kiến bắt đầu'
+            : 'Ngày dự kiến kết thúc'
+        }
+      />
+    </>
   );
 }

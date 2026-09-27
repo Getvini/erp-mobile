@@ -24,11 +24,12 @@ import { useProjectsQuery } from '@/hooks/queries/useProjects';
 
 const STATUS_FILTERS = [
   { key: 'ALL', label: 'Tất cả' },
-  { key: 'IN_PROGRESS', label: 'Đang triển khai' },
+  { key: 'PENDING_CONFIRMATION', label: 'Chờ xác nhận' },
   { key: 'CONFIRMED', label: 'Đã xác nhận' },
-  { key: 'PLANNING', label: 'Lập kế hoạch' },
-  { key: 'COMPLETED', label: 'Hoàn thành' },
+  { key: 'IN_PROGRESS', label: 'Đang thực hiện' },
+  { key: 'PENDING_PAUSE_APPROVAL', label: 'Chờ duyệt tạm dừng' },
   { key: 'ON_HOLD', label: 'Tạm dừng' },
+  { key: 'COMPLETED', label: 'Hoàn thành' },
   { key: 'CANCELLED', label: 'Đã hủy' },
 ];
 

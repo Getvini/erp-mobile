@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
+  Pressable,
   TouchableOpacity,
   ScrollView,
   TextInput,
@@ -56,15 +57,20 @@ interface QuotationFormItem {
 export default function QuotationCreateEditScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ opportunityId: string; quotationId?: string }>();
-  const opportunityId = params.opportunityId || '';
   const quotationId = params.quotationId;
   const isEditMode = !!quotationId;
 
   // TanStack Queries
+  const { data: quoteData, isLoading: isLoadingQuote } = useQuotationDetailQuery(quotationId || '');
+  const opportunityId =
+    params.opportunityId ||
+    quoteData?.opportunityId ||
+    (quoteData?.opportunity as any)?.id ||
+    '';
+
   const { data: oppData, isLoading: isLoadingOpp } = useOpportunityDetailQuery(opportunityId);
   const { data: allServicesRes, isLoading: isLoadingServices } = useAvailableServicesQuery();
   const { data: pkgTemplatesRes, isLoading: isLoadingPackages } = useServicePackagesQuery();
-  const { data: quoteData, isLoading: isLoadingQuote } = useQuotationDetailQuery(quotationId || '');
   const { data: servicesRes } = useOpportunityServicesQuery(opportunityId);
 
   // TanStack Mutations
@@ -120,7 +126,7 @@ export default function QuotationCreateEditScreen() {
       setNotes(quoteData.note || '');
 
       const loadedItems: QuotationFormItem[] = (quoteData.details || []).map((detail: any) => {
-        const costPrice = parseFloat(String(detail.costAtSale || 0));
+        const costPrice = parseFloat(String(detail.costAtSale || detail.service?.costPrice || 0));
         const sellingPrice = parseFloat(String(detail.sellingPrice || 0));
         const minPrice = roundToTenThousands(costPrice / 0.8);
         const recommendedPrice = roundToTenThousands(costPrice / 0.6);
@@ -139,7 +145,7 @@ export default function QuotationCreateEditScreen() {
           packageQuantity: detail.packageQuantity || 1,
           norm: detail.packageQuantity ? (detail.quantity || 1) / detail.packageQuantity : 1,
           servicePackageId: detail.servicePackageId,
-          unit: detail.service?.unit || '',
+          unit: detail.service?.unit || detail.unit || '',
         };
       });
 
@@ -507,6 +513,7 @@ export default function QuotationCreateEditScreen() {
       const submitData: any = {
         opportunityId,
         note: notes,
+        totalAmount: totals.totalWithVat,
         details: items.map((item) => ({
           serviceId: item.serviceId,
           quantity: item.quantity,
@@ -586,7 +593,11 @@ export default function QuotationCreateEditScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={['top', 'left', 'right']}>
+    <SafeAreaView
+      testID="quotationCreateScreen"
+      className="flex-1 bg-slate-50"
+      edges={['top', 'left', 'right']}
+    >
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -622,12 +633,24 @@ export default function QuotationCreateEditScreen() {
           <View className="mb-4">
             <Text className="mb-2 text-[13px] font-bold text-slate-700">Lựa chọn mức giá áp dụng:</Text>
             <View className="flex-row gap-1 rounded-xl bg-slate-200 p-1">
-              <TouchableOpacity
-                className={`flex-1 items-center justify-center rounded-lg py-2 ${
-                  priceType === 'minimum' ? 'bg-white shadow-sm' : ''
-                }`}
+              <Pressable
+                testID="quotationPriceMinimumTab"
+                accessibilityRole="tab"
+                accessibilityState={{ selected: priceType === 'minimum' }}
+                className="flex-1 items-center justify-center rounded-lg py-2"
+                style={
+                  priceType === 'minimum'
+                    ? {
+                        backgroundColor: '#FFFFFF',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: 0.08,
+                        shadowRadius: 2,
+                        elevation: 2,
+                      }
+                    : undefined
+                }
                 onPress={() => handlePriceTypeChange('minimum')}
-                activeOpacity={0.8}
               >
                 <Text
                   className={`text-[13px] font-semibold ${priceType === 'minimum' ? 'font-bold text-emerald-600' : 'text-slate-500'}`}
@@ -635,14 +658,26 @@ export default function QuotationCreateEditScreen() {
                   Giá tối thiểu
                 </Text>
                 <Text className="mt-0.5 text-[10px] text-slate-400">Cost / 0.8</Text>
-              </TouchableOpacity>
+              </Pressable>
 
-              <TouchableOpacity
-                className={`flex-1 items-center justify-center rounded-lg py-2 ${
-                  priceType === 'recommended' ? 'bg-white shadow-sm' : ''
-                }`}
+              <Pressable
+                testID="quotationPriceRecommendedTab"
+                accessibilityRole="tab"
+                accessibilityState={{ selected: priceType === 'recommended' }}
+                className="flex-1 items-center justify-center rounded-lg py-2"
+                style={
+                  priceType === 'recommended'
+                    ? {
+                        backgroundColor: '#FFFFFF',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: 0.08,
+                        shadowRadius: 2,
+                        elevation: 2,
+                      }
+                    : undefined
+                }
                 onPress={() => handlePriceTypeChange('recommended')}
-                activeOpacity={0.8}
               >
                 <Text
                   className={`text-[13px] font-semibold ${priceType === 'recommended' ? 'font-bold text-emerald-600' : 'text-slate-500'}`}
@@ -650,14 +685,26 @@ export default function QuotationCreateEditScreen() {
                   Giá đề xuất
                 </Text>
                 <Text className="mt-0.5 text-[10px] text-slate-400">Cost / 0.6</Text>
-              </TouchableOpacity>
+              </Pressable>
 
-              <TouchableOpacity
-                className={`flex-1 items-center justify-center rounded-lg py-2 ${
-                  priceType === 'custom' ? 'bg-white shadow-sm' : ''
-                }`}
+              <Pressable
+                testID="quotationPriceCustomTab"
+                accessibilityRole="tab"
+                accessibilityState={{ selected: priceType === 'custom' }}
+                className="flex-1 items-center justify-center rounded-lg py-2"
+                style={
+                  priceType === 'custom'
+                    ? {
+                        backgroundColor: '#FFFFFF',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: 0.08,
+                        shadowRadius: 2,
+                        elevation: 2,
+                      }
+                    : undefined
+                }
                 onPress={() => handlePriceTypeChange('custom')}
-                activeOpacity={0.8}
               >
                 <Text
                   className={`text-[13px] font-semibold ${priceType === 'custom' ? 'font-bold text-emerald-600' : 'text-slate-500'}`}
@@ -665,7 +712,7 @@ export default function QuotationCreateEditScreen() {
                   Tùy chỉnh
                 </Text>
                 <Text className="mt-0.5 text-[10px] text-slate-400">Nhập tay</Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           </View>
 
@@ -736,18 +783,26 @@ export default function QuotationCreateEditScreen() {
                   </View>
                 </View>
 
-                {/* Total and Margin row */}
-                <View className="mt-1 flex-row items-center justify-between border-t border-slate-100 pt-2">
-                  <Text className="text-[13px] font-bold text-blue-600">
-                    Thành tiền: {formatNumber(pkg.selectedPrice * pkg.quantity)} ₫
-                  </Text>
-                  <Text
-                    className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
-                      pkg.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                    }`}
-                  >
-                    Margin: {pkg.profitMargin.toFixed(0)}%
-                  </Text>
+                {/* Total and Margin row - 2 hàng tránh tràn */}
+                <View className="mt-1 border-t border-slate-100 pt-2 gap-1.5">
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs text-slate-500">
+                      Giá vốn gói: <Text className="font-semibold text-slate-700">{formatNumber(pkg.costPrice)} ₫</Text>
+                    </Text>
+                    <Text
+                      className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
+                        pkg.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                      }`}
+                    >
+                      Margin: {pkg.profitMargin.toFixed(0)}%
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-[13px] font-bold text-slate-700">Thành tiền:</Text>
+                    <Text className="text-sm font-extrabold text-blue-600">
+                      {formatNumber(pkg.selectedPrice * pkg.quantity)} ₫
+                    </Text>
+                  </View>
                 </View>
 
                 {/* Toggle Accordion Sub-items */}
@@ -789,14 +844,16 @@ export default function QuotationCreateEditScreen() {
                           Định mức: {formatNumber(sub.norm)} {sub.unit || 'lần'} / gói | Số lượng tổng: {formatNumber(sub.quantity)}
                         </Text>
                         {priceType === 'custom' ? (
-                          <View className="mt-2 flex-row items-center justify-between border-t border-slate-100 pt-2">
-                            <Text className="text-[11px] text-slate-400">
-                              Giá vốn: {formatNumber(sub.costPrice)} ₫
-                            </Text>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                              <Text className="text-xs font-semibold text-slate-600">Đơn giá con:</Text>
+                          <View className="mt-2 border-t border-slate-100 pt-2 gap-1.5">
+                            <View className="flex-row items-center justify-between">
+                              <Text className="text-xs text-slate-500">
+                                Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(sub.costPrice)} ₫</Text>
+                              </Text>
+                            </View>
+                            <View className="flex-row items-center justify-between">
+                              <Text className="text-xs font-semibold text-slate-600">Đơn giá con (VNĐ):</Text>
                               <TextInput
-                                className="w-[140px] rounded-md border border-emerald-600 bg-slate-50 px-2 py-[5px] text-right text-[13px] font-bold text-slate-900"
+                                className="w-[140px] rounded-md border border-emerald-600 bg-slate-50 px-2 py-1 text-right text-[13px] font-bold text-slate-900"
                                 keyboardType="numeric"
                                 value={formatNumberInput(sub.customPrice)}
                                 onChangeText={(val) =>
@@ -808,11 +865,11 @@ export default function QuotationCreateEditScreen() {
                             </View>
                           </View>
                         ) : (
-                          <View className="mt-1 flex-row justify-between border-t border-slate-100 pt-1">
-                            <Text className="text-[11px] text-slate-400">
-                              Giá vốn: {formatNumber(sub.costPrice)} ₫
+                          <View className="mt-1.5 flex-row items-center justify-between border-t border-slate-100 pt-1.5">
+                            <Text className="text-xs text-slate-500">
+                              Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(sub.costPrice)} ₫</Text>
                             </Text>
-                            <Text className="text-[11px] font-bold text-slate-900">
+                            <Text className="text-xs font-bold text-slate-900">
                               Đơn giá con: {formatNumber(sub.selectedPrice)} ₫
                             </Text>
                           </View>
@@ -882,21 +939,29 @@ export default function QuotationCreateEditScreen() {
                 )}
               </View>
 
-              {/* Standalone Financial info */}
-              <View className="mt-1 flex-row items-center justify-between border-t border-slate-100 pt-2">
-                <Text className="text-[11px] text-slate-400">
-                  Giá vốn: {formatNumber(item.costPrice)} ₫
-                </Text>
-                <Text className="text-[13px] font-bold text-blue-600">
-                  Thành tiền: {formatNumber(item.selectedPrice * item.quantity)} ₫
-                </Text>
-                <Text
-                  className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
-                    item.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                  }`}
-                >
-                  Margin: {item.profitMargin.toFixed(0)}%
-                </Text>
+              {/* Standalone Financial info - 2 hàng tránh tràn */}
+              <View className="mt-1 border-t border-slate-100 pt-2 gap-1.5">
+                {/* Hàng 1: Giá vốn & Margin */}
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-xs text-slate-500">
+                    Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(item.costPrice)} ₫</Text>
+                  </Text>
+                  <Text
+                    className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
+                      item.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                    }`}
+                  >
+                    Margin: {item.profitMargin.toFixed(0)}%
+                  </Text>
+                </View>
+
+                {/* Hàng 2: Thành tiền */}
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-[13px] font-bold text-slate-700">Thành tiền:</Text>
+                  <Text className="text-sm font-extrabold text-blue-600">
+                    {formatNumber(item.selectedPrice * item.quantity)} ₫
+                  </Text>
+                </View>
               </View>
             </View>
           ))}

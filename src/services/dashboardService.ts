@@ -1,10 +1,21 @@
 import { apiService } from './api';
+import { normalizeTaskListResponse } from './responseAdapters';
+
+export interface DashboardParams {
+  userId?: string | null;
+  month?: number | null;
+  year?: number | null;
+  projectId?: string | null;
+  mode?: 'personal' | 'management' | string;
+}
 
 export interface AdminMetrics {
   totalRevenue?: number;
   totalCustomers?: number;
   newCustomers?: number;
   activeProjects?: number;
+  totalDebt?: number;
+  pendingApprovalCount?: number;
   currentProjects?: Array<{
     id: string;
     name: string;
@@ -14,14 +25,50 @@ export interface AdminMetrics {
     completedServiceCount: number;
     progress: number;
   }>;
-  totalDebt?: number;
-  pendingApprovalCount?: number;
   upcomingDebts?: Array<{
     id: string;
     name: string;
     amount: number;
     remaining: number;
     dueDate: string;
+    customerName?: string;
+  }>;
+  revenueChart?: Array<{
+    month: string;
+    revenue: number;
+    cost?: number;
+  }>;
+}
+
+export interface SalesMetrics {
+  totalRevenue?: number;
+  personalRevenue?: number;
+  targetRevenue?: number;
+  totalOpportunities?: number;
+  opportunityCount?: number;
+  totalCustomers?: number;
+  newCustomersCount?: number;
+  totalDebt?: number;
+  winRate?: number;
+  projects?: Array<{
+    id: string;
+    name: string;
+    status: string;
+    customerName?: string;
+    serviceCount?: number;
+    completedServiceCount?: number;
+    progress?: number;
+  }>;
+  pipelineStages?: Array<{
+    stage: string;
+    count: number;
+    value: number;
+  }>;
+  recentOpportunities?: Array<{
+    id: string;
+    name: string;
+    expectedRevenue: number;
+    status: string;
     customerName?: string;
   }>;
 }
@@ -65,11 +112,30 @@ export interface MemberMetrics {
   }>;
 }
 
+export interface DashboardScope {
+  type?: 'MANAGEMENT' | 'PERSONAL';
+  canSelectMembers?: boolean;
+  isAccountViewer?: boolean;
+  isAccountViewingMember?: boolean;
+  availableMembers?: Array<{
+    id: string;
+    fullName?: string;
+    username?: string;
+    role?: string;
+  }>;
+  availableProjects?: Array<{
+    id: string;
+    name: string;
+  }>;
+}
+
 export interface DashboardResponse {
   admin?: AdminMetrics;
+  sale?: SalesMetrics;
   teamLead?: TeamLeadProject[];
-  sale?: any;
   member?: MemberMetrics;
+  scope?: DashboardScope;
+  staffWorkloads?: any[];
 }
 
 export interface TaskItem {
@@ -98,25 +164,37 @@ export interface TaskItem {
 }
 
 class DashboardService {
-  async getDashboardData(params?: {
-    month?: number;
-    year?: number;
-    userId?: string;
-  }): Promise<{ data?: DashboardResponse; error?: string }> {
-    const res = await apiService.get<DashboardResponse>('/dashboard', params);
+  /**
+   * Lấy dữ liệu bảng điều khiển tổng hợp theo bộ lọc
+   */
+  async getDashboardData(params?: DashboardParams): Promise<{ data?: DashboardResponse; error?: string }> {
+    const cleanParams: Record<string, any> = {};
+    if (params?.userId) cleanParams.userId = params.userId;
+    if (params?.month) cleanParams.month = params.month;
+    if (params?.year) cleanParams.year = params.year;
+    if (params?.projectId) cleanParams.projectId = params.projectId;
+    if (params?.mode) cleanParams.mode = params.mode;
+
+    const res = await apiService.get<DashboardResponse>('/dashboard', cleanParams);
     return { data: res.data, error: res.error };
   }
 
+  /**
+   * Danh sách công việc chờ duyệt dành cho Lead / Quản lý
+   */
   async getAwaitingReviewTasks(): Promise<{ data?: TaskItem[]; error?: string }> {
-    const res = await apiService.get<TaskItem[]>('/tasks', {
+    const res = await apiService.get<unknown>('/tasks', {
       status: 'AWAITING_REVIEW',
     });
-    return { data: res.data, error: res.error };
+    return { data: normalizeTaskListResponse(res.data), error: res.error };
   }
 
+  /**
+   * Danh sách công việc cá nhân của người dùng hiện tại
+   */
   async getMyTasks(): Promise<{ data?: TaskItem[]; error?: string }> {
-    const res = await apiService.get<TaskItem[]>('/tasks');
-    return { data: res.data, error: res.error };
+    const res = await apiService.get<unknown>('/tasks');
+    return { data: normalizeTaskListResponse(res.data), error: res.error };
   }
 }
 

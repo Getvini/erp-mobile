@@ -36,10 +36,12 @@ export interface QuotationDetailItem {
   sellingPrice: number;
   costAtSale: number;
   name?: string;
+  description?: string;
   isPackageService?: boolean;
   service?: {
     id: string;
     name: string;
+    description?: string;
     unit?: string;
     costPrice?: number;
   };
@@ -52,6 +54,7 @@ export interface QuotationDetailResponse extends QuotationItem {
     id: string;
     opportunityCode?: string;
     name: string;
+    description?: string;
     packages?: Array<{
       id: string;
       name: string;
@@ -65,6 +68,7 @@ export interface QuotationDetailResponse extends QuotationItem {
         service?: {
           id: string;
           name: string;
+          description?: string;
           unit?: string;
           costPrice?: number;
         };
@@ -125,6 +129,18 @@ export const quotationService = {
       description: reason,
       reason,
     });
+  },
+
+  async getQuotations(params?: Record<string, any>) {
+    return apiService.get<any[]>('/quotations', params);
+  },
+
+  async deleteQuotation(id: string) {
+    return apiService.delete<{ message: string }>(`/quotations/${id}`);
+  },
+
+  async createAddendumQuotation(data: any) {
+    return apiService.post<any>('/quotations/addendum', data);
   },
 
   async getOpportunityServices(opportunityId: string) {

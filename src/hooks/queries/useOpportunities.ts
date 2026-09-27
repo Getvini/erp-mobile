@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import {
   opportunityService,
   OpportunityListFilters,
@@ -15,6 +15,29 @@ export function useOpportunitiesQuery(filters: OpportunityListFilters = {}) {
     queryFn: async () => {
       const res = await opportunityService.getOpportunities(filters);
       return res.data;
+    },
+  });
+}
+
+/**
+ * Hook to fetch opportunities list with Infinite Scroll pagination
+ */
+export function useInfiniteOpportunitiesQuery(filters: Omit<OpportunityListFilters, 'page'> = {}) {
+  return useInfiniteQuery({
+    queryKey: [...queryKeys.opportunities.lists(), 'infinite', filters],
+    queryFn: async ({ pageParam = 1 }) => {
+      const res = await opportunityService.getOpportunities({
+        ...filters,
+        page: pageParam,
+        limit: filters.limit || 20,
+      });
+      return res.data;
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      if (!lastPage || !lastPage.meta) return undefined;
+      const { page, totalPages } = lastPage.meta;
+      return page < totalPages ? page + 1 : undefined;
     },
   });
 }
@@ -87,6 +110,59 @@ export function useApproveOpportunityMutation() {
 }
 
 /**
+ * Hook to reject an opportunity (BOD action)
+ */
+export function useRejectOpportunityMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason?: string }) => {
+      const res = await opportunityService.rejectOpportunity(id, reason);
+      return res.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.detail(variables.id) });
+    },
+  });
+}
+
+/**
+ * Hook to update opportunity stage
+ */
+export function useUpdateOpportunityStageMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, stage }: { id: string; stage: string }) => {
+      const res = await opportunityService.updateOpportunityStage(id, stage);
+      return res.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.detail(variables.id) });
+    },
+  });
+}
+
+/**
+ * Hook to delete an opportunity
+ */
+export function useDeleteOpportunityMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await opportunityService.deleteOpportunity(id);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+    },
+  });
+}
+
+/**
  * Hook to fetch available services for selection
  */
 export function useAvailableServicesQuery() {
@@ -94,7 +170,10 @@ export function useAvailableServicesQuery() {
     queryKey: ['services', 'available'],
     queryFn: async () => {
       const res = await opportunityService.getAvailableServices();
-      return res.data;
+      const raw = res?.data;
+      if (Array.isArray(raw)) return raw;
+      if (raw && Array.isArray((raw as any).data)) return (raw as any).data;
+      return [];
     },
     staleTime: 1000 * 60 * 10,
   });
@@ -108,7 +187,10 @@ export function useServicePackagesQuery() {
     queryKey: ['service-packages'],
     queryFn: async () => {
       const res = await opportunityService.getServicePackages();
-      return res.data;
+      const raw = res?.data;
+      if (Array.isArray(raw)) return raw;
+      if (raw && Array.isArray((raw as any).data)) return (raw as any).data;
+      return [];
     },
     staleTime: 1000 * 60 * 10,
   });
@@ -122,7 +204,10 @@ export function useReferralPartnersQuery() {
     queryKey: ['referral-partners'],
     queryFn: async () => {
       const res = await opportunityService.getReferralPartners();
-      return res.data;
+      const raw = res?.data;
+      if (Array.isArray(raw)) return raw;
+      if (raw && Array.isArray((raw as any).data)) return (raw as any).data;
+      return [];
     },
     staleTime: 1000 * 60 * 10,
   });
