@@ -1151,7 +1151,7 @@ export default function ContractDetailScreen() {
                           <Text className="text-[12px] font-bold text-[#0369A1]">
                             {formatNumber(s.sellingPrice)} VNĐ
                           </Text>
-                          {canEditServiceNickname && !!s.id &&
+                          {/* {canEditServiceNickname && !!s.id &&
                   <TouchableOpacity
                     onPress={() => handleOpenNickname(s.id, s.name, (s as any).nickname)}
                     activeOpacity={0.7}
@@ -1160,7 +1160,7 @@ export default function ContractDetailScreen() {
 
                               <Feather name="edit-3" size={13} color="#0284C7" />
                             </TouchableOpacity>
-                  }
+                  } */}
                         </View>
                 ) :
 
@@ -1187,7 +1187,7 @@ export default function ContractDetailScreen() {
                   <Text className="text-[13px] font-bold text-emerald-600">
                     {formatNumber(s.sellingPrice)} VNĐ
                   </Text>
-                  {canEditServiceNickname && !!s.id &&
+                  {/* {canEditServiceNickname && !!s.id &&
               <TouchableOpacity
                 onPress={() => handleOpenNickname(s.id, s.name, (s as any).nickname)}
                 activeOpacity={0.7}
@@ -1196,7 +1196,7 @@ export default function ContractDetailScreen() {
 
                       <Feather name="edit-3" size={13} color="#475569" />
                     </TouchableOpacity>
-              }
+              } */}
                 </View>
             )}
             </View>
@@ -1939,7 +1939,7 @@ export default function ContractDetailScreen() {
       </Modal>
 
       {/* 12. BOTTOM SHEET ĐỔI TÊN HIỂN THỊ (NICKNAME) DỊCH VỤ HỢP ĐỒNG */}
-      <Modal
+      {/* <Modal
         visible={!!nicknameTarget}
         transparent
         animationType="slide"
@@ -2008,7 +2008,7 @@ export default function ContractDetailScreen() {
             </View>
           </View>
         </View>
-      </Modal>
+      </Modal> */}
     </SafeAreaView>);
 
 }
