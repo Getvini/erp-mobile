@@ -70,19 +70,28 @@ export default function CreateAcceptanceModal({
 
   const isValidStatus = (s: any) => s.status === 'ACTIVE' || s.status === 'ACCEPTANCE_REJECTED';
 
-  const availableServices = contract?.services?.filter(
-    (s: any) =>
-      isValidStatus(s) &&
-      s.results?.some((r: any) => r.status === 'PENDING') &&
-      s.tasks?.every((t: any) => t.status === 'COMPLETED')
-  ) || [];
+  /**
+   * Điều kiện hạng mục đủ gửi nghiệm thu — mirror backend
+   * (task chặn = status ∉ {COMPLETED, INTERNAL_COMPLETED, ACCEPTED, ON_HOLD, CANCELLED}).
+   */
+  const hasPendingResult = (s: any) => s.results?.some((r: any) => r.status === 'PENDING');
+  const hasBlockingTask = (s: any) =>
+    (s.tasks || []).some(
+      (t: any) =>
+        !['COMPLETED', 'INTERNAL_COMPLETED', 'ACCEPTED', 'ON_HOLD', 'CANCELLED'].includes(
+          t.status,
+        ),
+    );
 
-  const rejectedServices = contract?.services?.filter(
-    (s: any) =>
-      isValidStatus(s) &&
-      s.results?.some((r: any) => r.status === 'PENDING') &&
-      s.tasks?.some((t: any) => t.status !== 'COMPLETED')
-  ) || [];
+  const availableServices =
+    contract?.services?.filter(
+      (s: any) => isValidStatus(s) && hasPendingResult(s) && !hasBlockingTask(s),
+    ) || [];
+
+  const rejectedServices =
+    contract?.services?.filter(
+      (s: any) => isValidStatus(s) && hasPendingResult(s) && hasBlockingTask(s),
+    ) || [];
 
   const toggleServiceSelection = (id: string) => {
     setSelectedServiceIds((prev) =>
@@ -104,11 +113,12 @@ export default function CreateAcceptanceModal({
 
     setIsSubmitting(true);
     try {
+      // Payload parity 100% với Web (CreateAcceptanceModal.jsx:55-59):
+      // CHỈ gửi { projectId, note, serviceIds } — backend tự sinh `name`.
       await createAcceptanceMutation.mutateAsync({
         projectId,
-        name: name.trim() || undefined,
         note: note.trim() || undefined,
-        serviceIds: selectedServiceIds.length > 0 ? selectedServiceIds : undefined,
+        serviceIds: selectedServiceIds,
       });
 
       Alert.alert('Thành công', 'Đã gửi yêu cầu nghiệm thu thành công.');

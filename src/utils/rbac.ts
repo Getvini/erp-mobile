@@ -76,6 +76,25 @@ export const canAccessAcceptance = (role?: string): boolean => {
 };
 
 /**
+ * GỬI nghiệm thu (tạo yêu cầu) — mirrors erp-UI ContractInfo.jsx:357
+ * `const canSendAcceptance = isAdminOrBOD || isProjectManager || user?.role === 'ADMIN_SALE';`
+ * Account / Team Lead chỉ được XEM task, KHÔNG được gửi nghiệm thu.
+ */
+export const canSendAcceptance = (role?: string): boolean => {
+  if (!role) return false;
+  return ['ADMIN', 'BOD', 'PM', 'ADMIN_SALE'].includes(role);
+};
+
+/**
+ * DUYỆT / TỪ CHỐI / XỬ LÝ nghiệm thu — mirrors ERP Acceptance.Route.ts:10
+ * `const acceptanceRoles = ["BOD", "ADMIN", "ADMIN_SALE", "PM"];`
+ */
+export const canProcessAcceptance = (role?: string): boolean => {
+  if (!role) return false;
+  return ['BOD', 'ADMIN', 'ADMIN_SALE', 'PM'].includes(role);
+};
+
+/**
  * Role check helpers
  */
 export const isManagementRole = (role?: string): boolean => {
