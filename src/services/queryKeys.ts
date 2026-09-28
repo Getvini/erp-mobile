@@ -51,6 +51,14 @@ export const queryKeys = {
     detail: (id: string) => [...queryKeys.contracts.details(), id] as const,
   },
 
+  // Contract Addendums / Phụ lục hợp đồng
+  // (Backend không có GET /contract-addendums ⇒ dữ liệu đọc từ contracts.detail(id).addendums)
+  contractAddendums: {
+    all: ['contractAddendums'] as const,
+    byContract: (contractId: string) =>
+      [...queryKeys.contractAddendums.all, 'contract', contractId] as const,
+  },
+
   // Projects / Dự án
   projects: {
     all: ['projects'] as const,
@@ -58,7 +66,12 @@ export const queryKeys = {
     list: (filters?: Record<string, any>) => [...queryKeys.projects.lists(), filters || {}] as const,
     details: () => [...queryKeys.projects.all, 'detail'] as const,
     detail: (id: string) => [...queryKeys.projects.details(), id] as const,
+    myProjects: () => [...queryKeys.projects.all, 'my-projects'] as const,
     productDescriptions: (projectId: string) => [...queryKeys.projects.detail(projectId), 'product-descriptions'] as const,
+    pauseHistory: (projectId: string) => [...queryKeys.projects.detail(projectId), 'pause-history'] as const,
+    holdSummary: (projectId: string) => [...queryKeys.projects.detail(projectId), 'hold-summary'] as const,
+    serviceAddendums: (projectId: string) =>
+      [...queryKeys.projects.detail(projectId), 'service-addendums'] as const,
   },
 
   // Tasks / Công việc
@@ -68,6 +81,14 @@ export const queryKeys = {
     list: (filters?: Record<string, any>) => [...queryKeys.tasks.lists(), filters || {}] as const,
     details: () => [...queryKeys.tasks.all, 'detail'] as const,
     detail: (id: string) => [...queryKeys.tasks.details(), id] as const,
+    byProject: (projectId: string) => [...queryKeys.tasks.all, 'project', projectId] as const,
+    byAssignee: (userId: string, filters?: Record<string, any>) =>
+      [...queryKeys.tasks.all, 'assignee', userId, filters || {}] as const,
+    byOpportunity: (opportunityId: string) =>
+      [...queryKeys.tasks.all, 'opportunity', opportunityId] as const,
+    dailyWorkload: (userId: string, startDate?: string, endDate?: string) =>
+      [...queryKeys.tasks.all, 'daily-workload', userId, startDate || '', endDate || ''] as const,
+    comments: (taskId: string) => [...queryKeys.tasks.detail(taskId), 'comments'] as const,
   },
 
   // Acceptances / Nghiệm thu
@@ -101,7 +122,10 @@ export const queryKeys = {
   // Notifications
   notifications: {
     all: ['notifications'] as const,
+    list: (filters?: Record<string, any>) =>
+      [...queryKeys.notifications.all, 'list', filters || {}] as const,
     unread: ['notifications', 'unread'] as const,
+    unreadCount: () => [...queryKeys.notifications.all, 'unread-count'] as const,
   },
 
   // Finance / Tài chính & Công nợ
