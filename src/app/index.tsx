@@ -22,6 +22,8 @@ import { SalesDashboardView } from '@/components/dashboard/views/SalesDashboardV
 import { TeamLeadDashboardView } from '@/components/dashboard/views/TeamLeadDashboardView';
 import { MemberDashboardView } from '@/components/dashboard/views/MemberDashboardView';
 import { formatVND } from '@/utils/formatters';
+import { useSSERefresh } from '@/hooks/useSSERefresh';
+import { useUnreadNotificationCount } from '@/hooks/queries/useNotifications';
 import {
   canAccessCustomers,
   isManagementRole,
@@ -109,6 +111,11 @@ export default function HomeScreen() {
     router.push('/notifications' as any);
   };
 
+  // Badge số thông báo chưa đọc trên header (đồng bộ realtime qua SSE).
+  const { data: unreadNotificationCount = 0, refetch: refetchUnreadNotifications } =
+    useUnreadNotificationCount(Boolean(user));
+  useSSERefresh('invalidate_Notifications', refetchUnreadNotifications);
+
   if (isLoading) {
     return (
       <View className="flex-1 justify-center items-center bg-background gap-3">
@@ -156,12 +163,19 @@ export default function HomeScreen() {
 
         <View className="flex-row items-center gap-2">
           <TouchableOpacity
-            className="w-[38px] h-[38px] rounded-xl bg-slate-100 items-center justify-center relative"
+            className="w-[38px] h-[38px] rounded-xl bg-slate-100 items-center justify-center relative min-w-[48px] min-h-[48px]"
             onPress={handleNotificationPress}
             activeOpacity={0.7}
           >
             <Feather name="bell" size={20} color="#475569" />
-            <View className="absolute top-2 right-2 w-[7px] h-[7px] rounded-full bg-primary border-[1.5px] border-white" />
+            {/* Unread badge — đồng bộ realtime qua SSE invalidate_Notifications */}
+            {unreadNotificationCount > 0 ? (
+              <View className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-primary items-center justify-center border-[1.5px] border-white">
+                <Text className="text-[10px] font-bold text-white">
+                  {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                </Text>
+              </View>
+            ) : null}
           </TouchableOpacity>
 
           <TouchableOpacity

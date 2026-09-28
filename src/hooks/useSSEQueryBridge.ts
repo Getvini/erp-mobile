@@ -1,76 +1,126 @@
 import { useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { sseEventBus } from '@/services/sseEventBus';
 import { queryKeys } from '@/services/queryKeys';
+import { isPaymentRequestNotification, isProjectLifecycleNotification } from '@/constants/events';
+
+/**
+ * Ánh xạ tag SSE (giống RTK Query `providesTags` của Web) sang query key gốc của TanStack Query.
+ * Dùng hàm thay vì object để tránh truy cập `queryKeys` ngoài scope module.
+ */
+export const getQueryKeyForSseTag = (tag: string): readonly unknown[] | null => {
+  switch (tag) {
+    case 'Opportunities':
+      return queryKeys.opportunities.all;
+    case 'Quotations':
+      return queryKeys.quotations.all;
+    case 'Customers':
+      return queryKeys.customers.all;
+    case 'Contracts':
+      return queryKeys.contracts.all;
+    case 'ContractAddendums':
+      // Backend không có GET /contract-addendums ⇒ phụ lục nằm trong chi tiết hợp đồng.
+      return queryKeys.contracts.all;
+    case 'Projects':
+      return queryKeys.projects.all;
+    case 'PauseHistory':
+      // Lịch sử tạm dừng là query con của project detail.
+      return queryKeys.projects.all;
+    case 'Tasks':
+      return queryKeys.tasks.all;
+    case 'TaskReviews':
+      return queryKeys.tasks.all;
+    case 'TaskResultChecks':
+      return queryKeys.taskResultChecks.all;
+    case 'Acceptance':
+      return queryKeys.acceptances.all;
+    case 'Services':
+      // Dịch vụ hợp đồng hiển thị trong chi tiết hợp đồng & dự án.
+      return queryKeys.contracts.all;
+    case 'PaymentMilestones':
+      return queryKeys.paymentMilestones.all;
+    case 'Debts':
+      return queryKeys.debts.all;
+    case 'PaymentRequests':
+      return queryKeys.paymentRequests.all;
+    case 'Notifications':
+      return queryKeys.notifications.all;
+    case 'Teams':
+    case 'Users':
+      // Module Nhân sự / Đội nhóm thuộc Phase P3 — dữ liệu team hiện nằm trong project detail.
+      return queryKeys.projects.all;
+    default:
+      return null;
+  }
+};
+
+/** Invalidate cache cho một tag SSE. Trả về true nếu tag được xử lý. */
+export const invalidateSseTag = (queryClient: QueryClient, tag: string): boolean => {
+  const key = getQueryKeyForSseTag(tag);
+  if (!key) return false;
+  queryClient.invalidateQueries({ queryKey: key });
+  return true;
+};
 
 /**
  * Hook to bridge SSE EventBus with TanStack Query Cache.
- * When real-time SSE events arrive from backend, this automatically invalidates
- * the corresponding TanStack Query cache tags.
+ * Khi SSE realtime đẩy sự kiện về, tự động invalidate cache tương ứng.
  */
 export function useSSEQueryBridge() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    // Invalidate Opportunity Queries on SSE signal
-    const handleOpportunityInvalidate = () => {
-      console.log('⚡ [SSE QueryBridge] Invalidating Opportunities cache');
-      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
-    };
+    // Danh sách tag cần lắng nghe — hợp nhất EVENT_TO_TAGS_MAP (đã bao trùm P1).
+    const bridgeTags = [
+      'Opportunities',
+      'Quotations',
+      'Customers',
+      'Contracts',
+      'ContractAddendums',
+      'Projects',
+      'PauseHistory',
+      'Tasks',
+      'TaskReviews',
+      'TaskResultChecks',
+      'Acceptance',
+      'Services',
+      'PaymentMilestones',
+      'Debts',
+      'Notifications',
+      'Users',
+      'Teams',
+    ];
 
-    // Invalidate Quotation Queries on SSE signal
-    const handleQuotationInvalidate = () => {
-      console.log('⚡ [SSE QueryBridge] Invalidating Quotations cache');
-      queryClient.invalidateQueries({ queryKey: queryKeys.quotations.all });
-    };
+    const unsubscribers = bridgeTags.map((tag) =>
+      sseEventBus.on(`invalidate_${tag}`, () => {
+        invalidateSseTag(queryClient, tag);
+      }),
+    );
 
-    // Invalidate Notifications on new notification event
-    const handleNotification = () => {
-      console.log('⚡ [SSE QueryBridge] Invalidating Notifications cache');
+    // Thông báo nghiệp vụ (không phải module event) — mirror erp-UI useSSE.js:150-182
+    const unsubNotification = sseEventBus.on('notification', (payload: any) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
-    };
 
-    // Invalidate Customer Queries on SSE signal
-    const handleCustomerInvalidate = () => {
-      console.log('⚡ [SSE QueryBridge] Invalidating Customers cache');
-      queryClient.invalidateQueries({ queryKey: queryKeys.customers.all });
-    };
+      if (payload?.type === 'TASK_COMPLETED') {
+        queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+      }
 
-    // Invalidate Contract Queries on SSE signal
-    const handleContractInvalidate = () => {
-      console.log('⚡ [SSE QueryBridge] Invalidating Contracts cache');
-      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
-    };
+      if (isPaymentRequestNotification(payload?.type)) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.paymentRequests.all });
+      }
 
-    // Invalidate Project Queries on SSE signal
-    const handleProjectInvalidate = () => {
-      console.log('⚡ [SSE QueryBridge] Invalidating Projects cache');
-      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
-    };
-
-    // Invalidate Acceptance Queries on SSE signal
-    const handleAcceptanceInvalidate = () => {
-      console.log('⚡ [SSE QueryBridge] Invalidating Acceptances cache');
-      queryClient.invalidateQueries({ queryKey: queryKeys.acceptances.all });
-    };
-
-    // Listen to sseEventBus channels
-    const unsubOpp = sseEventBus.on('invalidate_Opportunities', handleOpportunityInvalidate);
-    const unsubQuo = sseEventBus.on('invalidate_Quotations', handleQuotationInvalidate);
-    const unsubCus = sseEventBus.on('invalidate_Customers', handleCustomerInvalidate);
-    const unsubCon = sseEventBus.on('invalidate_Contracts', handleContractInvalidate);
-    const unsubProj = sseEventBus.on('invalidate_Projects', handleProjectInvalidate);
-    const unsubAcc = sseEventBus.on('invalidate_Acceptances', handleAcceptanceInvalidate);
-    const unsubNotif = sseEventBus.on('notification', handleNotification);
+      if (isProjectLifecycleNotification(payload?.type)) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.debts.all });
+      }
+    });
 
     return () => {
-      if (typeof unsubOpp === 'function') unsubOpp();
-      if (typeof unsubQuo === 'function') unsubQuo();
-      if (typeof unsubCus === 'function') unsubCus();
-      if (typeof unsubCon === 'function') unsubCon();
-      if (typeof unsubProj === 'function') unsubProj();
-      if (typeof unsubAcc === 'function') unsubAcc();
-      if (typeof unsubNotif === 'function') unsubNotif();
+      unsubscribers.forEach((unsubscribe) => {
+        if (typeof unsubscribe === 'function') unsubscribe();
+      });
+      if (typeof unsubNotification === 'function') unsubNotification();
     };
   }, [queryClient]);
 }
