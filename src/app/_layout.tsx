@@ -63,6 +63,17 @@ export default function RootLayout() {
             <Stack.Screen name="finance" options={{ headerShown: false }} />
             <Stack.Screen name="notifications" options={{ headerShown: false }} />
             <Stack.Screen name="profile" options={{ headerShown: false }} />
+            {/* Phase P2 — Danh mục & Đối tác ngoài */}
+            <Stack.Screen name="vendors" options={{ headerShown: false }} />
+            <Stack.Screen name="referral-partners" options={{ headerShown: false }} />
+            <Stack.Screen name="services" options={{ headerShown: false }} />
+            <Stack.Screen name="service-packages" options={{ headerShown: false }} />
+            {/* Phase P3 — Quản trị hành chính & nội bộ */}
+            <Stack.Screen name="users" options={{ headerShown: false }} />
+            <Stack.Screen name="teams" options={{ headerShown: false }} />
+            <Stack.Screen name="jobs" options={{ headerShown: false }} />
+            <Stack.Screen name="announcements" options={{ headerShown: false }} />
+            <Stack.Screen name="documents" options={{ headerShown: false }} />
           </Stack>
         </ThemeProvider>
       </AuthProvider>
