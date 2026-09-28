@@ -133,6 +133,12 @@ export interface ProjectDetailItem extends ProjectItem {
   jobs?: any[];
   tasks?: any[];
   workingFiles?: WorkingFileItem[];
+  /** Vòng đời tạm dừng (P1.11) — dùng cho banner tự động đóng D+37. */
+  isOnHold?: boolean;
+  pausedAt?: string;
+  /** Thời điểm hệ thống tự động đóng dự án (pausedAt + 37 ngày). */
+  autoAcceptAt?: string;
+  pausedBy?: { id: string; fullName?: string };
   contract?: ProjectItem['contract'] & {
     contractCode?: string;
     signingDate?: string;
@@ -141,7 +147,22 @@ export interface ProjectDetailItem extends ProjectItem {
     vatAmount?: number;
     paidAmount?: number;
     remainingAmount?: number;
+    services?: ContractServiceSummary[];
+    addendums?: any[];
   };
+}
+
+/** Dịch vụ trong hợp đồng hiển thị ở tab SERVICES của dự án. */
+export interface ContractServiceSummary {
+  id: string;
+  name?: string;
+  nickname?: string;
+  code?: string;
+  quantity?: number;
+  sellingPrice?: number;
+  cost?: number;
+  status?: string;
+  service?: { id: string; name?: string; code?: string };
 }
 
 class ProjectService {
@@ -243,6 +264,154 @@ class ProjectService {
 
   async getPmUsers(): Promise<{ data?: UserPMItem[]; error?: string }> {
     const res = await apiService.get<UserPMItem[]>('/users', { role: 'PM' });
+    return { data: res.data, error: res.error };
+  }
+
+  // ---------------------------------------------------------------------------
+  // P1.11 — Tạm dừng / Làm tiếp / Đóng dự án (copy endpoint erp-UI/src/api/projects.js)
+  // ---------------------------------------------------------------------------
+
+  /** POST /projects/:id/pause — yêu cầu tạm dừng (chờ BOD duyệt). */
+  async requestPauseProject(id: string, reason: string): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.post(`/projects/${id}/pause`, { reason });
+    return { data: res.data, error: res.error };
+  }
+
+  /** POST /projects/:id/pause/direct — tạm dừng ngay (BOD/ADMIN). */
+  async pauseProjectDirect(id: string, reason: string): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.post(`/projects/${id}/pause/direct`, { reason });
+    return { data: res.data, error: res.error };
+  }
+
+  /** POST /projects/pause-requests/:requestId/approve */
+  async approvePauseRequest(requestId: string): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.post(`/projects/pause-requests/${requestId}/approve`);
+    return { data: res.data, error: res.error };
+  }
+
+  /** POST /projects/pause-requests/:requestId/reject — feedback bắt buộc. */
+  async rejectPauseRequest(
+    requestId: string,
+    feedback: string,
+  ): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.post(`/projects/pause-requests/${requestId}/reject`, { feedback });
+    return { data: res.data, error: res.error };
+  }
+
+  /** POST /projects/:id/resume — làm tiếp dự án đang tạm dừng. */
+  async resumeProject(id: string, resumeReason?: string): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.post(`/projects/${id}/resume`, { resumeReason });
+    return { data: res.data, error: res.error };
+  }
+
+  /** GET /projects/:id/hold-summary — thống kê trước khi đóng dự án. */
+  async getHoldSummary(id: string): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.get<any>(`/projects/${id}/hold-summary`);
+    const item = res.data?.data && typeof res.data.data === 'object' ? res.data.data : res.data;
+    return { data: item, error: res.error };
+  }
+
+  /** POST /projects/:id/close/direct — đóng ngay (BD/BOD/ADMIN), reason bắt buộc. */
+  async closeProjectDirect(id: string, reason: string): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.post(`/projects/${id}/close/direct`, { reason });
+    return { data: res.data, error: res.error };
+  }
+
+  /** POST /projects/:id/close — đề nghị đóng dự án (chờ duyệt). */
+  async requestCloseProject(id: string, reason?: string): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.post(`/projects/${id}/close`, {
+      reason: reason ?? 'Đề nghị đóng dự án',
+    });
+    return { data: res.data, error: res.error };
+  }
+
+  /** POST /projects/close-requests/:requestId/approve */
+  async approveCloseRequest(requestId: string): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.post(`/projects/close-requests/${requestId}/approve`);
+    return { data: res.data, error: res.error };
+  }
+
+  /** POST /projects/close-requests/:requestId/reject — feedback bắt buộc. */
+  async rejectCloseRequest(
+    requestId: string,
+    feedback: string,
+  ): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.post(`/projects/close-requests/${requestId}/reject`, { feedback });
+    return { data: res.data, error: res.error };
+  }
+
+  /** GET /projects/:id/pause-history — lịch sử tạm dừng/đóng (mới nhất trước). */
+  async getPauseHistory(id: string): Promise<{ data?: any[]; error?: string }> {
+    const res = await apiService.get<any>(`/projects/${id}/pause-history`);
+    const items = Array.isArray(res.data)
+      ? res.data
+      : Array.isArray(res.data?.data)
+        ? res.data.data
+        : [];
+    return { data: items, error: res.error };
+  }
+
+  /** GET /projects/my-projects — dự án đang thực hiện của tôi. */
+  async getMyProjects(): Promise<{ data?: ProjectItem[]; error?: string }> {
+    const res = await apiService.get<any>('/projects/my-projects');
+    const items = Array.isArray(res.data)
+      ? res.data
+      : Array.isArray(res.data?.data)
+        ? res.data.data
+        : [];
+    return { data: items, error: res.error };
+  }
+
+  /** POST /projects/:id/request-staffing */
+  async requestStaffing(id: string, note: string): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.post(`/projects/${id}/request-staffing`, { note });
+    return { data: res.data, error: res.error };
+  }
+
+  /** POST /projects — tạo dự án mới. */
+  async createProject(payload: {
+    name: string;
+    contractId: string;
+    teamId: string;
+    plannedStartDate?: string;
+    plannedEndDate?: string;
+  }): Promise<{ data?: ProjectItem; error?: string }> {
+    const res = await apiService.post<ProjectItem>('/projects', payload);
+    return { data: res.data, error: res.error };
+  }
+
+  /** DELETE /projects/:id */
+  async deleteProject(id: string): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.delete(`/projects/${id}`);
+    return { data: res.data, error: res.error };
+  }
+
+  /** POST /projects/:id/sync-service-jobs (ADMIN/PM). */
+  async syncServiceJobs(id: string): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.post(`/projects/${id}/sync-service-jobs`);
+    return { data: res.data, error: res.error };
+  }
+
+  /** POST /projects/:projectId/service-addendums — phụ lục dịch vụ dự án. */
+  async createProjectServiceAddendum(
+    projectId: string,
+    payload: {
+      name?: string;
+      description?: string;
+      items: {
+        serviceId: string;
+        serviceName?: string;
+        quantity: number;
+        packageKey?: string;
+        packageName?: string;
+        packageQuantity?: number;
+        isPackageService?: boolean;
+        sellingPrice: number;
+        cost: number;
+      }[];
+    },
+  ): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.post(`/projects/${projectId}/service-addendums`, payload);
     return { data: res.data, error: res.error };
   }
 }

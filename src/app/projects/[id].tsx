@@ -21,6 +21,12 @@ import { BrandColors } from '@/constants/colors';
 import ProjectOverviewTab from '@/components/projects/ProjectOverviewTab';
 import ProjectTasksTab from '@/components/projects/ProjectTasksTab';
 import ProjectAcceptanceTab from '@/components/projects/ProjectAcceptanceTab';
+import ProjectMyTasksTab from '@/components/projects/ProjectMyTasksTab';
+import ProjectServiceAddendumTab from '@/components/projects/ProjectServiceAddendumTab';
+import ProjectExtraTasksTab from '@/components/projects/ProjectExtraTasksTab';
+import PauseHistoryTab from '@/components/projects/PauseHistoryTab';
+import PauseProjectModal from '@/components/projects/PauseProjectModal';
+import CloseProjectModal from '@/components/projects/CloseProjectModal';
 import { ProductDescriptionSection } from '@/components/projects/ProductDescriptionSection';
 
 import AssignPmModal from '@/components/projects/AssignPmModal';
@@ -40,11 +46,33 @@ import {
   useTeamMembersQuery,
   useConfirmProjectMutation,
   useRemoveTeamMemberMutation,
+  useResumeProjectMutation,
 } from '@/hooks/queries/useProjects';
 import { useTasksByProjectQuery } from '@/hooks/queries/useTasks';
 import { useAcceptancesQuery } from '@/hooks/queries/useAcceptances';
+import {
+  PROJECT_MANAGEMENT_ROLES,
+  ProjectPermissionContext,
+  canCloseDirect,
+  canPauseDirect,
+  canRequestClose,
+  canRequestPause,
+  canResume,
+  getDaysUntilAutoClose,
+  isInReminderWindow,
+  shouldShowPauseTab,
+} from '@/utils/projectPause';
+import { formatDateToDDMMYYYY } from '@/utils/formatters';
 
-type TabKey = 'OVERVIEW' | 'PRODUCT_DESC' | 'TASKS' | 'ACCEPTANCE';
+type TabKey =
+  | 'OVERVIEW'
+  | 'PRODUCT_DESC'
+  | 'TASKS'
+  | 'MY_TASKS'
+  | 'SERVICES'
+  | 'EXTRA'
+  | 'ACCEPTANCE'
+  | 'PAUSE';
 
 export default function ProjectDetailScreen() {
   const router = useRouter();
@@ -66,6 +94,7 @@ export default function ProjectDetailScreen() {
 
   const confirmProjectMutation = useConfirmProjectMutation();
   const removeTeamMemberMutation = useRemoveTeamMemberMutation();
+  const resumeProjectMutation = useResumeProjectMutation();
 
   const { data: tasksData, isLoading: isLoadingTasks, refetch: refetchTasks } = useTasksByProjectQuery(String(id || ''));
   const tasks: TaskDetail[] = useMemo(() => tasksData || [], [tasksData]);
@@ -91,6 +120,13 @@ export default function ProjectDetailScreen() {
   const [showEditMemberRole, setShowEditMemberRole] = useState(false);
   const [showCreateMonthlyWork, setShowCreateMonthlyWork] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+
+  // P1.11 — Tạm dừng / Làm tiếp / Đóng dự án
+  const [showPauseRequest, setShowPauseRequest] = useState(false);
+  const [showPauseDirect, setShowPauseDirect] = useState(false);
+  const [showCloseRequest, setShowCloseRequest] = useState(false);
+  const [showCloseDirect, setShowCloseDirect] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
 
   // Multi-select task state
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -129,6 +165,52 @@ export default function ProjectDetailScreen() {
   const canManageTeam =
     (isAdminOrBod || isAssignedPm || isCurrentTeamLead) && !!assignedPmId;
 
+  // ── P1.11: Tạm dừng / Làm tiếp / Đóng dự án ─────────────────────────────
+  const projectExtras = project as any;
+  const pauseCtx: ProjectPermissionContext = useMemo(
+    () => ({
+      role: user?.role,
+      isTeamLead: isCurrentTeamLead,
+      isProjectManagerMember:
+        !!user?.id &&
+        effectiveTeamMembers.some(
+          (m: any) => m.user?.id === user.id && hasTeamMemberRole(m, 'PROJECT_MANAGER')
+        ),
+      isBdOwner:
+        !!user?.id &&
+        (project?.contract?.createdById === user.id || projectExtras?.createdById === user.id),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [user?.role, user?.id, isCurrentTeamLead, effectiveTeamMembers, project?.contract?.createdById]
+  );
+
+  const canPauseDirectNow = canPauseDirect(project?.status, pauseCtx);
+  const canRequestPauseNow = !canPauseDirectNow && canRequestPause(project?.status, pauseCtx);
+  const canResumeNow = canResume(project?.status, pauseCtx);
+  const canCloseDirectNow = canCloseDirect(project?.status, pauseCtx);
+  const canRequestCloseNow = !canCloseDirectNow && canRequestClose(project?.status, pauseCtx);
+  const hasProjectActions =
+    canPauseDirectNow || canRequestPauseNow || canResumeNow || canCloseDirectNow || canRequestCloseNow;
+
+  const isOnHold = project?.status === 'ON_HOLD';
+  const isPendingPauseApproval = project?.status === 'PENDING_PAUSE_APPROVAL';
+  const autoAcceptAt: string | undefined = projectExtras?.autoAcceptAt;
+  const pausedByName: string | undefined = projectExtras?.pausedBy?.fullName;
+  const daysUntilAutoClose = getDaysUntilAutoClose(project?.status, autoAcceptAt);
+  const inReminderWindow = isInReminderWindow(project?.status, autoAcceptAt);
+  const showPauseTab = shouldShowPauseTab({
+    status: project?.status,
+    pausedAt: projectExtras?.pausedAt,
+    role: user?.role,
+  });
+
+  // Thành viên dự án hoặc vai trò quản lý ⇒ thấy tab Dịch vụ (mirror isCoreMember của Web).
+  const isCoreMember =
+    isAdminOrBod ||
+    isCurrentTeamLead ||
+    PROJECT_MANAGEMENT_ROLES.includes(user?.role || '') ||
+    effectiveTeamMembers.some((m: any) => m.user?.id === user?.id);
+
   const handleRemoveMember = async (memberId: string) => {
     if (!project?.team?.id) return;
 
@@ -160,7 +242,7 @@ export default function ProjectDetailScreen() {
       if (otherAccountsCount === 0) {
         Alert.alert(
           'Không thể xóa',
-          'Không thể xóa nhân sự này vì đây là người duy nhất giữ vai trò Account/Lead trong đội dự án. Vui lòng phân công nhân sự khác giữ vai trò này trước khi xóa.'
+          'Không thể xóa nhân sự này vì đây là người duy nhất giữ vai trò Account trong đội dự án. Vui lòng phân công nhân sự khác giữ vai trò này trước khi xóa.'
         );
         return;
       }
@@ -266,6 +348,29 @@ export default function ProjectDetailScreen() {
     loadAcceptances();
   };
 
+  /** "Làm tiếp" chỉ cần xác nhận, không có form lý do (mirror Web handleResume). */
+  const handleResumeProject = () => {
+    if (!id) return;
+    Alert.alert('Làm tiếp dự án', 'Mở lại dự án và khôi phục các công việc đang tạm dừng?', [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Làm tiếp',
+        onPress: async () => {
+          setIsResuming(true);
+          try {
+            await resumeProjectMutation.mutateAsync({ id: String(id) });
+            Alert.alert('Thành công', 'Đã mở lại dự án.');
+            handleRefresh();
+          } catch (err: any) {
+            Alert.alert('Lỗi', err?.message || 'Không thể mở lại dự án.');
+          } finally {
+            setIsResuming(false);
+          }
+        },
+      },
+    ]);
+  };
+
   const getStatusBadge = (status?: string) => {
     const stKey = status || 'PENDING_CONFIRMATION';
     const config = PROJECT_STATUS_CONFIG[stKey];
@@ -325,6 +430,152 @@ export default function ProjectDetailScreen() {
         </View>
       </View>
 
+      {/* Banner trạng thái tạm dừng / chờ duyệt tạm dừng (P1.11) */}
+      {isOnHold && (
+        <View
+          className={`mx-3 mt-3 flex-row items-start gap-2.5 rounded-2xl border p-3.5 ${
+            inReminderWindow ? 'border-red-200 bg-red-50/70' : 'border-amber-200 bg-amber-50/70'
+          }`}
+        >
+          <View
+            className={`h-10 w-10 items-center justify-center rounded-xl ${
+              inReminderWindow ? 'bg-red-600' : 'bg-amber-500'
+            }`}
+          >
+            <Feather
+              name={inReminderWindow ? 'alert-triangle' : 'clock'}
+              size={20}
+              color="#FFFFFF"
+            />
+          </View>
+          <View className="flex-1 gap-0.5">
+            <Text
+              className={`text-[13px] font-bold ${
+                inReminderWindow ? 'text-red-900' : 'text-amber-900'
+              }`}
+            >
+              Dự án đang tạm dừng
+              {daysUntilAutoClose !== null ? ` — còn ${daysUntilAutoClose} ngày sẽ tự động đóng` : ''}
+            </Text>
+            {autoAcceptAt ? (
+              <Text
+                className={`text-[11px] font-medium ${
+                  inReminderWindow ? 'text-red-700' : 'text-amber-700'
+                }`}
+              >
+                Tự động đóng lúc: {formatDateToDDMMYYYY(autoAcceptAt, '—')}
+              </Text>
+            ) : null}
+            {pausedByName ? (
+              <Text
+                className={`text-[11px] font-medium ${
+                  inReminderWindow ? 'text-red-700' : 'text-amber-700'
+                }`}
+              >
+                Người tạm dừng: {pausedByName}
+              </Text>
+            ) : null}
+            {inReminderWindow ? (
+              <Text className="text-[11px] font-semibold text-red-700">
+                Hệ thống đang gửi nhắc nhở hằng ngày. Hãy chốt đóng dự án hoặc làm tiếp trước hạn.
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      )}
+
+      {isPendingPauseApproval && (
+        <View className="mx-3 mt-3 flex-row items-start gap-2.5 rounded-2xl border border-yellow-200 bg-yellow-50/70 p-3.5">
+          <View className="h-10 w-10 items-center justify-center rounded-xl bg-yellow-500">
+            <Feather name="clock" size={20} color="#FFFFFF" />
+          </View>
+          <View className="flex-1 gap-0.5">
+            <Text className="text-[13px] font-bold text-yellow-900">
+              Đang chờ BOD duyệt yêu cầu tạm dừng
+            </Text>
+            <Text className="text-[11px] font-medium text-yellow-800">
+              Dự án vẫn đang chạy bình thường. Yêu cầu cần được BOD/ADMIN duyệt ở tab Lịch sử tạm
+              dừng.
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* Cụm nút hành động — chỉ render khi đủ quyền (RBAC ẩn hoàn toàn) */}
+      {hasProjectActions && (
+        <View className="bg-white px-3 pt-3">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}
+          >
+            {canPauseDirectNow && (
+              <TouchableOpacity
+                className="h-12 flex-row items-center gap-2 rounded-xl bg-amber-500 px-4"
+                onPress={() => setShowPauseDirect(true)}
+                activeOpacity={0.85}
+              >
+                <Feather name="pause-circle" size={16} color="#FFFFFF" />
+                <Text className="text-[13px] font-bold text-white">Tạm dừng ngay</Text>
+              </TouchableOpacity>
+            )}
+
+            {canRequestPauseNow && (
+              <TouchableOpacity
+                className="h-12 flex-row items-center gap-2 rounded-xl bg-primary px-4"
+                onPress={() => setShowPauseRequest(true)}
+                activeOpacity={0.85}
+              >
+                <Feather name="pause-circle" size={16} color="#FFFFFF" />
+                <Text className="text-[13px] font-bold text-white">Yêu cầu tạm dừng</Text>
+              </TouchableOpacity>
+            )}
+
+            {canResumeNow && (
+              <TouchableOpacity
+                className={`h-12 flex-row items-center gap-2 rounded-xl bg-emerald-600 px-4 ${
+                  isResuming ? 'opacity-60' : ''
+                }`}
+                onPress={handleResumeProject}
+                disabled={isResuming}
+                activeOpacity={0.85}
+              >
+                {isResuming ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Feather name="play-circle" size={16} color="#FFFFFF" />
+                    <Text className="text-[13px] font-bold text-white">Làm tiếp</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {canCloseDirectNow && (
+              <TouchableOpacity
+                className="h-12 flex-row items-center gap-2 rounded-xl bg-red-600 px-4"
+                onPress={() => setShowCloseDirect(true)}
+                activeOpacity={0.85}
+              >
+                <Feather name="archive" size={16} color="#FFFFFF" />
+                <Text className="text-[13px] font-bold text-white">Đóng dự án</Text>
+              </TouchableOpacity>
+            )}
+
+            {canRequestCloseNow && (
+              <TouchableOpacity
+                className="h-12 flex-row items-center gap-2 rounded-xl bg-slate-700 px-4"
+                onPress={() => setShowCloseRequest(true)}
+                activeOpacity={0.85}
+              >
+                <Feather name="archive" size={16} color="#FFFFFF" />
+                <Text className="text-[13px] font-bold text-white">Đề nghị đóng dự án</Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
+        </View>
+      )}
+
       {/* Tab Switcher */}
       <View className="bg-white border-b border-slate-200 px-3 py-2.5">
         <ScrollView
@@ -336,7 +587,23 @@ export default function ProjectDetailScreen() {
             { key: 'OVERVIEW', label: 'Tổng quan', icon: 'grid' },
             { key: 'PRODUCT_DESC', label: 'Thông tin chuẩn', icon: 'file-text' },
             { key: 'TASKS', label: `Công việc (${tasks.length})`, icon: 'check-square' },
+            {
+              key: 'MY_TASKS',
+              label: `Công việc của tôi (${
+                tasks.filter(
+                  (t) => t.assigneeId === user?.id || (t as any).assignee?.id === user?.id
+                ).length
+              })`,
+              icon: 'user-check',
+            },
+            ...(isCoreMember
+              ? [{ key: 'SERVICES', label: 'Dịch vụ', icon: 'package' }]
+              : []),
+            { key: 'EXTRA', label: 'Công việc phát sinh', icon: 'alert-circle' },
             { key: 'ACCEPTANCE', label: `Nghiệm thu (${acceptances.length})`, icon: 'award' },
+            ...(showPauseTab
+              ? [{ key: 'PAUSE', label: 'Lịch sử tạm dừng', icon: 'clock' }]
+              : []),
           ].map((tab) => {
             const isActive = activeTab === tab.key;
             return (
@@ -368,96 +635,121 @@ export default function ProjectDetailScreen() {
         </ScrollView>
       </View>
 
-      {/* Main Content Area */}
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: activeTab === 'TASKS' && isSelectMode ? 90 : 30 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            colors={[BrandColors.primary]}
-            tintColor={BrandColors.primary}
-          />
-        }
-      >
-        {activeTab === 'OVERVIEW' && project && (
-          <ProjectOverviewTab
-            project={project}
-            teamMembers={effectiveTeamMembers}
-            user={user}
-            onOpenAssignPm={() => setShowAssignPm(true)}
-            onConfirmProject={handleConfirmProject}
-            isConfirming={isConfirming}
-            canAssignPm={canAssignPm}
-            canConfirmProject={canConfirmProject}
-            taskStats={taskStats}
-            onOpenAddMember={() => setShowAddTeamMember(true)}
-            onRemoveMember={handleRemoveMember}
-            onEditMemberRole={(m) => {
-              setEditingMember(m);
-              setShowEditMemberRole(true);
-            }}
-            canManageTeam={canManageTeam}
-            onOpenCreateMonthlyWork={() => setShowCreateMonthlyWork(true)}
-            canCreateMonthlyWork={canCreateMonthlyWork}
-          />
-        )}
-
-        {activeTab === 'PRODUCT_DESC' && project && (
-          <View className="p-4">
-            <ProductDescriptionSection
-              projectId={project.id}
-              user={user}
-              project={project}
+      {/* Main Content Area — tab PAUSE dùng FlatList riêng (không lồng trong ScrollView) */}
+      {activeTab === 'PAUSE' ? (
+        <PauseHistoryTab
+          projectId={String(id || '')}
+          projectName={project?.name}
+          onChanged={handleRefresh}
+        />
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: activeTab === 'TASKS' && isSelectMode ? 90 : 30 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              colors={[BrandColors.primary]}
+              tintColor={BrandColors.primary}
             />
-          </View>
-        )}
+          }
+        >
+          {activeTab === 'OVERVIEW' && project && (
+            <ProjectOverviewTab
+              project={project}
+              teamMembers={effectiveTeamMembers}
+              user={user}
+              onOpenAssignPm={() => setShowAssignPm(true)}
+              onConfirmProject={handleConfirmProject}
+              isConfirming={isConfirming}
+              canAssignPm={canAssignPm}
+              canConfirmProject={canConfirmProject}
+              taskStats={taskStats}
+              onOpenAddMember={() => setShowAddTeamMember(true)}
+              onRemoveMember={handleRemoveMember}
+              onEditMemberRole={(m) => {
+                setEditingMember(m);
+                setShowEditMemberRole(true);
+              }}
+              canManageTeam={canManageTeam}
+              onOpenCreateMonthlyWork={() => setShowCreateMonthlyWork(true)}
+              canCreateMonthlyWork={canCreateMonthlyWork}
+            />
+          )}
 
+          {activeTab === 'PRODUCT_DESC' && project && (
+            <View className="p-4">
+              <ProductDescriptionSection projectId={project.id} user={user} project={project} />
+            </View>
+          )}
 
-        {activeTab === 'TASKS' && (
-          <ProjectTasksTab
-            tasks={tasks}
-            isLoading={isLoadingTasks}
-            projectStatus={project?.status}
-            isPmOrAdmin={isPmOrAdmin}
-            isSelectMode={isSelectMode}
-            selectedTaskIds={validSelectedTaskIds}
-            onToggleSelectMode={() => {
-              setIsSelectMode((prev) => !prev);
-              if (isSelectMode) setSelectedTaskIds([]);
-            }}
-            onToggleSelectTask={handleToggleSelectTask}
-            onToggleSelectGroup={handleToggleSelectGroup}
-            onOpenUpdateTask={(t) => {
-              setSelectedTask(t);
-              setShowTaskUpdate(true);
-            }}
-            onAssignTask={(t) => {
-              if (!Array.isArray(t)) {
-                setSelectedTaskIds((prev) => prev.filter((id) => id !== t.id));
-              }
-              setAssigningTask(t);
-              setShowAssignTask(true);
-            }}
-            onOpenAddExtraTask={() => setShowAddExtraTask(true)}
-          />
-        )}
+          {activeTab === 'TASKS' && (
+            <ProjectTasksTab
+              tasks={tasks}
+              isLoading={isLoadingTasks}
+              projectStatus={project?.status}
+              isPmOrAdmin={isPmOrAdmin}
+              isSelectMode={isSelectMode}
+              selectedTaskIds={validSelectedTaskIds}
+              onToggleSelectMode={() => {
+                setIsSelectMode((prev) => !prev);
+                if (isSelectMode) setSelectedTaskIds([]);
+              }}
+              onToggleSelectTask={handleToggleSelectTask}
+              onToggleSelectGroup={handleToggleSelectGroup}
+              onOpenUpdateTask={(t) => {
+                setSelectedTask(t);
+                setShowTaskUpdate(true);
+              }}
+              onAssignTask={(t) => {
+                if (!Array.isArray(t)) {
+                  setSelectedTaskIds((prev) => prev.filter((id) => id !== t.id));
+                }
+                setAssigningTask(t);
+                setShowAssignTask(true);
+              }}
+              onOpenAddExtraTask={() => setShowAddExtraTask(true)}
+            />
+          )}
 
-        {activeTab === 'ACCEPTANCE' && (
-          <ProjectAcceptanceTab
-            acceptances={acceptances}
-            isLoading={isLoadingAcceptances}
-            projectStatus={project?.status}
-            isPmOrAdmin={isPmOrAdmin||isCurrentTeamLead}
-            onOpenCreateAcceptance={() => setShowCreateAcceptance(true)}
-            onOpenReviewAcceptance={(item) => {
-              setReviewingAcceptance(item);
-              setShowReviewAcceptance(true);
-            }}
-          />
-        )}
-      </ScrollView>
+          {activeTab === 'MY_TASKS' && (
+            <ProjectMyTasksTab
+              tasks={tasks}
+              isLoading={isLoadingTasks}
+              currentUserId={user?.id}
+              projectStatus={project?.status}
+              onChanged={handleRefresh}
+            />
+          )}
+
+          {activeTab === 'SERVICES' && isCoreMember && (
+            <ProjectServiceAddendumTab project={project} user={user} onChanged={handleRefresh} />
+          )}
+
+          {activeTab === 'EXTRA' && (
+            <ProjectExtraTasksTab
+              tasks={tasks}
+              isLoading={isLoadingTasks}
+              projectId={String(id || '')}
+            />
+          )}
+
+          {activeTab === 'ACCEPTANCE' && (
+            <ProjectAcceptanceTab
+              acceptances={acceptances}
+              isLoading={isLoadingAcceptances}
+              projectStatus={project?.status}
+              projectIsOnHold={(project as any)?.isOnHold}
+              onOpenCreateAcceptance={() => setShowCreateAcceptance(true)}
+              onOpenReviewAcceptance={(item) => {
+                setReviewingAcceptance(item);
+                setShowReviewAcceptance(true);
+              }}
+            />
+          )}
+        </ScrollView>
+      )}
 
       {/* Floating Bulk Action Bar - Fixed at screen bottom */}
       {activeTab === 'TASKS' && isSelectMode && (
@@ -619,6 +911,43 @@ export default function ProjectDetailScreen() {
               loadProjectDetail();
               loadTasks();
             }}
+          />
+
+          {/* P1.11 — Tạm dừng / Đóng dự án */}
+          <PauseProjectModal
+            visible={showPauseRequest}
+            onClose={() => setShowPauseRequest(false)}
+            projectId={id}
+            projectName={project?.name}
+            isDirect={false}
+            onSuccess={handleRefresh}
+          />
+
+          <PauseProjectModal
+            visible={showPauseDirect}
+            onClose={() => setShowPauseDirect(false)}
+            projectId={id}
+            projectName={project?.name}
+            isDirect
+            onSuccess={handleRefresh}
+          />
+
+          <CloseProjectModal
+            visible={showCloseRequest}
+            onClose={() => setShowCloseRequest(false)}
+            projectId={id}
+            projectName={project?.name}
+            isDirect={false}
+            onSuccess={handleRefresh}
+          />
+
+          <CloseProjectModal
+            visible={showCloseDirect}
+            onClose={() => setShowCloseDirect(false)}
+            projectId={id}
+            projectName={project?.name}
+            isDirect
+            onSuccess={handleRefresh}
           />
         </>
       )}

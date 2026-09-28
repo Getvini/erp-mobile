@@ -17,7 +17,7 @@ import { getUserRolesInTeam, getUserAccountRole } from '@/utils/teamMember';
 import { WorkloadBadge } from '@/components/common/WorkloadBadge';
 
 export const ASSIGNABLE_ROLES = [
-  { key: 'ACCOUNT', label: 'Account dự án', desc: 'Quản lý & duyệt công việc nhóm' },
+  { key: 'ACCOUNT', label: 'Account', desc: 'Quản lý & duyệt công việc nhóm' },
   { key: 'EDITOR', label: 'Editor', desc: 'Dựng phim & biên tập video' },
   { key: 'CONTENT_CREATOR', label: 'Nội dung', desc: 'Sáng tạo nội dung & bài viết' },
   { key: 'GRAPHIC_DESIGNER', label: 'Thiết kế đồ họa', desc: 'Thiết kế banner, hình ảnh' },

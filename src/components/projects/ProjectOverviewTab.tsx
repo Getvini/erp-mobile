@@ -519,9 +519,9 @@ export default function ProjectOverviewTab({
 
         <Text className="text-sm font-bold text-text-primary">{team?.name || 'Đội dự án'}</Text>
         <Text className="text-xs text-text-secondary">
-          Trưởng nhóm (Account dự án):{' '}
+          Trưởng nhóm (Account):{' '}
           <Text className={`font-bold ${leadUser ? 'text-emerald-700' : 'text-text-muted'}`}>
-            {leadUser?.fullName || 'Chưa chọn Account dự án'}
+            {leadUser?.fullName || 'Chưa chọn Account'}
           </Text>
         </Text>
 
@@ -563,12 +563,12 @@ export default function ProjectOverviewTab({
                         )}
                         {isTeamLead && (
                           <View className="bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                            <Text className="text-[10px] font-bold text-emerald-700">Account dự án</Text>
+                            <Text className="text-[10px] font-bold text-emerald-700">Account</Text>
                           </View>
                         )}
                         {!isTeamLead && hasAccount && (
                           <View className="bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                            <Text className="text-[10px] font-bold text-emerald-700">Account dự án</Text>
+                            <Text className="text-[10px] font-bold text-emerald-700">Account</Text>
                           </View>
                         )}
                         {group.roles
@@ -615,7 +615,7 @@ export default function ProjectOverviewTab({
                                 if (otherAccounts.length === 0) {
                                   Alert.alert(
                                     'Không thể xóa',
-                                    'Không thể xóa nhân sự này vì đây là người duy nhất giữ vai trò Account/Lead trong đội dự án. Vui lòng phân công nhân sự khác giữ vai trò này trước khi xóa.'
+                                    'Không thể xóa nhân sự này vì đây là người duy nhất giữ vai trò Account trong đội dự án. Vui lòng phân công nhân sự khác giữ vai trò này trước khi xóa.'
                                   );
                                   return;
                                 }

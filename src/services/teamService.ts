@@ -38,7 +38,10 @@ export const TEAM_MEMBER_ROLE_LABELS: Record<string, string> = {
   GRAPHIC_DESIGNER: 'Thiết kế đồ họa',
   CAMERAMAN: 'Quay phim',
   PROJECT_MANAGER: 'Quản lý dự án',
-  ACCOUNT: 'Account dự án',
+  // Chuẩn hóa nhãn theo Web 28-09-2026 (erp-UI/src/utils/enums.js:352):
+  // ACCOUNT hiển thị "Account" thay cho "Lead dự án"/"Account dự án".
+  // Enum gửi API vẫn giữ nguyên là `ACCOUNT`.
+  ACCOUNT: 'Account',
   SCRIPTER: 'Biên kịch',
   SOCIAL_MEDIA_MANAGER: 'Quản lý MXH',
   SEO_SPECIALIST: 'Chuyên viên SEO',
