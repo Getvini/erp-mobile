@@ -282,15 +282,15 @@ export default function ProjectOverviewTab({
             )}
             {canEditTimeline && !editingTimeline && (
               <TouchableOpacity
-                className="flex-row items-center gap-1 bg-primary/10 border border-primary/20 px-2.5 py-1.5 rounded-lg"
+                className="flex-row items-center gap-1 px-1.5 py-1"
                 onPress={() => {
                   setTimelineForm({ plannedStartDate: startDateStr || '', plannedEndDate: endDateStr || '' });
                   setEditingTimeline(true);
                 }}
-                activeOpacity={0.7}
+                activeOpacity={0.6}
               >
                 <Feather name="edit-2" size={11} color={BrandColors.primary} />
-                <Text className="text-[11px] font-bold text-primary">Sửa tiến trình</Text>
+                <Text className="text-[11px] font-bold text-primary underline decoration-primary/40">Sửa tiến trình</Text>
               </TouchableOpacity>
             )}
           </View>

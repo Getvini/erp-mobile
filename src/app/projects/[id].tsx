@@ -503,7 +503,7 @@ export default function ProjectDetailScreen() {
 
       {/* Cụm nút hành động — chỉ render khi đủ quyền (RBAC ẩn hoàn toàn) */}
       {hasProjectActions && (
-        <View className="bg-white px-3 pt-3">
+        <View className="bg-white px-3 pt-3 pb-2 border-b border-slate-100">
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -511,29 +511,31 @@ export default function ProjectDetailScreen() {
           >
             {canPauseDirectNow && (
               <TouchableOpacity
-                className="h-12 flex-row items-center gap-2 rounded-xl bg-amber-500 px-4"
+                style={{ borderRadius: 10 }}
+                className="h-11 flex-row items-center gap-1.5 rounded-lg bg-amber-500 px-4"
                 onPress={() => setShowPauseDirect(true)}
                 activeOpacity={0.85}
               >
-                <Feather name="pause-circle" size={16} color="#FFFFFF" />
+                <Feather name="pause" size={15} color="#FFFFFF" />
                 <Text className="text-[13px] font-bold text-white">Tạm dừng ngay</Text>
               </TouchableOpacity>
             )}
 
             {canRequestPauseNow && (
               <TouchableOpacity
-                className="h-12 flex-row items-center gap-2 rounded-xl bg-primary px-4"
+                style={{ borderRadius: 10 }}
+                className="h-11 flex-row items-center gap-1.5 rounded-lg bg-primary px-4"
                 onPress={() => setShowPauseRequest(true)}
                 activeOpacity={0.85}
               >
-                <Feather name="pause-circle" size={16} color="#FFFFFF" />
+                <Feather name="pause" size={15} color="#FFFFFF" />
                 <Text className="text-[13px] font-bold text-white">Yêu cầu tạm dừng</Text>
               </TouchableOpacity>
             )}
 
             {canResumeNow && (
               <TouchableOpacity
-                className={`h-12 flex-row items-center gap-2 rounded-xl bg-emerald-600 px-4 ${
+                className={`h-11 flex-row items-center gap-1.5 rounded-lg bg-emerald-600 px-4 ${
                   isResuming ? 'opacity-60' : ''
                 }`}
                 onPress={handleResumeProject}
@@ -544,7 +546,7 @@ export default function ProjectDetailScreen() {
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <>
-                    <Feather name="play-circle" size={16} color="#FFFFFF" />
+                    <Feather name="play" size={15} color="#FFFFFF" />
                     <Text className="text-[13px] font-bold text-white">Làm tiếp</Text>
                   </>
                 )}
@@ -553,22 +555,24 @@ export default function ProjectDetailScreen() {
 
             {canCloseDirectNow && (
               <TouchableOpacity
-                className="h-12 flex-row items-center gap-2 rounded-xl bg-red-600 px-4"
+                style={{ borderRadius: 10 }}
+                className="h-11 flex-row items-center gap-1.5 rounded-lg bg-red-600 px-4"
                 onPress={() => setShowCloseDirect(true)}
                 activeOpacity={0.85}
               >
-                <Feather name="archive" size={16} color="#FFFFFF" />
+                <Feather name="archive" size={15} color="#FFFFFF" />
                 <Text className="text-[13px] font-bold text-white">Đóng dự án</Text>
               </TouchableOpacity>
             )}
 
             {canRequestCloseNow && (
               <TouchableOpacity
-                className="h-12 flex-row items-center gap-2 rounded-xl bg-slate-700 px-4"
+                style={{ borderRadius: 10 }}
+                className="h-11 flex-row items-center gap-1.5 rounded-lg bg-slate-700 px-4"
                 onPress={() => setShowCloseRequest(true)}
                 activeOpacity={0.85}
               >
-                <Feather name="archive" size={16} color="#FFFFFF" />
+                <Feather name="archive" size={15} color="#FFFFFF" />
                 <Text className="text-[13px] font-bold text-white">Đề nghị đóng dự án</Text>
               </TouchableOpacity>
             )}
@@ -613,7 +617,7 @@ export default function ProjectDetailScreen() {
                 activeOpacity={0.7}
                 className={`flex-row items-center gap-1.5 px-3.5 py-2 rounded-xl border ${
                   isActive
-                    ? 'bg-orange-50 border-primary'
+                    ? 'bg-orange-50 border-orange-100'
                     : 'bg-slate-50 border-slate-200'
                 }`}
               >

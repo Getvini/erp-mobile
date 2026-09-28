@@ -252,13 +252,13 @@ export default function TaskLifecycleActions({
   // Ẩn hoàn toàn khối thao tác khi không đủ quyền và không có cảnh báo nào
   if (!hasAnyAction && !isParentBlocked) return null;
 
-  const buttonBase = 'flex-row items-center gap-1.5 px-3.5 min-h-[48px] rounded-xl';
+  const buttonBase = 'flex-1 flex-row items-center justify-center gap-2 px-4 h-[42px] rounded-xl';
   const disabledClass = isPending ? 'opacity-60' : '';
   const blockedClass = 'opacity-40';
 
   return (
     <>
-      <View className="bg-white rounded-2xl p-4 border border-slate-200 gap-3">
+      <View className="gap-2">
         {/* <View className="flex-row items-center gap-2.5">
           <View className="w-8 h-8 rounded-lg bg-blue-50 items-center justify-center">
             <Feather name="zap" size={16} color="#2563EB" />
@@ -298,7 +298,7 @@ export default function TaskLifecycleActions({
           )}
 
           {/* 2. Nộp kết quả — mở modal nộp kết quả có sẵn của tasks/[id].tsx */}
-          {canUploadResult && (
+          {/* {canUploadResult && (
             <TouchableOpacity
               className={`${buttonBase} bg-primary ${isParentBlocked || isPending ? blockedClass : ''}`}
               onPress={handleOpenResultModal}
@@ -310,7 +310,7 @@ export default function TaskLifecycleActions({
                 {hasSubmittedResult ? 'Cập nhật kết quả' : 'Nộp kết quả'}
               </Text>
             </TouchableOpacity>
-          )}
+          )} */}
 
           {/* 3. Gửi duyệt — đã có kết quả chờ gửi */}
           {canSubmitForReview && (
