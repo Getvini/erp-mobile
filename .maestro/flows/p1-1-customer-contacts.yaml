@@ -1,0 +1,24 @@
+appId: com.getvini.erp
+name: "P1-1 Customer CRM Read-only Contact Flow"
+---
+- launchApp
+- waitForAnimationToEnd
+- tapOn:
+    id: customersTab
+- assertVisible:
+    id: customersList
+- tapOn:
+    id: "customerCard-.*"
+- assertVisible:
+    id: customerDetailScreen
+- tapOn:
+    id: customerTab-contacts
+- assertVisible: "Liên hệ chính"
+- assertVisible: "Số điện thoại"
+- assertVisible: "Email"
+- tapOn:
+    id: customerTab-opportunities
+- assertVisible: "Cơ hội"
+- tapOn:
+    id: customerTab-contracts
+- assertVisible: "Hợp đồng"

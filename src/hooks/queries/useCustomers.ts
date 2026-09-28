@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { customerService, CustomerListFilters, CustomerItem } from '@/services/customerService';
 import { queryKeys } from '@/services/queryKeys';
 
@@ -15,6 +15,34 @@ export function useCustomersQuery(filters: CustomerListFilters = {}) {
       }
       return res.data || [];
     },
+  });
+}
+
+/**
+ * Infinite-query compatible adapter for long customer directories. The
+ * current backend returns the complete array without pagination metadata, so
+ * the hook intentionally exposes one page and never risks appending duplicate
+ * records. Enable getNextPageParam when the API gains a documented meta block.
+ */
+export function useInfiniteCustomersQuery(
+  filters: Omit<CustomerListFilters, 'page'> = {},
+  pageSize = 20,
+) {
+  return useInfiniteQuery({
+    queryKey: [...queryKeys.customers.lists(), 'infinite', filters, pageSize],
+    queryFn: async ({ pageParam = 1 }) => {
+      const res = await customerService.getCustomers({
+        ...filters,
+        page: pageParam,
+        limit: pageSize,
+      });
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data || [];
+    },
+    initialPageParam: 1,
+    getNextPageParam: () => undefined,
   });
 }
 
@@ -76,3 +104,26 @@ export function useCreateCustomerMutation() {
   });
 }
 
+
+/**
+ * Hook to delete a customer and evict every dependent customer cache entry.
+ */
+export function useDeleteCustomerMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await customerService.deleteCustomer(id);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data;
+    },
+    onSuccess: (_, id) => {
+      queryClient.removeQueries({ queryKey: queryKeys.customers.detail(id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.customers.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
+    },
+  });
+}

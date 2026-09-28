@@ -1,5 +1,24 @@
 import { apiService } from './api';
 
+export interface CustomerOpportunity {
+  id: string;
+  opportunityCode?: string;
+  name: string;
+  status?: string;
+  expectedRevenue?: number | string;
+  createdAt?: string;
+}
+
+export interface CustomerContract {
+  id: string;
+  name?: string;
+  contractCode?: string;
+  sellingPrice?: number | string;
+  totalWithVat?: number | string;
+  status?: string;
+  createdAt?: string;
+}
+
 export interface CustomerItem {
   id: string;
   name: string;
@@ -13,13 +32,9 @@ export interface CustomerItem {
   website?: string;
   contactPerson?: string;
   industry?: string;
-  contracts?: Array<{
-    id: string;
-    name?: string;
-    contractCode?: string;
-    sellingPrice?: number | string;
-    status?: string;
-  }>;
+  source?: 'INTERNAL' | 'REFERRAL_PARTNER' | string;
+  opportunities?: CustomerOpportunity[];
+  contracts?: CustomerContract[];
 }
 
 export interface CustomerListFilters {
@@ -53,6 +68,11 @@ class CustomerService {
 
   async createCustomer(payload: Partial<CustomerItem>): Promise<{ data?: CustomerItem; error?: string }> {
     const res = await apiService.post<CustomerItem>('/customers', payload);
+    return { data: res.data, error: res.error };
+  }
+
+  async deleteCustomer(id: string): Promise<{ data?: { message: string }; error?: string }> {
+    const res = await apiService.delete<{ message: string }>(`/customers/${id}`);
     return { data: res.data, error: res.error };
   }
 }

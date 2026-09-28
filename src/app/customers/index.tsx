@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
-  ActivityIndicator,
   RefreshControl,
   Linking,
   Alert,
@@ -38,7 +37,7 @@ export default function CustomersScreen() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // TanStack Query for customer list
-  const { data: customers = [], isLoading, isFetching, refetch } = useCustomersQuery({
+  const { data: customers = [], isLoading, isFetching, isError, error, refetch } = useCustomersQuery({
     search: searchQuery,
     source: activeSourceTab !== 'ALL' ? activeSourceTab : undefined,
   });
@@ -83,6 +82,7 @@ export default function CustomersScreen() {
   const renderCustomerCard = ({ item }: { item: CustomerItem }) => {
     return (
       <TouchableOpacity
+        testID={`customerCard-${item.id}`}
         className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm"
         onPress={() => router.push(`/customers/${item.id}` as any)}
         activeOpacity={0.8}
@@ -112,7 +112,7 @@ export default function CustomersScreen() {
           <View className="flex-row items-center gap-2">
             {item.phoneNumber && (
               <TouchableOpacity
-                className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 min-h-[36px]"
+                className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 min-h-[48px]"
                 onPress={() => handleCall(item.phoneNumber)}
                 activeOpacity={0.7}
               >
@@ -123,7 +123,7 @@ export default function CustomersScreen() {
 
             {item.email && (
               <TouchableOpacity
-                className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 min-h-[36px]"
+                className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 min-h-[48px]"
                 onPress={() => handleEmail(item.email)}
                 activeOpacity={0.7}
               >
@@ -183,7 +183,7 @@ export default function CustomersScreen() {
       {/* Header */}
       <View className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-slate-200">
         <TouchableOpacity
-          className="w-10 h-10 rounded-xl bg-slate-100 items-center justify-center min-w-[44px] min-h-[44px]"
+          className="w-12 h-12 rounded-xl bg-slate-100 items-center justify-center"
           onPress={() => safeGoBack(router, '/')}
           activeOpacity={0.7}
         >
@@ -191,14 +191,15 @@ export default function CustomersScreen() {
         </TouchableOpacity>
 
         <Text className="text-[17px] font-bold text-slate-900">Hồ sơ Khách hàng & CRM</Text>
-        <View className="w-10" />
+        <View className="w-12" />
       </View>
 
       {/* Search Input */}
       <View className="px-4 py-3 bg-white border-b border-slate-200">
-        <View className="flex-row items-center bg-slate-100 rounded-xl px-3 h-[42px]">
+        <View className="flex-row items-center bg-slate-100 rounded-xl px-3 h-[48px]">
           <Feather name="search" size={18} color="#94A3B8" />
           <TextInput
+            testID="customerSearchInput"
             className="flex-1 ml-2 text-sm text-slate-900"
             placeholder="Tìm theo tên công ty, SĐT, người đại diện..."
             placeholderTextColor="#94A3B8"
@@ -219,7 +220,7 @@ export default function CustomersScreen() {
             return (
               <TouchableOpacity
                 key={tab.key}
-                className={`px-3 py-1.5 rounded-full border ${
+                className={`px-3 min-h-[44px] justify-center rounded-full border ${
                   isActive ? 'bg-primary border-primary' : 'bg-slate-100 border-slate-200'
                 }`}
                 onPress={() => setActiveSourceTab(tab.key)}
@@ -240,16 +241,32 @@ export default function CustomersScreen() {
 
       {/* Content List */}
       {isLoading && !isFetching ? (
-        <View className="flex-1 justify-center items-center gap-2.5">
-          <ActivityIndicator size="large" color={BrandColors.primary} />
-          <Text className="text-[13px] text-slate-400">Đang tải danh bạ đối tác...</Text>
+        <View className="flex-1 px-4 pt-4 gap-3">
+          {[0, 1, 2].map((item) => (
+            <View key={item} className="h-36 rounded-2xl bg-slate-200" />
+          ))}
+        </View>
+      ) : isError ? (
+        <View className="flex-1 items-center justify-center px-8 gap-3">
+          <Feather name="wifi-off" size={42} color="#EF4444" />
+          <Text className="text-base font-bold text-slate-700">Không tải được danh sách khách hàng</Text>
+          <Text className="text-xs text-slate-500 text-center">
+            {error instanceof Error ? error.message : 'Vui lòng kiểm tra kết nối và thử lại.'}
+          </Text>
+          <TouchableOpacity
+            className="min-h-[48px] justify-center rounded-xl bg-primary px-5"
+            onPress={() => refetch()}
+          >
+            <Text className="text-sm font-bold text-white">Thử lại</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
+          testID="customersList"
           data={filteredCustomers}
           keyExtractor={(item) => item.id}
           renderItem={renderCustomerCard}
-          contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 24 }}
+          contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -272,6 +289,18 @@ export default function CustomersScreen() {
           }
         />
       )}
+
+      <TouchableOpacity
+        testID="createCustomerButton"
+        className="absolute bottom-[84px] right-4 min-h-[56px] flex-row items-center justify-center gap-2 rounded-2xl bg-primary px-5 shadow-lg"
+        onPress={() => setIsModalOpen(true)}
+        activeOpacity={0.82}
+        accessibilityRole="button"
+        accessibilityLabel="Thêm khách hàng mới"
+      >
+        <Feather name="plus" size={20} color="#FFFFFF" />
+        <Text className="text-sm font-extrabold text-white">Thêm khách hàng</Text>
+      </TouchableOpacity>
 
       {/* Create Modal */}
       <CreateCustomerModal
