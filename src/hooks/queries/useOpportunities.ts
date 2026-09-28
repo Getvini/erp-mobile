@@ -92,6 +92,32 @@ export function useUpdateOpportunityMutation() {
 }
 
 /**
+ * Hook to add an existing customer to an opportunity (PATCH /opportunities/:id/addcustomer)
+ */
+export function useAddCustomerToOpportunityMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...data
+    }: {
+      id: string;
+      customerId: string;
+      referralPartnerId?: string | null;
+      customerType?: string;
+    }) => {
+      const res = await opportunityService.addCustomerToOpportunity(id, data);
+      return res.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.detail(variables.id) });
+    },
+  });
+}
+
+/**
  * Hook to approve an opportunity
  */
 export function useApproveOpportunityMutation() {

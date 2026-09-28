@@ -28,6 +28,23 @@ export interface UpdateQcSettingsPayload {
   maxContext: number;
 }
 
+export interface WorkloadNormItem {
+  role: string;
+  monthlyNorm: number;
+  isCustomized?: boolean;
+}
+
+export interface WorkloadNormSettingsResponse {
+  norms: WorkloadNormItem[];
+}
+
+export interface UpdateWorkloadNormsPayload {
+  norms: Array<{
+    role: string;
+    monthlyNorm: number;
+  }>;
+}
+
 class SettingService {
   /**
    * Lấy cấu hình QC đối chiếu sản phẩm tự động bằng AI
@@ -42,6 +59,22 @@ class SettingService {
    */
   async updateQcSettings(payload: UpdateQcSettingsPayload): Promise<{ data?: any; error?: string }> {
     const res = await apiService.put<any>('/settings/qc', payload);
+    return { data: res.data, error: res.error };
+  }
+
+  /**
+   * Lấy cấu hình định mức workload theo role
+   */
+  async getWorkloadNorms(): Promise<{ data?: WorkloadNormSettingsResponse; error?: string }> {
+    const res = await apiService.get<WorkloadNormSettingsResponse>('/settings/workload-norms');
+    return { data: res.data, error: res.error };
+  }
+
+  /**
+   * Cập nhật định mức workload theo role
+   */
+  async updateWorkloadNorms(payload: UpdateWorkloadNormsPayload): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.put<any>('/settings/workload-norms', payload);
     return { data: res.data, error: res.error };
   }
 }

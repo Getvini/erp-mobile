@@ -1,294 +1,348 @@
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Linking,
+  RefreshControl,
   Text,
   TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Linking,
-  Alert,
-  RefreshControl,
-  StyleSheet,
+  View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import * as Haptic from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useCustomerDetailQuery } from '@/hooks/queries/useCustomers';
+import {
+  useCustomerDetailQuery,
+  useDeleteCustomerMutation,
+} from '@/hooks/queries/useCustomers';
 import { BrandColors } from '@/constants/colors';
-import { CONTRACT_STATUS_CONFIG, CONTRACT_STATUS_LABELS } from '@/services/contractService';
 import EditCustomerModal from '@/components/customers/EditCustomerModal';
-
+import {
+  CustomerContactsTab,
+  CustomerContractCard,
+  CustomerOpportunityCard,
+} from '@/components/customers';
+import { CustomerContract, CustomerOpportunity } from '@/services/customerService';
+import { useAuth } from '@/context/AuthContext';
+import { canDeleteCustomers } from '@/utils/rbac';
 import { safeGoBack } from '@/utils/navigation';
+
+type CustomerTab = 'info' | 'contacts' | 'opportunities' | 'contracts';
+type CustomerRow =
+  | { type: 'info'; id: 'info' }
+  | { type: 'contacts'; id: 'contacts' }
+  | { type: 'opportunity'; id: string; value: CustomerOpportunity }
+  | { type: 'contract'; id: string; value: CustomerContract };
+
+const TABS: { key: CustomerTab; label: string }[] = [
+  { key: 'info', label: 'Thông tin' },
+  { key: 'contacts', label: 'Liên hệ' },
+  { key: 'opportunities', label: 'Cơ hội' },
+  { key: 'contracts', label: 'Hợp đồng' },
+];
+
+function LoadingSkeleton() {
+  return (
+    <SafeAreaView className="flex-1 bg-slate-50 px-4 pt-4" edges={['top']}>
+      <View className="h-14 rounded-2xl bg-slate-200" />
+      <View className="mt-4 h-48 rounded-2xl bg-slate-200" />
+      <View className="mt-4 h-24 rounded-2xl bg-slate-200" />
+      <View className="mt-4 h-40 rounded-2xl bg-slate-200" />
+    </SafeAreaView>
+  );
+}
 
 export default function CustomerDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'info' | 'contracts'>('info');
+  const { user } = useAuth();
+  const customerId = typeof id === 'string' ? id : '';
+  const [activeTab, setActiveTab] = useState<CustomerTab>('info');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  const { data: customer, isLoading, refetch, isFetching } = useCustomerDetailQuery(id as string);
+  const {
+    data: customer,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+  } = useCustomerDetailQuery(customerId);
+  const deleteCustomerMutation = useDeleteCustomerMutation();
+  const canDelete = canDeleteCustomers(user?.role);
 
-  const handleCall = (phone?: string) => {
-    if (!phone) {
+  const phone = customer?.phoneNumber || customer?.phone;
+  const opportunities = useMemo(
+    () => (Array.isArray(customer?.opportunities) ? customer.opportunities.filter(Boolean) : []),
+    [customer],
+  );
+  const contracts = useMemo(
+    () => (Array.isArray(customer?.contracts) ? customer.contracts.filter(Boolean) : []),
+    [customer],
+  );
+
+  const rows = useMemo<CustomerRow[]>(() => {
+    if (activeTab === 'info') return [{ type: 'info', id: 'info' }];
+    if (activeTab === 'contacts') return [{ type: 'contacts', id: 'contacts' }];
+    if (activeTab === 'opportunities') {
+      return opportunities.map((value) => ({ type: 'opportunity', id: value.id, value }));
+    }
+    return contracts.map((value) => ({ type: 'contract', id: value.id, value }));
+  }, [activeTab, contracts, opportunities]);
+
+  const handleCall = useCallback((value?: string) => {
+    if (!value) {
       Alert.alert('Thông báo', 'Khách hàng chưa cập nhật số điện thoại.');
       return;
     }
-    Linking.openURL(`tel:${phone}`);
-  };
+    Linking.openURL(`tel:${value}`);
+  }, []);
 
-  const handleEmail = (email?: string) => {
-    if (!email) {
+  const handleEmail = useCallback((value?: string) => {
+    if (!value) {
       Alert.alert('Thông báo', 'Khách hàng chưa cập nhật email liên hệ.');
       return;
     }
-    Linking.openURL(`mailto:${email}`);
-  };
+    Linking.openURL(`mailto:${value}`);
+  }, []);
 
-  const formatCurrency = (val?: number | string) => {
-    if (val === undefined || val === null) return '0 ₫';
-    const num = typeof val === 'number' ? val : Number(val);
-    if (isNaN(num) || num === 0) return '0 ₫';
-    return num.toLocaleString('vi-VN') + ' ₫';
-  };
+  const confirmDelete = useCallback(() => {
+    if (!customer || !canDelete || deleteCustomerMutation.isPending) return;
 
-  if (isLoading) {
-    return (
-      <SafeAreaView className="flex-1 bg-slate-50 justify-center items-center gap-3" edges={['top']}>
-        <ActivityIndicator size="large" color={BrandColors.primary} />
-        <Text className="text-sm font-semibold text-slate-500">Đang tải thông tin khách hàng...</Text>
-      </SafeAreaView>
+    Alert.alert(
+      'Xóa khách hàng',
+      `Bạn có chắc muốn xóa “${customer.name}”? Thao tác này không thể hoàn tác.`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa khách hàng',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteCustomerMutation.mutateAsync(customer.id);
+              await Haptic.notificationAsync(Haptic.NotificationFeedbackType.Success);
+              Alert.alert('Thành công', 'Đã xóa khách hàng.', [
+                { text: 'Đóng', onPress: () => router.replace('/customers') },
+              ]);
+            } catch (deleteError: any) {
+              await Haptic.notificationAsync(Haptic.NotificationFeedbackType.Error);
+              Alert.alert(
+                'Không thể xóa khách hàng',
+                deleteError?.message || 'Vui lòng kiểm tra dữ liệu liên quan và thử lại.',
+              );
+            }
+          },
+        },
+      ],
     );
-  }
+  }, [canDelete, customer, deleteCustomerMutation, router]);
 
-  if (!customer) {
+  const renderInfo = useCallback(() => {
+    if (!customer) return null;
+    const fields = [
+      { label: 'Mã số thuế', value: customer.taxId || customer.taxCode || 'Chưa cập nhật', separated: false },
+      { label: 'Số điện thoại', value: phone || 'Chưa cập nhật', separated: true },
+      { label: 'Email khách hàng', value: customer.email || 'Chưa cập nhật', separated: true },
+      { label: 'Địa chỉ trụ sở', value: customer.address || 'Chưa cập nhật', separated: true },
+      ...(customer.website ? [{ label: 'Website', value: customer.website, separated: true }] : []),
+      ...(customer.industry ? [{ label: 'Ngành nghề / Lĩnh vực', value: customer.industry, separated: true }] : []),
+    ];
+
     return (
-      <SafeAreaView className="flex-1 bg-slate-50 justify-center items-center p-6 gap-3" edges={['top']}>
+      <View className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        {fields.map((field) => (
+          <View key={field.label} className={field.separated ? 'mt-3 border-t border-slate-100 pt-3' : ''}>
+            <Text className="mb-1 text-xs font-semibold uppercase text-slate-400">{field.label}</Text>
+            <Text className="text-sm font-bold leading-5 text-slate-800">{field.value}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  }, [customer, phone]);
+
+  const renderRow = useCallback(({ item }: { item: CustomerRow }) => {
+    if (!customer) return null;
+    if (item.type === 'info') return renderInfo();
+    if (item.type === 'contacts') {
+      return (
+        <CustomerContactsTab
+          phone={phone}
+          email={customer.email}
+          onCall={handleCall}
+          onEmail={handleEmail}
+        />
+      );
+    }
+    if (item.type === 'opportunity') {
+      return (
+        <CustomerOpportunityCard
+          opportunity={item.value}
+          onPress={(opportunityId) => router.push(`/opportunities/${opportunityId}` as any)}
+        />
+      );
+    }
+    return (
+      <CustomerContractCard
+        contract={item.value}
+        onPress={(contractId) => router.push(`/contracts/${contractId}` as any)}
+      />
+    );
+  }, [customer, handleCall, handleEmail, phone, renderInfo, router]);
+
+  if (isLoading) return <LoadingSkeleton />;
+
+  if (isError || !customer) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center gap-3 bg-slate-50 p-6" edges={['top']}>
         <Feather name="alert-circle" size={48} color="#EF4444" />
-        <Text className="text-base font-bold text-slate-800">Không tìm thấy thông tin đối tác</Text>
+        <Text className="text-base font-bold text-slate-800">Không tải được thông tin khách hàng</Text>
+        <Text className="text-center text-xs text-slate-500">
+          {error instanceof Error ? error.message : 'Dữ liệu không tồn tại hoặc bạn không có quyền xem.'}
+        </Text>
         <TouchableOpacity
-          className="mt-2 bg-slate-900 px-5 py-3 rounded-xl min-h-[44px] justify-center"
-          onPress={() => safeGoBack(router, '/customers')}
+          className="mt-2 min-h-[48px] justify-center rounded-xl bg-orange-500 px-5 py-3"
+          onPress={() => refetch()}
+          accessibilityRole="button"
         >
-          <Text className="text-sm font-bold text-white">Quay lại danh sách</Text>
+          <Text className="text-sm font-bold text-white">Thử lại</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          className="min-h-[48px] justify-center px-5"
+          onPress={() => safeGoBack(router, '/customers')}
+          accessibilityRole="button"
+        >
+          <Text className="text-sm font-bold text-slate-600">Quay lại danh sách</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
-  const contractsList = Array.isArray(customer.contracts)
-    ? customer.contracts.filter((c) => c && typeof c === 'object')
-    : [];
-
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
-      {/* Header */}
-      <View className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-slate-200">
+    <SafeAreaView testID="customerDetailScreen" className="flex-1 bg-slate-50" edges={['top']}>
+      <View className="flex-row items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
         <TouchableOpacity
-          className="w-10 h-10 rounded-xl bg-slate-100 items-center justify-center min-w-[44px] min-h-[44px]"
+          className="h-12 w-12 items-center justify-center rounded-xl bg-slate-100"
           onPress={() => safeGoBack(router, '/customers')}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Quay lại danh sách khách hàng"
         >
           <Feather name="arrow-left" size={20} color="#0F172A" />
         </TouchableOpacity>
-        <Text className="text-[17px] font-bold text-slate-900 flex-1 text-center px-2" numberOfLines={1}>
+        <Text className="flex-1 px-2 text-center text-[17px] font-bold text-slate-900" numberOfLines={1}>
           {customer.name}
         </Text>
         <TouchableOpacity
-          className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 items-center justify-center min-w-[44px] min-h-[44px]"
+          className="h-12 w-12 items-center justify-center rounded-xl border border-orange-100 bg-orange-50"
           onPress={() => setIsEditModalOpen(true)}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Chỉnh sửa khách hàng"
         >
           <Feather name="edit-3" size={18} color={BrandColors.primary} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        contentContainerStyle={{ padding: 16, gap: 16 }}
+      <FlatList
+        data={rows}
+        keyExtractor={(item) => `${item.type}-${item.id}`}
+        renderItem={renderRow}
+        contentContainerStyle={{ padding: 16, paddingBottom: 36, flexGrow: 1 }}
+        ItemSeparatorComponent={() => <View className="h-3" />}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={BrandColors.primary} />}
-      >
-        {/* Profile Header Card */}
-        <View className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm items-center">
-          <View className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-100 items-center justify-center mb-3">
-            <Text className="text-2xl font-black text-blue-600">{(customer.name || 'C').charAt(0).toUpperCase()}</Text>
-          </View>
-          <Text className="text-lg font-bold text-slate-900 text-center mb-1">{customer.name}</Text>
-          {customer.code && (
-            <View className="bg-slate-100 px-2.5 py-0.5 rounded-md mb-3">
-              <Text className="text-xs font-bold text-slate-600">Mã KH: #{customer.code}</Text>
-            </View>
-          )}
-
-          {/* Contact & Edit Action Buttons */}
-          <View className="flex-row gap-3 mt-2 w-full">
-            {customer.phoneNumber && (
-              <TouchableOpacity
-                className="flex-1 flex-row items-center justify-center gap-2 bg-emerald-50 border border-emerald-200 py-3 rounded-xl min-h-[44px]"
-                onPress={() => handleCall(customer.phoneNumber || customer.phone)}
-                activeOpacity={0.75}
-              >
-                <Feather name="phone" size={16} color="#10B981" />
-                <Text className="text-xs font-bold text-emerald-700">Gọi điện</Text>
-              </TouchableOpacity>
-            )}
-
-            {customer.email && (
-              <TouchableOpacity
-                className="flex-1 flex-row items-center justify-center gap-2 bg-blue-50 border border-blue-200 py-3 rounded-xl min-h-[44px]"
-                onPress={() => handleEmail(customer.email)}
-                activeOpacity={0.75}
-              >
-                <Feather name="mail" size={16} color="#3B82F6" />
-                <Text className="text-xs font-bold text-blue-700">Gửi Email</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <TouchableOpacity
-            className="flex-row items-center justify-center gap-2 bg-slate-50 border border-slate-200 py-2.5 px-4 rounded-xl min-h-[44px] mt-3 w-full"
-            onPress={() => setIsEditModalOpen(true)}
-            activeOpacity={0.75}
-          >
-            <Feather name="edit" size={15} color="#475569" />
-            <Text className="text-xs font-bold text-slate-700">Chỉnh sửa thông tin đối tác</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Tab Switcher */}
-        <View className="flex-row bg-slate-200 p-1 rounded-xl">
-          <TouchableOpacity
-            className={`flex-1 py-2.5 items-center rounded-lg min-h-[40px] justify-center ${
-              activeTab === 'info' ? 'bg-white' : ''
-            }`}
-            style={activeTab === 'info' ? styles.activeTabShadow : undefined}
-            onPress={() => setActiveTab('info')}
-          >
-            <Text className={`text-xs font-bold ${activeTab === 'info' ? 'text-slate-900' : 'text-slate-500'}`}>
-              Thông tin chi tiết
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            className={`flex-1 py-2.5 items-center rounded-lg min-h-[40px] justify-center ${
-              activeTab === 'contracts' ? 'bg-white' : ''
-            }`}
-            style={activeTab === 'contracts' ? styles.activeTabShadow : undefined}
-            onPress={() => setActiveTab('contracts')}
-          >
-            <Text className={`text-xs font-bold ${activeTab === 'contracts' ? 'text-slate-900' : 'text-slate-500'}`}>
-              Hợp đồng ({contractsList.length})
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Tab Content */}
-        {activeTab === 'info' ? (
-          <View className="bg-white rounded-2xl p-4 border border-slate-200 gap-3.5 shadow-sm">
-            <View>
-              <Text className="text-xs font-semibold text-slate-400 mb-1">MÃ SỐ THUẾ</Text>
-              <Text className="text-sm font-bold text-slate-800">{customer.taxId || customer.taxCode || 'Chưa cập nhật'}</Text>
-            </View>
-
-            <View className="border-t border-slate-100 pt-3">
-              <Text className="text-xs font-semibold text-slate-400 mb-1">SỐ ĐIỆN THOẠI</Text>
-              <Text className="text-sm font-bold text-slate-800">{customer.phoneNumber || customer.phone || 'Chưa cập nhật'}</Text>
-            </View>
-
-            <View className="border-t border-slate-100 pt-3">
-              <Text className="text-xs font-semibold text-slate-400 mb-1">EMAIL KHÁCH HÀNG</Text>
-              <Text className="text-sm font-bold text-slate-800">{customer.email || 'Chưa cập nhật'}</Text>
-            </View>
-
-            <View className="border-t border-slate-100 pt-3">
-              <Text className="text-xs font-semibold text-slate-400 mb-1">ĐỊA CHỈ TRỤ SỞ</Text>
-              <Text className="text-sm font-medium text-slate-800 leading-5">{customer.address || 'Chưa cập nhật'}</Text>
-            </View>
-
-            {customer.website ? (
-              <View className="border-t border-slate-100 pt-3">
-                <Text className="text-xs font-semibold text-slate-400 mb-1">WEBSITE</Text>
-                <Text className="text-sm font-semibold text-blue-600">{customer.website}</Text>
-              </View>
-            ) : null}
-
-            {customer.industry ? (
-              <View className="border-t border-slate-100 pt-3">
-                <Text className="text-xs font-semibold text-slate-400 mb-1">NGÀNH NGHỀ / LĨNH VỰC</Text>
-                <Text className="text-sm font-medium text-slate-800">{customer.industry}</Text>
-              </View>
-            ) : null}
-          </View>
-        ) : (
-          <View className="gap-3">
-            {contractsList.length > 0 ? (
-              contractsList.map((contract, idx) => {
-                const contractId = contract.id || contract.contractCode || `contract-${idx}`;
-                const displayCode = contract.contractCode || (contract.id ? String(contract.id).slice(0, 8) : `HĐ #${idx + 1}`);
-
-                const statusKey = contract.status || '';
-                const statusConfig = CONTRACT_STATUS_CONFIG[statusKey] || {
-                  text: CONTRACT_STATUS_LABELS[statusKey] || statusKey || 'Đang thực hiện',
-                  color: '#1E40AF',
-                  bg: '#DBEAFE',
-                  border: '#BFDBFE',
-                };
-
-                return (
-                  <TouchableOpacity
-                    key={contractId}
-                    className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm gap-2"
-                    onPress={() => {
-                      if (contract.id) {
-                        router.push(`/contracts/${contract.id}` as any);
-                      } else {
-                        router.push('/contracts' as any);
-                      }
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <View className="flex-row items-center justify-between">
-                      <Text className="text-sm font-bold text-slate-900 flex-1 mr-2" numberOfLines={1}>
-                        HĐ: #{displayCode}
-                      </Text>
-                      <View
-                        className="px-2.5 py-0.5 rounded border"
-                        style={{ backgroundColor: statusConfig.bg, borderColor: statusConfig.border }}
-                      >
-                        <Text className="text-[11px] font-bold" style={{ color: statusConfig.color }}>
-                          {statusConfig.text}
-                        </Text>
-                      </View>
-                    </View>
-
-                    {contract.name ? (
-                      <Text className="text-xs font-semibold text-slate-700" numberOfLines={1}>
-                        {contract.name}
-                      </Text>
-                    ) : null}
-
-                    <View className="border-t border-slate-100 pt-2 flex-row justify-between items-center">
-                      <Text className="text-xs text-slate-500">Giá trị hợp đồng:</Text>
-                      <Text className="text-sm font-extrabold text-blue-600">
-                        {formatCurrency(contract.sellingPrice)}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })
-            ) : (
-              <View className="bg-white rounded-2xl p-8 items-center justify-center border border-slate-200 gap-2">
-                <Feather name="file-text" size={36} color="#CBD5E1" />
-                <Text className="text-sm font-bold text-slate-600">Chưa có hợp đồng nào</Text>
-                <Text className="text-xs text-slate-400 text-center">
-                  Khách hàng này hiện chưa có phụ lục hoặc hợp đồng nào trong hệ thống.
+        refreshControl={
+          <RefreshControl
+            refreshing={isFetching}
+            onRefresh={refetch}
+            colors={[BrandColors.primary]}
+            tintColor={BrandColors.primary}
+          />
+        }
+        ListHeaderComponent={
+          <View className="mb-4 gap-4">
+            <View className="items-center rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <View className="mb-3 h-16 w-16 items-center justify-center rounded-2xl border border-orange-100 bg-orange-50">
+                <Text className="text-2xl font-black text-orange-600">
+                  {(customer.name || 'C').charAt(0).toUpperCase()}
                 </Text>
               </View>
-            )}
-          </View>
-        )}
-      </ScrollView>
+              <Text className="text-center text-lg font-bold text-slate-900">{customer.name}</Text>
+              <View className="mt-2 flex-row gap-2">
+                <View className="rounded-lg bg-orange-50 px-2.5 py-1">
+                  <Text className="text-[11px] font-bold text-orange-700">
+                    {opportunities.length} cơ hội
+                  </Text>
+                </View>
+                <View className="rounded-lg bg-blue-50 px-2.5 py-1">
+                  <Text className="text-[11px] font-bold text-blue-700">{contracts.length} hợp đồng</Text>
+                </View>
+              </View>
+            </View>
 
-      {/* Edit Customer Modal */}
+            <View className="flex-row flex-wrap justify-between gap-y-2 rounded-2xl bg-slate-200 p-1.5">
+              {TABS.map((tab) => {
+                const isActive = activeTab === tab.key;
+                const count = tab.key === 'opportunities'
+                  ? opportunities.length
+                  : tab.key === 'contracts'
+                    ? contracts.length
+                    : undefined;
+                return (
+                  <TouchableOpacity
+                    key={tab.key}
+                    testID={`customerTab-${tab.key}`}
+                    className={`min-h-[48px] w-[49%] flex-row items-center justify-center rounded-xl px-2 ${
+                      isActive ? 'bg-white' : ''
+                    }`}
+                    onPress={() => setActiveTab(tab.key)}
+                    activeOpacity={0.75}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: isActive }}
+                  >
+                    <Text className={`text-xs font-bold ${isActive ? 'text-orange-600' : 'text-slate-500'}`}>
+                      {tab.label}{count !== undefined ? ` (${count})` : ''}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        }
+        ListEmptyComponent={
+          <View className="items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-12">
+            <Feather name={activeTab === 'opportunities' ? 'briefcase' : 'file-text'} size={38} color="#CBD5E1" />
+            <Text className="mt-3 text-sm font-bold text-slate-600">
+              {activeTab === 'opportunities' ? 'Chưa có cơ hội kinh doanh' : 'Chưa có hợp đồng'}
+            </Text>
+            <Text className="mt-1 text-center text-xs text-slate-400">
+              Chưa ghi nhận dữ liệu liên quan cho khách hàng này.
+            </Text>
+          </View>
+        }
+        ListFooterComponent={
+          activeTab === 'info' && canDelete ? (
+            <TouchableOpacity
+              className="mt-6 min-h-[48px] flex-row items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4"
+              onPress={confirmDelete}
+              disabled={deleteCustomerMutation.isPending}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel="Xóa khách hàng"
+              accessibilityState={{ disabled: deleteCustomerMutation.isPending }}
+            >
+              {deleteCustomerMutation.isPending ? (
+                <ActivityIndicator size="small" color="#DC2626" />
+              ) : (
+                <Feather name="trash-2" size={18} color="#DC2626" />
+              )}
+              <Text className="text-sm font-bold text-red-700">Xóa khách hàng</Text>
+            </TouchableOpacity>
+          ) : null
+        }
+      />
+
       <EditCustomerModal
         visible={isEditModalOpen}
         customer={customer}
@@ -298,14 +352,3 @@ export default function CustomerDetailScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  activeTabShadow: {
-    elevation: 1,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 1.5,
-  },
-});
-
