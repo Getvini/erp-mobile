@@ -6,6 +6,7 @@ export * from './paymentMilestoneService';
 export * from './paymentRequestService';
 export * from './financeService';
 export * from './contractService';
+export * from './contractAddendumService';
 export * from './customerService';
 export * from './opportunityService';
 export * from './quotationService';
