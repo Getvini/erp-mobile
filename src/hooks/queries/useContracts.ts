@@ -1,9 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  contractService,
-  ContractItem,
-  CreateContractPayload,
-} from '@/services/contractService';
+import { contractService, CreateContractPayload } from '@/services/contractService';
 import { queryKeys } from '@/services/queryKeys';
 
 export interface ContractListFilters {
@@ -157,5 +153,105 @@ export function useRejectProposalMutation() {
       queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.contracts.detail(variables.id) });
     },
+  });
+}
+
+/** Invalidate toàn bộ phạm vi hợp đồng (detail + list + công nợ + milestone). */
+const invalidateContractScope = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  id?: string,
+) => {
+  queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
+  if (id) {
+    queryClient.invalidateQueries({ queryKey: queryKeys.contracts.detail(id) });
+  }
+  queryClient.invalidateQueries({ queryKey: queryKeys.debts.all });
+  queryClient.invalidateQueries({ queryKey: queryKeys.paymentMilestones.all });
+};
+
+/**
+ * Xóa hợp đồng — BỊ CHẶN trên UI khi hợp đồng đã ký duyệt (Quality Gate).
+ * ⚠️ `useUpdateContractMutation` / `useUpdateContractStatusMutation` KHÔNG được cung cấp
+ * vì backend không expose `PUT /contracts/:id` và `PATCH /contracts/:id/status`.
+ */
+export function useDeleteContractMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await contractService.deleteContract(id);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data;
+    },
+    onSuccess: (_, id) => invalidateContractScope(queryClient, id),
+  });
+}
+
+/** Cập nhật nickname dịch vụ trong hợp đồng. */
+export function useUpdateContractServiceNicknameMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: { id: string; nickname: string }) => {
+      const res = await contractService.updateContractServiceNickname(payload);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+    },
+  });
+}
+
+/** Thêm mốc thanh toán vào hợp đồng. */
+export function useAddContractMilestoneMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: { id: string } & Record<string, any>) => {
+      const res = await contractService.addMilestone(payload);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data;
+    },
+    onSuccess: (_, variables) => invalidateContractScope(queryClient, variables.id),
+  });
+}
+
+/** Cập nhật mốc thanh toán của hợp đồng. */
+export function useUpdateContractMilestoneMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: { id: string } & Record<string, any>) => {
+      const res = await contractService.updateMilestone(payload);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data;
+    },
+    onSuccess: () => invalidateContractScope(queryClient),
+  });
+}
+
+/** Xóa mốc thanh toán của hợp đồng. */
+export function useDeleteContractMilestoneMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await contractService.deleteMilestone(id);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data;
+    },
+    onSuccess: () => invalidateContractScope(queryClient),
   });
 }
