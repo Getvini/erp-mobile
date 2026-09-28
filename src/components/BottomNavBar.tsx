@@ -97,7 +97,8 @@ export default function BottomNavBar() {
       {/* 4. Customers */}
       {hasCustomerAccess && (
         <TouchableOpacity
-          className="items-center justify-center flex-1 py-0.5"
+          testID="customersTab"
+          className="items-center justify-center flex-1 min-h-[48px] py-0.5"
           onPress={() => navigateTo('/customers')}
           activeOpacity={0.7}
         >
@@ -114,7 +115,7 @@ export default function BottomNavBar() {
 
       {/* 5. Profile */}
       <TouchableOpacity
-        className="items-center justify-center flex-1 py-0.5"
+        className="items-center justify-center flex-1 min-h-[48px] py-0.5"
         onPress={() => navigateTo('/profile')}
         activeOpacity={0.7}
       >

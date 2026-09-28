@@ -33,6 +33,15 @@ export const canAccessCustomers = (role?: string): boolean => {
 };
 
 /**
+ * Destructive customer actions are restricted to roles with full tenant-wide
+ * CRM visibility. BD users keep scoped read/update access to their own data.
+ */
+export const canDeleteCustomers = (role?: string): boolean => {
+  if (!role) return false;
+  return ['ADMIN', 'BOD', 'ADMIN_SALE'].includes(role);
+};
+
+/**
  * Check if the user role can access Contracts module.
  * Strictly mirrors: { path: '/contracts', roles: ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE'] } in erp-UI/Sidebar.jsx
  */

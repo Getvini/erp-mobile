@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -17,6 +17,7 @@ import { useUpdateCustomerMutation } from '@/hooks/queries/useCustomers';
 import { CustomerItem } from '@/services/customerService';
 import { BrandColors } from '@/constants/colors';
 import { fetchTaxInfo } from '@/utils/tax';
+import { EMAIL_REGEX, PHONE_REGEX, TAX_ID_REGEX } from '@/utils/validators';
 
 interface EditCustomerModalProps {
   visible: boolean;
@@ -44,7 +45,7 @@ export default function EditCustomerModal({
   const [isFetchingTax, setIsFetchingTax] = useState(false);
   const [taxError, setTaxError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const resetForm = useCallback(() => {
     if (customer) {
       setForm({
         name: customer.name || '',
@@ -55,13 +56,12 @@ export default function EditCustomerModal({
       });
       setTaxError(null);
     }
-  }, [customer, visible]);
+  }, [customer]);
 
   // Tự động kiểm tra MST và điền tên doanh nghiệp & địa chỉ
   useEffect(() => {
     const cleanTaxId = form.taxId?.replace(/[\s-]/g, '');
     if (!cleanTaxId) {
-      setTaxError(null);
       return;
     }
 
@@ -69,10 +69,8 @@ export default function EditCustomerModal({
       const timer = setTimeout(async () => {
         setIsFetchingTax(true);
         setTaxError(null);
-        console.log('[Tax Lookup Edit] Tra cứu mã số thuế:', cleanTaxId);
         try {
           const info = await fetchTaxInfo(cleanTaxId);
-          console.log('[Tax Lookup Edit] Kết quả tra cứu:', info);
           if (info && info.name) {
             setForm((prev) => ({
               ...prev,
@@ -82,11 +80,9 @@ export default function EditCustomerModal({
             setTaxError(null);
             Haptic.notificationAsync(Haptic.NotificationFeedbackType.Success);
           } else {
-            console.log('[Tax Lookup Edit] Không tìm thấy thông tin cho MST:', cleanTaxId);
             setTaxError('Không tra cứu được mã số thuế');
           }
-        } catch (err) {
-          console.log('[Tax Lookup Edit] Lỗi khi tra cứu mã số thuế:', err);
+        } catch {
           setTaxError('Không tra cứu được mã số thuế');
         } finally {
           setIsFetchingTax(false);
@@ -94,12 +90,11 @@ export default function EditCustomerModal({
       }, 500);
 
       return () => clearTimeout(timer);
-    } else {
-      setTaxError(null);
     }
   }, [form.taxId, visible]);
 
   const handleChange = (key: keyof typeof form, val: string) => {
+    if (key === 'taxId') setTaxError(null);
     setForm((prev) => ({ ...prev, [key]: val }));
   };
 
@@ -129,14 +124,28 @@ export default function EditCustomerModal({
       return;
     }
 
+    const phone = form.phoneNumber.trim().replace(/\s+/g, '');
+    if (!PHONE_REGEX.test(phone)) {
+      Alert.alert('Lỗi nhập liệu', 'Số điện thoại phải đúng định dạng Việt Nam, ví dụ 0912345678 hoặc +84912345678.');
+      return;
+    }
+    if (!EMAIL_REGEX.test(form.email.trim())) {
+      Alert.alert('Lỗi nhập liệu', 'Email liên hệ không đúng định dạng.');
+      return;
+    }
+    if (form.taxId.trim() && !TAX_ID_REGEX.test(form.taxId.trim())) {
+      Alert.alert('Lỗi nhập liệu', 'Mã số thuế phải gồm 10 số hoặc dạng 0101234567-001.');
+      return;
+    }
+
     try {
       Haptic.impactAsync(Haptic.ImpactFeedbackStyle.Medium);
       await updateCustomerMutation.mutateAsync({
         id: customer.id,
         payload: {
           name: form.name.trim(),
-          phoneNumber: form.phoneNumber.trim(),
-          phone: form.phoneNumber.trim(),
+          phoneNumber: phone,
+          phone,
           email: form.email.trim(),
           taxId: form.taxId.trim() || undefined,
           taxCode: form.taxId.trim() || undefined,
@@ -155,7 +164,7 @@ export default function EditCustomerModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} onShow={resetForm}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1 justify-end bg-black/50"
@@ -170,7 +179,7 @@ export default function EditCustomerModal({
               <Text className="text-lg font-bold text-slate-900">Chỉnh Sửa Khách Hàng</Text>
             </View>
             <TouchableOpacity
-              className="w-9 h-9 rounded-xl bg-slate-100 items-center justify-center min-w-[36px] min-h-[36px]"
+              className="w-12 h-12 rounded-xl bg-slate-100 items-center justify-center"
               onPress={onClose}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
@@ -280,7 +289,7 @@ export default function EditCustomerModal({
             </TouchableOpacity>
 
             <TouchableOpacity
-              className="flex-1 py-3.5 rounded-xl bg-blue-600 items-center min-h-[48px] justify-center"
+              className="flex-1 py-3.5 rounded-xl bg-primary items-center min-h-[48px] justify-center"
               onPress={handleSubmit}
               disabled={updateCustomerMutation.isPending}
               activeOpacity={0.8}

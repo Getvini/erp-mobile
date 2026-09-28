@@ -16,6 +16,7 @@ import * as Haptic from 'expo-haptics';
 import { useCreateCustomerMutation } from '@/hooks/queries/useCustomers';
 import { BrandColors } from '@/constants/colors';
 import { fetchTaxInfo } from '@/utils/tax';
+import { EMAIL_REGEX, IDENTIFIER_REGEX, PHONE_REGEX, TAX_ID_REGEX } from '@/utils/validators';
 
 interface CreateCustomerModalProps {
   visible: boolean;
@@ -32,7 +33,6 @@ export default function CreateCustomerModal({ visible, onClose, onSuccess }: Cre
     taxId: '',
     phoneNumber: '',
     email: '',
-    contactPerson: '',
     address: '',
   });
 
@@ -43,7 +43,6 @@ export default function CreateCustomerModal({ visible, onClose, onSuccess }: Cre
   useEffect(() => {
     const cleanTaxId = form.taxId?.replace(/[\s-]/g, '');
     if (!cleanTaxId) {
-      setTaxError(null);
       return;
     }
 
@@ -51,10 +50,8 @@ export default function CreateCustomerModal({ visible, onClose, onSuccess }: Cre
       const timer = setTimeout(async () => {
         setIsFetchingTax(true);
         setTaxError(null);
-        console.log('[Tax Lookup Create] Tra cứu mã số thuế:', cleanTaxId);
         try {
           const info = await fetchTaxInfo(cleanTaxId);
-          console.log('[Tax Lookup Create] Kết quả tra cứu:', info);
           if (info && info.name) {
             setForm((prev) => ({
               ...prev,
@@ -64,11 +61,9 @@ export default function CreateCustomerModal({ visible, onClose, onSuccess }: Cre
             setTaxError(null);
             Haptic.notificationAsync(Haptic.NotificationFeedbackType.Success);
           } else {
-            console.log('[Tax Lookup Create] Không tìm thấy thông tin cho MST:', cleanTaxId);
             setTaxError('Không tra cứu được mã số thuế');
           }
-        } catch (err) {
-          console.log('[Tax Lookup Create] Lỗi khi tra cứu mã số thuế:', err);
+        } catch {
           setTaxError('Không tra cứu được mã số thuế');
         } finally {
           setIsFetchingTax(false);
@@ -76,12 +71,11 @@ export default function CreateCustomerModal({ visible, onClose, onSuccess }: Cre
       }, 500);
 
       return () => clearTimeout(timer);
-    } else {
-      setTaxError(null);
     }
   }, [form.taxId, visible]);
 
   const handleChange = (key: keyof typeof form, val: string) => {
+    if (key === 'taxId') setTaxError(null);
     setForm((prev) => ({ ...prev, [key]: val }));
   };
 
@@ -91,15 +85,32 @@ export default function CreateCustomerModal({ visible, onClose, onSuccess }: Cre
       return;
     }
 
+    const phone = form.phoneNumber.trim().replace(/\s+/g, '');
+    if (phone && !PHONE_REGEX.test(phone)) {
+      Alert.alert('Lỗi nhập liệu', 'Số điện thoại phải đúng định dạng Việt Nam, ví dụ 0912345678 hoặc +84912345678.');
+      return;
+    }
+    if (form.email.trim() && !EMAIL_REGEX.test(form.email.trim())) {
+      Alert.alert('Lỗi nhập liệu', 'Email liên hệ không đúng định dạng.');
+      return;
+    }
+    if (form.taxId.trim() && !TAX_ID_REGEX.test(form.taxId.trim())) {
+      Alert.alert('Lỗi nhập liệu', 'Mã số thuế phải gồm 10 số hoặc dạng 0101234567-001.');
+      return;
+    }
+    if (form.code.trim() && !IDENTIFIER_REGEX.test(form.code.trim())) {
+      Alert.alert('Lỗi nhập liệu', 'Mã đối tác phải gồm 3-30 ký tự in hoa, số, dấu gạch ngang hoặc gạch dưới.');
+      return;
+    }
+
     try {
       Haptic.impactAsync(Haptic.ImpactFeedbackStyle.Medium);
       await createCustomerMutation.mutateAsync({
         name: form.name.trim(),
         code: form.code.trim() || undefined,
         taxId: form.taxId.trim() || undefined,
-        phoneNumber: form.phoneNumber.trim() || undefined,
+        phoneNumber: phone || undefined,
         email: form.email.trim() || undefined,
-        contactPerson: form.contactPerson.trim() || undefined,
         address: form.address.trim() || undefined,
       });
 
@@ -111,7 +122,6 @@ export default function CreateCustomerModal({ visible, onClose, onSuccess }: Cre
         taxId: '',
         phoneNumber: '',
         email: '',
-        contactPerson: '',
         address: '',
       });
       setTaxError(null);
@@ -139,7 +149,7 @@ export default function CreateCustomerModal({ visible, onClose, onSuccess }: Cre
               <Text className="text-lg font-bold text-slate-900">Thêm Khách hàng mới</Text>
             </View>
             <TouchableOpacity
-              className="w-9 h-9 rounded-xl bg-slate-100 items-center justify-center"
+              className="w-12 h-12 rounded-xl bg-slate-100 items-center justify-center"
               onPress={onClose}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
@@ -245,7 +255,7 @@ export default function CreateCustomerModal({ visible, onClose, onSuccess }: Cre
             </TouchableOpacity>
 
             <TouchableOpacity
-              className="flex-1 py-3.5 rounded-xl bg-blue-600 items-center min-h-[48px] justify-center"
+              className="flex-1 py-3.5 rounded-xl bg-primary items-center min-h-[48px] justify-center"
               onPress={handleSubmit}
               disabled={createCustomerMutation.isPending}
               activeOpacity={0.8}
