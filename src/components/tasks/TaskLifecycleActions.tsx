@@ -134,7 +134,7 @@ export default function TaskLifecycleActions({
   const canRespondStaffing = isPendingStaffingRequest && canRespondStaffingRole;
   const canMarkNotPurchased =
     isVideoDemoTask && status === 'INTERNAL_COMPLETED' && NOT_PURCHASE_ROLES.includes(role);
-  const canDeleteTask = isAccount || isAdminOverride;
+  const canDeleteTask =  isAdminOverride;
 
   const isPending =
     startTaskMutation.isPending ||
@@ -273,7 +273,7 @@ export default function TaskLifecycleActions({
   return (
     <>
       <View className="bg-white rounded-2xl p-4 border border-slate-200 gap-3">
-        <View className="flex-row items-center gap-2.5">
+        {/* <View className="flex-row items-center gap-2.5">
           <View className="w-8 h-8 rounded-lg bg-blue-50 items-center justify-center">
             <Feather name="zap" size={16} color="#2563EB" />
           </View>
@@ -283,7 +283,7 @@ export default function TaskLifecycleActions({
               Vòng đời: bắt đầu → nộp kết quả → gửi duyệt
             </Text>
           </View>
-        </View>
+        </View> */}
 
         {/* Banner khóa task cha khi còn công việc con chưa hoàn tất */}
         {isParentBlocked && (
@@ -406,7 +406,7 @@ export default function TaskLifecycleActions({
           )}
 
           {/* 7. Xóa công việc — Account/ADMIN */}
-          {canDeleteTask && (
+          {/* {canDeleteTask && (
             <TouchableOpacity
               className={`${buttonBase} bg-red-50 border border-red-200`}
               onPress={handleDeleteTask}
@@ -420,7 +420,7 @@ export default function TaskLifecycleActions({
               )}
               <Text className="text-xs font-bold text-red-600">Xóa công việc</Text>
             </TouchableOpacity>
-          )}
+          )} */}
         </View>
 
         {/* Lý do không thể bắt đầu */}

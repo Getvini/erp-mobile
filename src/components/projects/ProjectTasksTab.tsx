@@ -330,7 +330,7 @@ export default function ProjectTasksTab({
       )}
 
       {/* Top Action Bar */}
-      <View className="flex-row items-center justify-between">
+     <View className="gap-2">
         <Text className="text-[15px] font-bold text-slate-950">Hạng mục công việc ({tasks.length})</Text>
         {!isPendingConfirmation && isPmOrAdmin && (
           <View className="flex-row gap-1.5">

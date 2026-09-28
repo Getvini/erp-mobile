@@ -906,30 +906,11 @@ export default function TaskAssignModal({
               )}
 
               {/* Support Team Request Toggle Banner */}
-              <View className="flex-row justify-between items-center">
-                <Text className="text-xs font-bold text-slate-700 mt-3 mb-1.5">
-                  {isTeamAssignment
-                    ? '2. Chọn Team hỗ trợ'
-                    : performerType === 'INTERNAL'
-                    ? `2. Người thực hiện (${teamMembers.length} thành viên)`
-                    : '2. Đối tác Vendor'}
-                </Text>
-
-                {/* {isSupportMode && (
-                  <TouchableOpacity
-                    className="flex-row items-center gap-1.5 py-1"
-                    onPress={handleToggleTeamAssignment}
-                    activeOpacity={0.7}
-                  >
-                    <Feather
-                      name={isTeamAssignment ? 'check-square' : 'square'}
-                      size={16}
-                      color={BrandColors.primary}
-                    />
-                    <Text className="text-[11px] font-bold text-primary">Nhờ hỗ trợ từ team khác</Text>
-                  </TouchableOpacity>
-                )} */}
-              </View>
+              <Text className="text-xs font-bold text-slate-700 mt-3 mb-1.5">
+                {performerType === 'INTERNAL'
+                  ? `2. Người thực hiện (${teamMembers.length} thành viên)`
+                  : '2. Đối tác Vendor'}
+              </Text>
 
               {/* Assignee / Team Selection */}
               {isTeamAssignment ? (
@@ -984,6 +965,8 @@ export default function TaskAssignModal({
                         const uId = member.user?.id;
                         if (!uId) return null;
                         const isSelected = selectedAssigneeId === uId;
+                        const roleLabel = TEAM_MEMBER_ROLE_LABELS[member.role] || member.role;
+
 
                         return (
                           <TouchableOpacity
@@ -1000,11 +983,11 @@ export default function TaskAssignModal({
                               </Text>
                             </View>
 
-                            <View className="flex-1">
+                            <View className="flex-1 justify-center">
                               <Text className="text-[13px] font-bold text-slate-900">{member.user?.fullName}</Text>
-                              <Text className="text-[11px] text-slate-500">
-                                {TEAM_MEMBER_ROLE_LABELS[member.role] || member.role}
-                              </Text>
+                              {roleLabel ? (
+                                <Text className="text-[11px] text-slate-500">{roleLabel}</Text>
+                              ) : null}
                             </View>
 
                             {isSelected && (
