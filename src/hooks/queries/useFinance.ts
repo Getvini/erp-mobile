@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   financeService,
   ContractDebtGroup,
+  PaymentPeriod,
 } from '@/services/financeService';
 import { queryKeys } from '@/services/queryKeys';
 
@@ -17,6 +18,55 @@ export function useContractDebtsQuery() {
         throw new Error(res.error);
       }
       return res.data || [];
+    },
+  });
+}
+
+export function usePaymentPeriodDetailQuery(id?: string) {
+  return useQuery({
+    queryKey: queryKeys.finance.paymentPeriod(id || ''),
+    queryFn: async (): Promise<PaymentPeriod> => {
+      if (!id) throw new Error('Thiếu ID đợt thanh toán');
+      const res = await financeService.getPaymentPeriodById(id);
+      if (res.error || !res.data) {
+        throw new Error(res.error || 'Không tìm thấy đợt thanh toán');
+      }
+      return res.data;
+    },
+    enabled: Boolean(id),
+  });
+}
+
+export function useApprovePaymentPeriodMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await financeService.approvePaymentPeriod(id);
+      if (!res.success) throw new Error(res.error || 'Không thể phê duyệt đợt thanh toán');
+      return res;
+    },
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.finance.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.paymentMilestones.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.finance.paymentPeriod(id) });
+    },
+  });
+}
+
+export function useRejectPaymentPeriodMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason?: string }) => {
+      const res = await financeService.rejectPaymentPeriod(id, reason);
+      if (!res.success) throw new Error(res.error || 'Không thể từ chối đợt thanh toán');
+      return res;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.finance.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.paymentMilestones.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.finance.paymentPeriod(variables.id) });
     },
   });
 }

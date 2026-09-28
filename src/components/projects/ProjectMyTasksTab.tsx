@@ -2,12 +2,10 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { TaskDetail, TASK_STATUS_CONFIG } from '@/services/taskService';
-import { apiService } from '@/services/api';
-import { queryKeys } from '@/services/queryKeys';
 import { BrandColors } from '@/constants/colors';
 import { formatDateToDDMMYYYY } from '@/utils/formatters';
+import { useBulkStartTasksMutation } from '@/hooks/queries/useTasks';
 
 /**
  * Tab "Công việc của tôi" (P1.11) — mirror `TaskTable bulkAction="start"` của Web:
@@ -17,6 +15,7 @@ const STARTABLE_TASK_STATUS = 'NOT_STARTED';
 const PROJECT_STARTABLE_STATUSES = ['IN_PROGRESS', 'CONFIRMED'];
 
 interface ProjectMyTasksTabProps {
+  projectId: string;
   tasks: TaskDetail[];
   isLoading?: boolean;
   /** ID người dùng hiện tại — dùng để lọc việc được phân công cho mình. */
@@ -27,6 +26,7 @@ interface ProjectMyTasksTabProps {
 }
 
 export default function ProjectMyTasksTab({
+  projectId,
   tasks,
   isLoading = false,
   currentUserId,
@@ -34,7 +34,6 @@ export default function ProjectMyTasksTab({
   onChanged,
 }: ProjectMyTasksTabProps) {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
 
@@ -75,23 +74,7 @@ export default function ProjectMyTasksTab({
     });
   }
 
-  /**
-   * KHÔNG có `useBulkStartTasksMutation` trong `@/hooks/queries/useTasks` và `taskService`
-   * cũng chưa có `bulkStartTasks` (không được phép sửa 2 file đó), nên dùng mutation nội bộ
-   * gọi đúng endpoint đang dùng ở Web: `PATCH /tasks/:id/start`.
-   */
-  const bulkStartMutation = useMutation({
-    mutationFn: async (taskIds: string[]) => {
-      const results = await Promise.all(taskIds.map((id) => apiService.patch(`/tasks/${id}/start`)));
-      const failed = results.find((r: any) => r?.error);
-      if (failed) throw new Error((failed as any).error);
-      return taskIds.length;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
-    },
-  });
+  const bulkStartMutation = useBulkStartTasksMutation();
 
   const toggleSelectTask = (taskId: string) => {
     setSelectedTaskIds((prev) =>
@@ -110,8 +93,8 @@ export default function ProjectMyTasksTab({
           text: 'Bắt đầu',
           onPress: async () => {
             try {
-              const count = await bulkStartMutation.mutateAsync(selectedTaskIds);
-              Alert.alert('Thành công', `Đã bắt đầu ${count} công việc.`);
+              await bulkStartMutation.mutateAsync({ projectId, taskIds: selectedTaskIds });
+              Alert.alert('Thành công', `Đã bắt đầu ${selectedTaskIds.length} công việc.`);
               setSelectedTaskIds([]);
               setIsSelectMode(false);
               onChanged?.();

@@ -39,7 +39,6 @@ import {
   useReturnSupportMutation,
   useRequestReturnSupportMutation,
   useSendTaskReminderMutation,
-  useRequestReworkMutation,
 } from '@/hooks/queries/useTasks';
 
 const formatDateTimeStr = (dateStr?: string) => {
@@ -96,7 +95,6 @@ export default function TaskDetailScreen() {
   const returnSupportMutation = useReturnSupportMutation();
   const requestReturnSupportMutation = useRequestReturnSupportMutation();
   const sendTaskReminderMutation = useSendTaskReminderMutation();
-  const requestReworkMutation = useRequestReworkMutation();
 
   const isActionLoading =
     updateTaskMutation.isPending ||
@@ -105,8 +103,7 @@ export default function TaskDetailScreen() {
     respondToSupportMutation.isPending ||
     returnSupportMutation.isPending ||
     requestReturnSupportMutation.isPending ||
-    sendTaskReminderMutation.isPending ||
-    requestReworkMutation.isPending;
+    sendTaskReminderMutation.isPending;
 
   const isUpdatingDescription = updateTaskMutation.isPending;
 
@@ -935,6 +932,7 @@ export default function TaskDetailScreen() {
 
       {/* Modals */}
       <ReworkTaskModal
+        key={`${task.id}:${isReworkModalOpen ? 'open' : 'closed'}`}
         visible={isReworkModalOpen}
         onClose={() => setIsReworkModalOpen(false)}
         task={task}

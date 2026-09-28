@@ -15,11 +15,9 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as Haptic from 'expo-haptics';
-import { useQuery } from '@tanstack/react-query';
-import { apiService } from '@/services/api';
-import { queryKeys } from '@/services/queryKeys';
 import { useUpsertVendorJobMutation } from '@/hooks/queries/useVendors';
-import { VendorJobItem, normalizeVendorList } from '@/services/vendorService';
+import { useJobsQuery } from '@/hooks/queries/useJobs';
+import { VendorJobItem } from '@/services/vendorService';
 import { BrandColors } from '@/constants/colors';
 import { formatNumberInput, formatVND, parseNumberInput } from '@/utils/formatters';
 
@@ -114,20 +112,7 @@ function VendorJobSheet({
     [dragY, onClose],
   );
 
-  // TODO(jobs-module): Module Jobs đang do subagent khác xây dựng nên hook
-  // `useJobsQuery` chưa tồn tại. Tạm gọi thẳng `apiService.get('/jobs')` với
-  // khoá `queryKeys.jobs.all`; khi hook chính thức có sẵn thì thay thế khối này.
-  const jobsQuery = useQuery({
-    queryKey: queryKeys.jobs.all,
-    queryFn: async (): Promise<JobListItem[]> => {
-      const res = await apiService.get<JobListItem[]>('/jobs');
-      if (res.error) {
-        throw new Error(res.error);
-      }
-      return normalizeVendorList<JobListItem>(res.data);
-    },
-    enabled: !isEditing,
-  });
+  const jobsQuery = useJobsQuery({}, { enabled: !isEditing });
 
   const availableJobs = useMemo(() => {
     const jobs = jobsQuery.data ?? [];

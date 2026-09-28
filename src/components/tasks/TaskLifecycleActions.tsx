@@ -1,16 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
-import { taskService, type TaskDetail } from '@/services/taskService';
-import { queryKeys } from '@/services/queryKeys';
+import { type TaskDetail } from '@/services/taskService';
 import {
   useStartTaskMutation,
   useSubmitResultForReviewMutation,
   useRequestTaskStaffingMutation,
   useRespondTaskStaffingMutation,
   useDeleteTaskMutation,
+  useCustomerNotPurchaseMutation,
 } from '@/hooks/queries/useTasks';
 import {
   STARTABLE,
@@ -55,7 +54,6 @@ export default function TaskLifecycleActions({
   onDeleted,
 }: TaskLifecycleActionsProps) {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
   const [isStaffingModalOpen, setIsStaffingModalOpen] = useState(false);
   const [staffingNote, setStaffingNote] = useState('');
   const [noteError, setNoteError] = useState<string | null>(null);
@@ -65,22 +63,7 @@ export default function TaskLifecycleActions({
   const requestTaskStaffingMutation = useRequestTaskStaffingMutation();
   const respondTaskStaffingMutation = useRespondTaskStaffingMutation();
   const deleteTaskMutation = useDeleteTaskMutation();
-
-  /**
-   * "Khách không mua" chưa có hook riêng trong useTasks.ts
-   * ⇒ dùng useMutation tại chỗ gọi taskService.customerNotPurchase (KHÔNG sửa useTasks.ts).
-   */
-  const customerNotPurchaseMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await taskService.customerNotPurchase(id);
-      if (res.error) throw new Error(res.error);
-      return res.data;
-    },
-    onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.detail(id) });
-    },
-  });
+  const customerNotPurchaseMutation = useCustomerNotPurchaseMutation();
 
   const currentUserId = user?.id;
   const role = String(user?.role || '').toUpperCase();
@@ -217,7 +200,10 @@ export default function TaskLifecycleActions({
         text: 'Xác nhận',
         onPress: async () => {
           try {
-            await customerNotPurchaseMutation.mutateAsync(task.id);
+            await customerNotPurchaseMutation.mutateAsync({
+              id: task.id,
+              projectId: resolvedProjectId,
+            });
             Alert.alert('Thành công', 'Đã đánh dấu khách hàng không mua');
             onChanged();
           } catch (err: any) {

@@ -13,6 +13,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { uploadToCloudinary } from '@/services/cloudinaryService';
+import { useRequestReworkMutation } from '@/hooks/queries/useTasks';
 import { isValidUrl, normalizeUrl } from '@/utils/validators';
 
 const ITEM_HEIGHT = 38;
@@ -123,17 +124,6 @@ const CalendarPickerModal: React.FC<{
   const [viewMonth, setViewMonth] = useState<number>(initial.getMonth());
   const [selectedHour, setSelectedHour] = useState<number>(initial.getHours());
   const [selectedMin, setSelectedMin] = useState<number>(initial.getMinutes());
-
-  useEffect(() => {
-    if (visible) {
-      const d = parseInitialDate();
-      setSelectedDate(d);
-      setViewYear(d.getFullYear());
-      setViewMonth(d.getMonth());
-      setSelectedHour(d.getHours());
-      setSelectedMin(d.getMinutes());
-    }
-  }, [visible, currentDateStr]);
 
   const monthNames = [
     'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
@@ -422,6 +412,15 @@ interface ReworkTaskModalProps {
   onSuccess: () => void;
 }
 
+const getDefaultReworkDeadline = (task: any) => {
+  const date = task?.dueDate ? new Date(task.dueDate) : new Date();
+  if (!task?.dueDate) date.setDate(date.getDate() + 2);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day} 17:00`;
+};
+
 export default function ReworkTaskModal({
   visible,
   onClose,
@@ -429,35 +428,13 @@ export default function ReworkTaskModal({
   onSuccess,
 }: ReworkTaskModalProps) {
   const [reworkReason, setReworkReason] = useState('');
-  const [deadlineAt, setDeadlineAt] = useState('');
+  const [deadlineAt, setDeadlineAt] = useState(() => getDefaultReworkDeadline(task));
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const requestReworkMutation = useRequestReworkMutation();
 
   const [attachments, setAttachments] = useState<any[]>([]);
   const [linkInput, setLinkInput] = useState('');
   const [isUploading, setIsUploading] = useState(false);
-
-  useEffect(() => {
-    if (visible && task) {
-      setReworkReason('');
-      setAttachments([]);
-      setLinkInput('');
-      if (task.dueDate) {
-        const d = new Date(task.dueDate);
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        setDeadlineAt(`${y}-${m}-${day} 17:00`);
-      } else {
-        const d = new Date();
-        d.setDate(d.getDate() + 2);
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        setDeadlineAt(`${y}-${m}-${day} 17:00`);
-      }
-    }
-  }, [visible, task]);
 
   const handlePickFile = async () => {
     try {
@@ -521,14 +498,19 @@ export default function ReworkTaskModal({
     }
 
     try {
-      setIsSubmitting(true);
-
+      await requestReworkMutation.mutateAsync({
+        id: task.id,
+        payload: {
+          feedback: reworkReason.trim(),
+          deadlineAt: deadlineAt.trim(),
+          attachments,
+          projectId: task.project?.id || task.projectId,
+        },
+      });
       Alert.alert('Thành công', 'Đã tạo yêu cầu làm lại thành công!');
-      setIsSubmitting(false);
       onClose();
       onSuccess();
     } catch (err: any) {
-      setIsSubmitting(false);
       Alert.alert('Lỗi', err?.message || 'Có lỗi xảy ra khi tạo yêu cầu sửa lại.');
     }
   };
@@ -669,19 +651,19 @@ export default function ReworkTaskModal({
               <TouchableOpacity
                 className="flex-1 py-3.5 rounded-xl border border-border items-center bg-surface"
                 onPress={onClose}
-                disabled={isSubmitting}
+                disabled={requestReworkMutation.isPending}
               >
                 <Text className="text-sm font-bold text-slate-500">Hủy</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 className={`flex-1 py-3.5 rounded-xl bg-primary items-center ${
-                  isSubmitting ? 'opacity-60' : ''
+                  requestReworkMutation.isPending ? 'opacity-60' : ''
                 }`}
                 onPress={handleSubmit}
-                disabled={isSubmitting}
+                disabled={requestReworkMutation.isPending}
               >
-                {isSubmitting ? (
+                {requestReworkMutation.isPending ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <Text className="text-sm font-bold text-white">Gửi yêu cầu</Text>
@@ -693,13 +675,15 @@ export default function ReworkTaskModal({
       </Modal>
 
       {/* Calendar Picker Modal */}
-      <CalendarPickerModal
-        visible={showDatePicker}
-        title="Chọn Deadline Mới"
-        currentDateStr={deadlineAt}
-        onSelectDate={(formattedStr) => setDeadlineAt(formattedStr)}
-        onClose={() => setShowDatePicker(false)}
-      />
+      {showDatePicker && (
+        <CalendarPickerModal
+          visible
+          title="Chọn Deadline Mới"
+          currentDateStr={deadlineAt}
+          onSelectDate={(formattedStr) => setDeadlineAt(formattedStr)}
+          onClose={() => setShowDatePicker(false)}
+        />
+      )}
     </>
   );
 }

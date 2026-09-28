@@ -7,6 +7,7 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
+  ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -29,7 +30,6 @@ const STATUS_TABS: Array<{ id: StatusFilter; label: string }> = [
   { id: 'APPROVED', label: 'Đã duyệt' },
   { id: 'REJECTED', label: 'Từ chối' },
   { id: 'PROCESSED', label: 'Đã xử lý' },
-  { id: 'CANCELLED', label: 'Đã hủy' },
 ];
 
 export default function AcceptancesScreen() {
@@ -187,22 +187,46 @@ export default function AcceptancesScreen() {
       </View>
 
       {/* Filter Tabs */}
-      <View className="flex-row px-4 py-2 bg-white border-b border-[#F1F5F9] gap-2">
-        {STATUS_TABS.map((tab) => {
-          const isActive = activeTab === tab.id;
-          return (
-            <TouchableOpacity
-              key={tab.id}
-              className={'px-3 py-1.5 rounded-lg ' + (isActive ? 'bg-primary' : 'bg-[#F1F5F9]')}
-              onPress={() => setActiveTab(tab.id)}
-              activeOpacity={0.75}
-            >
-              <Text className={'text-xs ' + (isActive ? 'text-white font-bold' : 'text-[#64748B] font-semibold')}>
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+      <View className="bg-white border-b border-[#F1F5F9]">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            gap: 8,
+            alignItems: 'center',
+          }}
+        >
+          {STATUS_TABS.map((tab) => {
+            const isActive = activeTab === tab.id;
+
+            return (
+              <TouchableOpacity
+                key={tab.id}
+                className={
+                  'min-h-[32px] px-3 rounded-lg items-center justify-center ' +
+                  (isActive ? 'bg-primary' : 'bg-[#F1F5F9]')
+                }
+                onPress={() => setActiveTab(tab.id)}
+                activeOpacity={0.75}
+                style={{ flexShrink: 0 }}
+              >
+                <Text
+                  numberOfLines={1}
+                  className={
+                    'text-xs leading-4 ' +
+                    (isActive
+                      ? 'text-white font-bold'
+                      : 'text-[#64748B] font-semibold')
+                  }
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* Content List */}

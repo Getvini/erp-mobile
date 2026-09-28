@@ -132,6 +132,8 @@ export const queryKeys = {
   finance: {
     all: ['finance'] as const,
     contractDebts: () => [...queryKeys.finance.all, 'contract-debts'] as const,
+    paymentPeriods: () => [...queryKeys.finance.all, 'payment-periods'] as const,
+    paymentPeriod: (id: string) => [...queryKeys.finance.paymentPeriods(), id] as const,
   },
 
   // Payment Milestones / Đợt thanh toán

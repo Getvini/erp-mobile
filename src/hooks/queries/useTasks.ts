@@ -896,6 +896,24 @@ export function useBulkStartTasksMutation() {
   });
 }
 
+/** Đánh dấu khách hàng không mua (PATCH /tasks/:id/customer-not-purchase) */
+export function useCustomerNotPurchaseMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id }: { id: string; projectId?: string }) => {
+      const res = await taskService.customerNotPurchase(id);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data;
+    },
+    onSuccess: (_, variables) => {
+      invalidateTaskRelated(queryClient, { id: variables.id, projectId: variables.projectId });
+    },
+  });
+}
+
 /** Xóa công việc (DELETE /tasks/:id) */
 export function useDeleteTaskMutation() {
   const queryClient = useQueryClient();

@@ -290,7 +290,7 @@ export default function CustomersScreen() {
         />
       )}
 
-      <TouchableOpacity
+      {/* <TouchableOpacity
         testID="createCustomerButton"
         className="absolute bottom-[84px] right-4 min-h-[56px] flex-row items-center justify-center gap-2 rounded-2xl bg-primary px-5 shadow-lg"
         onPress={() => setIsModalOpen(true)}
@@ -300,7 +300,7 @@ export default function CustomersScreen() {
       >
         <Feather name="plus" size={20} color="#FFFFFF" />
         <Text className="text-sm font-extrabold text-white">Thêm khách hàng</Text>
-      </TouchableOpacity>
+      </TouchableOpacity> */}
 
       {/* Create Modal */}
       <CreateCustomerModal

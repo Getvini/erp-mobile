@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
 import * as Haptic from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ServiceFormModal from '@/components/catalog/ServiceFormModal';
@@ -22,8 +21,7 @@ import {
   useRemoveServiceJobMutation,
   useServiceDetailQuery,
 } from '@/hooks/queries/useServices';
-import { apiService } from '@/services/api';
-import { queryKeys } from '@/services/queryKeys';
+import { useJobsQuery } from '@/hooks/queries/useJobs';
 import type { JobReference, ServiceJobItem } from '@/services/catalogService';
 import { BrandColors } from '@/constants/colors';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -31,16 +29,6 @@ import { canAccessServiceCatalog, canBulkDeleteServices } from '@/utils/rbac';
 import { formatVND } from '@/utils/formatters';
 import { computeServiceCost } from '@/utils/catalogPricing';
 import { safeGoBack } from '@/utils/navigation';
-
-/** Phòng thủ: `GET /jobs` trả mảng thô, nhưng vẫn chấp nhận `{ data: [...] }`. */
-function normalizeJobList(response: unknown): JobReference[] {
-  if (Array.isArray(response)) return response as JobReference[];
-  if (response && typeof response === 'object') {
-    const body = response as { data?: unknown };
-    if (Array.isArray(body.data)) return body.data as JobReference[];
-  }
-  return [];
-}
 
 export default function ServiceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -69,18 +57,10 @@ export default function ServiceDetailScreen() {
   const addJobMutation = useAddServiceJobMutation();
   const removeJobMutation = useRemoveServiceJobMutation();
 
-  const { data: jobs = [], isLoading: isLoadingJobs } = useQuery({
-    queryKey: queryKeys.jobs.all,
-    queryFn: async () => {
-      // TODO(P3): thay bằng hook useJobsQuery dùng chung khi module Jobs (P3) được dựng.
-      const res = await apiService.get<unknown>('/jobs');
-      if (res.error) {
-        throw new Error(res.error);
-      }
-      return normalizeJobList(res.data);
-    },
-    enabled: Boolean(serviceId) && canManage,
-  });
+  const { data: jobs = [], isLoading: isLoadingJobs } = useJobsQuery(
+    {},
+    { enabled: Boolean(serviceId) && canManage }
+  );
 
   const serviceJobs = useMemo<ServiceJobItem[]>(
     () => (Array.isArray(service?.serviceJobs) ? service.serviceJobs : []),

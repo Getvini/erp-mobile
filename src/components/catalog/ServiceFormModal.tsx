@@ -12,15 +12,13 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
 import * as Haptic from 'expo-haptics';
-import { apiService } from '@/services/api';
-import { queryKeys } from '@/services/queryKeys';
 import { JobReference, ServiceItem, ServiceJobConfig } from '@/services/catalogService';
 import {
   useCreateServiceMutation,
   useUpdateServiceMutation,
 } from '@/hooks/queries/useServices';
+import { useJobsQuery } from '@/hooks/queries/useJobs';
 import { BrandColors } from '@/constants/colors';
 import { SERVICE_UNIT_SUGGESTIONS } from '@/utils/catalogPricing';
 import { formatNumberInput, parseNumberInput, formatVND } from '@/utils/formatters';
@@ -38,16 +36,6 @@ interface JobConfigRow {
   /** Chuỗi đã mask dấu chấm (real-time) — parse lại bằng parseNumberInput. */
   quantityText: string;
   isOutput: boolean;
-}
-
-/** Phòng thủ: `GET /jobs` trả mảng thô, nhưng vẫn chấp nhận `{ data: [...] }`. */
-function normalizeJobList(response: unknown): JobReference[] {
-  if (Array.isArray(response)) return response as JobReference[];
-  if (response && typeof response === 'object') {
-    const body = response as { data?: unknown };
-    if (Array.isArray(body.data)) return body.data as JobReference[];
-  }
-  return [];
 }
 
 function toNumberOrOne(text: string): number {
@@ -84,18 +72,7 @@ export default function ServiceFormModal({
   const [isJobPickerOpen, setIsJobPickerOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { data: jobs = [], isLoading: isLoadingJobs } = useQuery({
-    queryKey: queryKeys.jobs.all,
-    queryFn: async () => {
-      // TODO(P3): thay bằng hook useJobsQuery dùng chung khi module Jobs (P3) được dựng.
-      const res = await apiService.get<unknown>('/jobs');
-      if (res.error) {
-        throw new Error(res.error);
-      }
-      return normalizeJobList(res.data);
-    },
-    enabled: visible,
-  });
+  const { data: jobs = [], isLoading: isLoadingJobs } = useJobsQuery({}, { enabled: visible });
 
   const originalJobConfigs = useMemo<ServiceJobConfig[]>(
     () =>

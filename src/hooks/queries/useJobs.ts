@@ -45,7 +45,10 @@ const invalidateJobScope = (
 };
 
 /** GET /jobs → mảng thô (đã kèm vendorJobs, serviceJobs, criteria). */
-export function useJobsQuery(filters: JobListFilters = {}) {
+export function useJobsQuery(
+  filters: JobListFilters = {},
+  options: { enabled?: boolean } = {}
+) {
   return useQuery({
     queryKey: queryKeys.jobs.list(filters),
     queryFn: async () => {
@@ -53,6 +56,7 @@ export function useJobsQuery(filters: JobListFilters = {}) {
       if (res.error) throw new Error(res.error);
       return res.data;
     },
+    enabled: options.enabled,
   });
 }
 

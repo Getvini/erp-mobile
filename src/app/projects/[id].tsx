@@ -715,6 +715,7 @@ export default function ProjectDetailScreen() {
 
           {activeTab === 'MY_TASKS' && (
             <ProjectMyTasksTab
+              projectId={String(id || '')}
               tasks={tasks}
               isLoading={isLoadingTasks}
               currentUserId={user?.id}
