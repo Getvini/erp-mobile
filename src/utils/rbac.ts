@@ -112,3 +112,82 @@ export const isProjectManagerRole = (role?: string): boolean => {
 export const isStaffRole = (role?: string): boolean => {
   return STAFF_ROLES.includes(role as UserRole);
 };
+
+// ============================================================================
+// PHASE P2 — Danh mục & Đối tác ngoài
+// ============================================================================
+
+/** Vendors — Sidebar.jsx: roles ['ADMIN','BOD']; Vendor.Route.ts không roleMiddleware nên UI phải tự chặn. */
+export const canAccessVendors = (role?: string): boolean => {
+  if (!role) return false;
+  return ['ADMIN', 'BOD'].includes(role);
+};
+
+/** Tạo/sửa/xóa nhà cung cấp — cùng nhóm quyền truy cập module. */
+export const canManageVendors = canAccessVendors;
+
+/** Referral Partners — Sidebar.jsx: roles ['ADMIN','BOD','BD','ADMIN_SALE']. */
+export const canAccessReferralPartners = (role?: string): boolean => {
+  if (!role) return false;
+  return ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE'].includes(role);
+};
+
+export const canManageReferralPartners = canAccessReferralPartners;
+
+/** Services + Service Packages — Sidebar.jsx: roles ['ADMIN','BOD','BD','ADMIN_SALE']. */
+export const canAccessServiceCatalog = (role?: string): boolean => {
+  if (!role) return false;
+  return ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE'].includes(role);
+};
+
+/** Xóa hàng loạt dịch vụ — Service.Route.ts: `roleMiddleware(["ADMIN","BOD"])`. */
+export const canBulkDeleteServices = (role?: string): boolean => {
+  if (!role) return false;
+  return ['ADMIN', 'BOD'].includes(role);
+};
+
+// ============================================================================
+// PHASE P3 — Quản trị hành chính & nội bộ
+// ============================================================================
+
+/** Users — Sidebar.jsx: roles ['ADMIN','BOD']; User.Route.ts chặn BOD/ADMIN cho create/update/delete. */
+export const canAccessUsers = (role?: string): boolean => {
+  if (!role) return false;
+  return ['ADMIN', 'BOD'].includes(role);
+};
+
+export const canManageUsers = canAccessUsers;
+
+/** Teams — Sidebar.jsx: roles ['ADMIN','BOD','BD','ADMIN_SALE','PM']. */
+export const canAccessTeams = (role?: string): boolean => {
+  if (!role) return false;
+  return ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE', 'PM'].includes(role);
+};
+
+export const canManageTeams = canAccessTeams;
+
+/** Jobs & Job Criteria — Sidebar.jsx: roles ['ADMIN','BOD','BD','ADMIN_SALE','PM']. */
+export const canAccessJobs = (role?: string): boolean => {
+  if (!role) return false;
+  return ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE', 'PM'].includes(role);
+};
+
+export const canManageJobs = canAccessJobs;
+
+/** Announcements — không giới hạn ở Sidebar; Route chỉ chặn create/update/delete. */
+export const canAccessAnnouncements = (role?: string): boolean => Boolean(role);
+
+/** Announcement.Route.ts: `const MANAGE_ROLES = ["BOD","ADMIN","PM"]`. */
+export const canManageAnnouncements = (role?: string): boolean => {
+  if (!role) return false;
+  return ['BOD', 'ADMIN', 'PM'].includes(role);
+};
+
+/** Document Library — không giới hạn ở Sidebar (mọi user đã đăng nhập đều xem). */
+export const canAccessDocumentLibrary = (role?: string): boolean => Boolean(role);
+
+/** DocumentLibrary.Route.ts: `const MANAGE_ROLES = ["BOD","ADMIN","ADMIN_SALE"]`. */
+export const canManageDocumentLibrary = (role?: string): boolean => {
+  if (!role) return false;
+  return ['BOD', 'ADMIN', 'ADMIN_SALE'].includes(role);
+};
