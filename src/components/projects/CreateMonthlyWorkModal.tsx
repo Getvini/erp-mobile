@@ -17,10 +17,8 @@ import {
   useMonthlyWorkTemplateQuery,
   useCreateMonthlyWorkAddendumMutation,
 } from '@/hooks/queries/useProjects';
-import {
-  useAvailableServicesQuery,
-  useServicePackagesQuery,
-} from '@/hooks/queries/useOpportunities';
+import { useAvailableServicesQuery } from '@/hooks/queries/useOpportunities';
+import { useServicePackagesQuery } from '@/hooks/queries/useServicePackages';
 import { formatNumber } from '@/utils/formatters';
 import { BrandColors } from '@/constants/colors';
 

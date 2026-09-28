@@ -358,37 +358,11 @@ export function useRequestReworkMutation() {
 }
 
 /**
- * Hook to fetch vendors by job ID
+ * Phase P2/P3: `useVendorsByJobQuery` và `useTeamsQuery` đã được chuyển về
+ * module chuyên trách (`@/hooks/queries/useVendors`, `@/hooks/queries/useTeams`)
+ * để chỉ còn MỘT query key cho mỗi resource — tránh 2 cache song song.
+ * Hãy import trực tiếp từ các module đó.
  */
-export function useVendorsByJobQuery(jobId: string) {
-  return useQuery({
-    queryKey: ['vendors', 'job', jobId],
-    queryFn: async () => {
-      const res = await taskService.getVendorsByJob(jobId);
-      if (res.error) {
-        throw new Error(res.error);
-      }
-      return res.data || [];
-    },
-    enabled: Boolean(jobId),
-  });
-}
-
-/**
- * Hook to fetch all support teams
- */
-export function useTeamsQuery() {
-  return useQuery({
-    queryKey: ['teams', 'all'],
-    queryFn: async () => {
-      const res = await teamService.getTeams();
-      if (res.error) {
-        throw new Error(res.error);
-      }
-      return res.data || [];
-    },
-  });
-}
 
 /**
  * Hook to assign support team

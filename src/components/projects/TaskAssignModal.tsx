@@ -19,11 +19,11 @@ import {
   useBulkAssignTasksMutation,
   useAssignSupportTeamMutation,
   useRequestSupportMutation,
-  useVendorsByJobQuery,
-  useTeamsQuery,
   useTaskDetailQuery,
   useTaskDailyWorkloadQuery,
 } from '@/hooks/queries/useTasks';
+import { useVendorsByJobQuery } from '@/hooks/queries/useVendors';
+import { useTeamsQuery } from '@/hooks/queries/useTeams';
 import { uploadToCloudinary, PickedFile } from '@/services/cloudinaryService';
 import { BrandColors } from '@/constants/colors';
 import { isValidUrl, normalizeUrl } from '@/utils/validators';
@@ -1046,7 +1046,8 @@ export default function TaskAssignModal({
                             </View>
                             <View className="flex-1">
                               <Text className="text-[13px] font-bold text-slate-900">{v.name}</Text>
-                              <Text className="text-[11px] text-slate-500">{v.contactPerson || v.phone || 'Đối tác Vendor'}</Text>
+                              {/* Vendor entity không có `contactPerson` — dùng SĐT, fallback nhãn chung. */}
+                              <Text className="text-[11px] text-slate-500">{v.phone || 'Đối tác Vendor'}</Text>
                             </View>
                             {isSelected && (
                               <Feather name="check-circle" size={18} color={BrandColors.primary} />
