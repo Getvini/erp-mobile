@@ -21,11 +21,19 @@ import {
   useRequestSupportMutation,
   useVendorsByJobQuery,
   useTeamsQuery,
+  useTaskDetailQuery,
+  useTaskDailyWorkloadQuery,
 } from '@/hooks/queries/useTasks';
 import { uploadToCloudinary, PickedFile } from '@/services/cloudinaryService';
 import { BrandColors } from '@/constants/colors';
 import { isValidUrl, normalizeUrl } from '@/utils/validators';
-import { formatDateTimeToDDMMYYYYHHMM } from '@/utils/formatters';
+import {
+  formatDateToDDMMYYYY,
+  formatDateToYYYYMMDD,
+  formatDateTimeToDDMMYYYYHHMM,
+} from '@/utils/formatters';
+import { combineDateWithDefaultTime, getMonthRange } from '@/utils/taskLifecycle';
+import TaskWorkloadCalendar from '@/components/tasks/TaskWorkloadCalendar';
 
 const ITEM_HEIGHT = 38;
 const VISIBLE_ITEMS = 3;
@@ -183,11 +191,19 @@ const CalendarPickerModal: React.FC<{
   const [hour, setHour] = useState('17');
   const [minute, setMinute] = useState('00');
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  /** Khoá đồng bộ: mỗi lần mở picker (hoặc đổi ngày) thì nạp lại giá trị từ prop */
+  const [syncedPickerKey, setSyncedPickerKey] = useState('closed');
 
   const hoursData = useMemo(() => Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0')), []);
   const minutesData = useMemo(() => Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0')), []);
 
-  useEffect(() => {
+  /**
+   * Điều chỉnh state trong lúc render khi mở picker / đổi ngày (React khuyến nghị,
+   * KHÔNG setState trong useEffect để tránh cascading render).
+   */
+  const pickerKey = visible ? `open:${currentDateStr || ''}` : 'closed';
+  if (pickerKey !== syncedPickerKey) {
+    setSyncedPickerKey(pickerKey);
     if (visible) {
       const parsed = parseDateObj(currentDateStr);
       setViewDate(parsed.date);
@@ -195,7 +211,7 @@ const CalendarPickerModal: React.FC<{
       setHour(parsed.hour);
       setMinute(parsed.minute);
     }
-  }, [visible, currentDateStr]);
+  }
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -237,14 +253,13 @@ const CalendarPickerModal: React.FC<{
   const todayDate = new Date();
   const isCurrentMonthToday = todayDate.getFullYear() === year && todayDate.getMonth() === month;
 
-  const currentSelectedDay = useMemo(() => {
-    if (selectedDay) return selectedDay;
-    const parsed = parseDateObj(currentDateStr);
-    if (parsed.date.getFullYear() === year && parsed.date.getMonth() === month) {
-      return parsed.date.getDate();
-    }
-    return null;
-  }, [selectedDay, currentDateStr, year, month]);
+  // Tính trực tiếp (không useMemo) vì React Compiler không giữ được memoization này
+  const parsedPickerDate = parseDateObj(currentDateStr);
+  const currentSelectedDay =
+    selectedDay ??
+    (parsedPickerDate.date.getFullYear() === year && parsedPickerDate.date.getMonth() === month
+      ? parsedPickerDate.date.getDate()
+      : null);
 
   const selectedHourIndex = Math.max(0, hoursData.indexOf(hour.padStart(2, '0')));
   const selectedMinuteIndex = Math.max(0, minutesData.indexOf(minute.padStart(2, '0')));
@@ -498,7 +513,16 @@ export default function TaskAssignModal({
   const { data: teamsData, isLoading: isLoadingTeams } = useTeamsQuery();
   const allTeams = teamsData || [];
 
-  useEffect(() => {
+  /**
+   * Nạp lại form mỗi lần mở modal cho một công việc (khác) — điều chỉnh state trong lúc
+   * render theo React khuyến nghị (KHÔNG setState trong useEffect để tránh cascading render).
+   * Khoá theo `id` công việc đại diện nên dữ liệu người dùng đang nhập không bị reset
+   * khi danh sách task được refetch (object identity đổi nhưng cùng id).
+   */
+  const [syncedAssignTaskKey, setSyncedAssignTaskKey] = useState('closed');
+  const nextAssignTaskKey = visible && representativeTask ? `open:${representativeTask.id || ''}` : 'closed';
+  if (nextAssignTaskKey !== syncedAssignTaskKey) {
+    setSyncedAssignTaskKey(nextAssignTaskKey);
     if (visible && representativeTask) {
       setSelectedAssigneeId(representativeTask.assigneeId || representativeTask.assignee?.id || '');
       const defaultPerfType = (representativeTask as any).performerType === 'VENDOR' ? 'VENDOR' : 'INTERNAL';
@@ -513,7 +537,56 @@ export default function TaskAssignModal({
       setFiles([]);
       setUploadProgress({});
     }
-  }, [visible, representativeTask]);
+  }
+
+  // ============================================================
+  // LỊCH TẢI NHÂN SỰ KHI PHÂN CÔNG (mirror erp-UI TaskAssignModal.jsx)
+  // ============================================================
+
+  /** Ngày/giờ deadline đang chọn trong form */
+  const parsedDeadline = useMemo(() => parseDateObj(dueDate), [dueDate]);
+
+  /** Khoá ngày (YYYY-MM-DD) của deadline đang chọn — dùng để tô ô trên lịch tải */
+  const selectedDeadlineDateKey = useMemo(
+    () => (dueDate ? formatDateToYYYYMMDD(parsedDeadline.date) : ''),
+    [dueDate, parsedDeadline.date]
+  );
+
+  /** Task cha (khi phân công công việc con) — lấy từ payload hoặc fetch riêng */
+  const parentTaskId = (representativeTask as any)?.parentTaskId as string | undefined;
+  const { data: fetchedParentTask } = useTaskDetailQuery(parentTaskId || '');
+  const parentTask: any = (representativeTask as any)?.parentTask || fetchedParentTask || null;
+  const parentDeadline = parentTask?.plannedEndDate ? new Date(parentTask.plannedEndDate) : null;
+
+  /** Tháng của deadline đang chọn — nguồn cho lịch tải nhân sự */
+  const workloadRange = useMemo(() => getMonthRange(parsedDeadline.date), [parsedDeadline.date]);
+  const shouldFetchWorkload =
+    Boolean(selectedAssigneeId) && performerType === 'INTERNAL' && !isTeamAssignment;
+
+  const { data: workloadData } = useTaskDailyWorkloadQuery(
+    shouldFetchWorkload ? selectedAssigneeId : '',
+    workloadRange.startDate,
+    workloadRange.endDate,
+    shouldFetchWorkload
+  );
+
+  /** % tải của nhân sự trong ngày deadline đang chọn (cảnh báo nếu ≥ 100%) */
+  const selectedDayWorkloadPercent = useMemo(() => {
+    const day = (workloadData?.days || []).find(
+      (item) => formatDateToYYYYMMDD(item.date) === selectedDeadlineDateKey
+    );
+    return Number(day?.workloadPercent ?? 0) || 0;
+  }, [workloadData?.days, selectedDeadlineDateKey]);
+
+  const selectedAssigneeName = useMemo(() => {
+    const member = teamMembers.find((item) => item.user?.id === selectedAssigneeId);
+    return member?.user?.fullName || 'Nhân sự được chọn';
+  }, [teamMembers, selectedAssigneeId]);
+
+  /** Chọn 1 ngày trên lịch tải ⇒ đặt deadline = ngày đó lúc 17:30 (DEFAULT_DEADLINE_TIME) */
+  const handleSelectWorkloadDate = useCallback((dateKey: string) => {
+    setDueDate(formatDateTimeToDDMMYYYYHHMM(combineDateWithDefaultTime(dateKey)));
+  }, []);
 
   const handlePerformerTypeChange = (type: 'INTERNAL' | 'VENDOR') => {
     setPerformerType(type);
@@ -585,23 +658,8 @@ export default function TaskAssignModal({
 
   if (!task) return null;
 
-  const handleSubmit = async () => {
-    if (isTeamAssignment) {
-      if (!selectedTeamId) {
-        Alert.alert('Cảnh báo', 'Vui lòng chọn Team hỗ trợ.');
-        return;
-      }
-    } else {
-      if (performerType === 'INTERNAL' && !selectedAssigneeId) {
-        Alert.alert('Cảnh báo', 'Vui lòng chọn nhân sự thực hiện trong đội dự án.');
-        return;
-      }
-      if (performerType === 'VENDOR' && !selectedVendorId) {
-        Alert.alert('Cảnh báo', 'Vui lòng chọn đối tác Vendor thực hiện.');
-        return;
-      }
-    }
-
+  /** Thân xử lý phân công — chỉ chạy sau khi đã qua toàn bộ validate của `handleSubmit` */
+  const performSubmit = async () => {
     try {
       const attachmentsList: Array<{ type: string; name: string; url: string; size?: number }> = [];
 
@@ -701,6 +759,67 @@ export default function TaskAssignModal({
       setIsUploading(false);
       Alert.alert('Lỗi', err?.message || 'Có lỗi xảy ra khi phân công công việc.');
     }
+  };
+
+  const handleSubmit = async () => {
+    if (isTeamAssignment) {
+      if (!selectedTeamId) {
+        Alert.alert('Cảnh báo', 'Vui lòng chọn Team hỗ trợ.');
+        return;
+      }
+    } else {
+      if (performerType === 'INTERNAL' && !selectedAssigneeId) {
+        Alert.alert('Cảnh báo', 'Vui lòng chọn nhân sự thực hiện trong đội dự án.');
+        return;
+      }
+      if (performerType === 'VENDOR' && !selectedVendorId) {
+        Alert.alert('Cảnh báo', 'Vui lòng chọn đối tác Vendor thực hiện.');
+        return;
+      }
+    }
+
+    // Ràng buộc 1: deadline không được ở quá khứ (mirror erp-UI TaskAssignModal.jsx:377-388)
+    if (dueDate && !Number.isNaN(parsedDeadline.date.getTime())) {
+      const now = new Date();
+      now.setSeconds(0, 0);
+      if (parsedDeadline.date.getTime() < now.getTime() - 60 * 1000) {
+        Alert.alert('Cảnh báo', 'Deadline không được ở trong quá khứ.');
+        return;
+      }
+
+      // Ràng buộc 2: công việc con không được có deadline sau deadline công việc cha
+      if (parentDeadline && !Number.isNaN(parentDeadline.getTime()) && parsedDeadline.date > parentDeadline) {
+        Alert.alert(
+          'Cảnh báo',
+          `Deadline của công việc con không được sau deadline của công việc cha (Hạn chót cha: ${formatDateToDDMMYYYY(
+            parentDeadline
+          )}).`
+        );
+        return;
+      }
+    }
+
+    // Ràng buộc 3: cảnh báo quá tải nếu nhân sự đã ≥ 100% tải trong ngày được chọn
+    if (
+      performerType === 'INTERNAL' &&
+      !isTeamAssignment &&
+      selectedAssigneeId &&
+      selectedDayWorkloadPercent >= 100
+    ) {
+      Alert.alert(
+        'Nhân sự đã quá tải trong ngày này',
+        `${selectedAssigneeName} đang có ${selectedDayWorkloadPercent}% tải công việc trong ngày ${
+          selectedDeadlineDateKey ? formatDateToDDMMYYYY(selectedDeadlineDateKey) : 'đã chọn'
+        }. Bạn vẫn muốn phân công?`,
+        [
+          { text: 'Hủy', style: 'cancel' },
+          { text: 'Vẫn phân công', onPress: () => { performSubmit(); } },
+        ]
+      );
+      return;
+    }
+
+    await performSubmit();
   };
 
   if (!task || tasks.length === 0) return null;
@@ -936,6 +1055,30 @@ export default function TaskAssignModal({
                         );
                       })}
                     </View>
+                  )}
+                </View>
+              )}
+
+              {/* Lịch tải nhân sự — chỉ khi đã chọn nhân sự INTERNAL và có deadline */}
+              {performerType === 'INTERNAL' && !isTeamAssignment && Boolean(selectedAssigneeId) && Boolean(dueDate) && (
+                <View className="mt-3 gap-1.5">
+                  <View className="flex-row items-center gap-1.5">
+                    <Feather name="bar-chart-2" size={13} color={BrandColors.primary} />
+                    <Text className="text-xs font-bold text-slate-700">
+                      Lịch tải nhân sự — {selectedAssigneeName}
+                    </Text>
+                  </View>
+                  <TaskWorkloadCalendar
+                    userId={selectedAssigneeId}
+                    monthDate={parsedDeadline.date}
+                    selectedDateKey={selectedDeadlineDateKey}
+                    onSelectDate={handleSelectWorkloadDate}
+                  />
+                  {parentDeadline && !Number.isNaN(parentDeadline.getTime()) && (
+                    <Text className="text-[11px] font-semibold text-amber-600">
+                      ⚠️ Công việc con: hạn chót tối đa theo task cha là{' '}
+                      {formatDateToDDMMYYYY(parentDeadline)}
+                    </Text>
                   )}
                 </View>
               )}
