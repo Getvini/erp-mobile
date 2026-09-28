@@ -5,6 +5,11 @@ module.exports = {
   moduleDirectories: ['node_modules', '<rootDir>'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    // Mock native modules that cannot run in Node environment
+    '^react-native$': '<rootDir>/test/__mocks__/react-native.js',
+    '^expo-secure-store$': '<rootDir>/test/__mocks__/expo-secure-store.js',
+    '^expo-local-authentication$': '<rootDir>/test/__mocks__/expo-local-authentication.js',
+    '^@react-native-async-storage/async-storage$': '<rootDir>/test/__mocks__/@react-native-async-storage/async-storage.js',
   },
   transform: {
     '^.+\\.tsx?$': [

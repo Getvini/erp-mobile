@@ -54,6 +54,7 @@ import {
   useApproveOpportunityMutation,
   useRejectOpportunityMutation,
   useUpdateOpportunityMutation,
+  useAddCustomerToOpportunityMutation,
 } from '@/hooks/queries/useOpportunities';
 import {
   useOpportunityQuotationsQuery,
@@ -141,6 +142,7 @@ export default function OpportunityDetailScreen() {
   const quotations: QuotationItem[] = Array.isArray(rawQuotations) ? rawQuotations : [];
 
   const updateOpportunityMutation = useUpdateOpportunityMutation();
+  const addCustomerToOpportunityMutation = useAddCustomerToOpportunityMutation();
   const approveOpportunityMutation = useApproveOpportunityMutation();
   const rejectOpportunityMutation = useRejectOpportunityMutation();
   const createContractMutation = useCreateContractMutation();
@@ -256,14 +258,17 @@ export default function OpportunityDetailScreen() {
     };
 
     if (data.customerStatus === 'EXISTING') {
-      updatePayload.customerId = data.selectedCustomerId;
-      updatePayload.leadName = '';
-      updatePayload.leadPhone = '';
-      updatePayload.leadEmail = '';
-      updatePayload.leadTaxId = '';
-      updatePayload.leadAddress = '';
-      updatePayload.referralPartnerId =
-        data.customerType === 'REFERRAL' ? data.selectedReferralPartnerId : null;
+      if (!data.selectedCustomerId) {
+        Alert.alert('Lỗi', 'Vui lòng chọn khách hàng');
+        return;
+      }
+      await addCustomerToOpportunityMutation.mutateAsync({
+        id,
+        customerId: data.selectedCustomerId,
+        customerType: data.customerType,
+        referralPartnerId:
+          data.customerType === 'REFERRAL' ? data.selectedReferralPartnerId : null,
+      });
     } else {
       updatePayload.customerId = null;
       updatePayload.leadName = data.leadName;
@@ -273,9 +278,9 @@ export default function OpportunityDetailScreen() {
       updatePayload.leadAddress = data.leadAddress;
       updatePayload.referralPartnerId =
         data.customerType === 'REFERRAL' ? data.selectedReferralPartnerId : null;
+      await updateOpportunityMutation.mutateAsync({ id, payload: updatePayload });
     }
 
-    await updateOpportunityMutation.mutateAsync({ id, payload: updatePayload });
     Alert.alert('Thành công', 'Thông tin khách hàng đã được lưu thành công!');
   };
 

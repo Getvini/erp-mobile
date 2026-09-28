@@ -1,11 +1,13 @@
 /**
- * Tra cứu thông tin doanh nghiệp theo Mã Số Thuế (MST) từ api.xinvoice.vn
+ * Tra cứu thông tin doanh nghiệp theo Mã Số Thuế (MST) qua VietQR API
  * Hỗ trợ MST 10 số hoặc 13 số
  */
 export interface TaxInfoResult {
   name: string;
   address: string;
   status?: string;
+  internationalName?: string;
+  shortName?: string;
   taxDepartment?: string;
 }
 
@@ -21,18 +23,20 @@ export const fetchTaxInfo = async (taxId: string): Promise<TaxInfoResult | null>
   }
 
   try {
-    const response = await fetch(`https://api.xinvoice.vn/gdt-api/tax-payer/${cleanTaxId}`);
+    const response = await fetch(`https://api.vietqr.io/v2/business/${cleanTaxId}`);
     if (!response.ok) {
       return null;
     }
 
-    const data = await response.json();
-    if (data && data.name) {
+    const res = await response.json();
+    if (res && res.code === '00' && res.data && res.data.name) {
       return {
-        name: data.name,
-        address: data.address || '',
-        status: data.status,
-        taxDepartment: data.taxDepartment,
+        name: res.data.name,
+        address: res.data.address || '',
+        status: res.data.status,
+        internationalName: res.data.internationalName || '',
+        shortName: res.data.shortName || '',
+        taxDepartment: res.data.taxDepartment,
       };
     }
     return null;

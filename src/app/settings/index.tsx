@@ -18,13 +18,16 @@ import {
   NotificationSettingCard,
   ClearCacheCard,
   QcConfigModal,
+  WorkloadNormModal,
 } from '@/components/settings';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const [qcModalVisible, setQcModalVisible] = useState(false);
+  const [workloadNormModalVisible, setWorkloadNormModalVisible] = useState(false);
 
+  const isAdmin = user?.role === 'ADMIN';
   const isAdminOrManager = isManagementRole(user?.role) || user?.role === 'PM';
 
   return (
@@ -102,6 +105,28 @@ export default function SettingsScreen() {
                 <Feather name="chevron-right" size={14} color="#2563EB" />
               </TouchableOpacity>
             </View>
+
+            {isAdmin && (
+              <View style={[styles.qcCard, { marginTop: 10 }]}>
+                <View style={[styles.qcIconCircle, { backgroundColor: '#FFF7ED' }]}>
+                  <MaterialCommunityIcons name="speedometer" size={22} color="#F38820" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.qcTitle}>Định Mức Workload Role</Text>
+                  <Text style={styles.qcSubtitle}>
+                    Cấu hình Vinicoin tháng/ngày cho các cấp bậc nhân viên (Level A - D)
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.qcConfigBtn, { borderColor: '#FDBA74' }]}
+                  onPress={() => setWorkloadNormModalVisible(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.qcConfigBtnText, { color: '#EA580C' }]}>Cấu hình</Text>
+                  <Feather name="chevron-right" size={14} color="#EA580C" />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
 
@@ -139,6 +164,12 @@ export default function SettingsScreen() {
       <QcConfigModal
         visible={qcModalVisible}
         onClose={() => setQcModalVisible(false)}
+      />
+
+      {/* Workload Norm Modal Bottom Sheet */}
+      <WorkloadNormModal
+        visible={workloadNormModalVisible}
+        onClose={() => setWorkloadNormModalVisible(false)}
       />
     </SafeAreaView>
   );

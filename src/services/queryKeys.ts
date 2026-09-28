@@ -157,5 +157,6 @@ export const queryKeys = {
   settings: {
     all: ['settings'] as const,
     qc: () => [...queryKeys.settings.all, 'qc'] as const,
+    workloadNorms: () => [...queryKeys.settings.all, 'workload-norms'] as const,
   },
 };

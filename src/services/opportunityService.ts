@@ -262,6 +262,17 @@ export const opportunityService = {
     return apiService.patch<OpportunityItem>(`/opportunities/${id}`, payload);
   },
 
+  async addCustomerToOpportunity(
+    id: string,
+    data: {
+      customerId: string;
+      referralPartnerId?: string | null;
+      customerType?: string;
+    }
+  ) {
+    return apiService.patch<OpportunityItem>(`/opportunities/${id}/addcustomer`, data);
+  },
+
   async approveOpportunity(id: string) {
     return apiService.patch<{ message: string }>(`/opportunities/${id}/approve`);
   },
