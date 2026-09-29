@@ -259,11 +259,11 @@ export default function ProjectMyTasksTab({
                     </View>
                   </View>
 
-                  {canStart && !isSelectMode && (
+                  {/* {canStart && !isSelectMode && (
                     <View className="rounded bg-emerald-50 px-1.5 py-0.5">
                       <Text className="text-[10px] font-bold text-emerald-600">Sẵn sàng bắt đầu</Text>
                     </View>
-                  )}
+                  )} */}
                 </View>
 
                 <Text className="text-[13px] font-bold text-slate-950">{item.name}</Text>

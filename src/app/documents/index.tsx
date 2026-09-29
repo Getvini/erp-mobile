@@ -64,13 +64,14 @@ export default function DocumentsIndexScreen() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [datePickerTarget, setDatePickerTarget] = useState<'from' | 'to' | null>(null);
 
-  // Deep-link từ nơi khác: /documents?category=pdf
-  // Điều chỉnh state trong lúc render thay vì useEffect (tránh set-state-in-effect).
+  const categoryParam =
+  typeof params.category === 'string' && params.category ? params.category : null;
+
   const [syncedCategoryParam, setSyncedCategoryParam] = useState<string | null>(null);
-  if (params.category !== syncedCategoryParam) {
-    setSyncedCategoryParam(params.category ?? null);
-    if (typeof params.category === 'string' && params.category) {
-      setCategory(params.category);
+  if (categoryParam !== syncedCategoryParam) {
+    setSyncedCategoryParam(categoryParam);
+    if (categoryParam) {
+      setCategory(categoryParam);
     }
   }
 

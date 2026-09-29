@@ -503,80 +503,74 @@ export default function ProjectDetailScreen() {
 
       {/* Cụm nút hành động — chỉ render khi đủ quyền (RBAC ẩn hoàn toàn) */}
       {hasProjectActions && (
-        <View className="bg-white px-3 pt-3 pb-2 border-b border-slate-100">
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}
-          >
-            {canPauseDirectNow && (
-              <TouchableOpacity
-                style={{ borderRadius: 10 }}
-                className="h-11 flex-row items-center gap-1.5 rounded-lg bg-amber-500 px-4"
-                onPress={() => setShowPauseDirect(true)}
-                activeOpacity={0.85}
-              >
-                <Feather name="pause" size={15} color="#FFFFFF" />
-                <Text className="text-[13px] font-bold text-white">Tạm dừng ngay</Text>
-              </TouchableOpacity>
-            )}
+        <View className="gap-2 border-b border-slate-100 bg-white px-3 pb-3 pt-3">
+          {(canResumeNow || canCloseDirectNow || canRequestCloseNow) && (
+            <View className="flex-row gap-2">
+              {canResumeNow && (
+                <TouchableOpacity
+                  className={`h-12 flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-emerald-600 ${
+                    isResuming ? 'opacity-60' : ''
+                  }`}
+                  onPress={handleResumeProject}
+                  disabled={isResuming}
+                  activeOpacity={0.85}
+                >
+                  {isResuming ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Feather name="play" size={16} color="#FFFFFF" />
+                      <Text className="text-sm font-bold text-white" numberOfLines={1}>Làm tiếp</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
 
-            {canRequestPauseNow && (
-              <TouchableOpacity
-                style={{ borderRadius: 10 }}
-                className="h-11 flex-row items-center gap-1.5 rounded-lg bg-primary px-4"
-                onPress={() => setShowPauseRequest(true)}
-                activeOpacity={0.85}
-              >
-                <Feather name="pause" size={15} color="#FFFFFF" />
-                <Text className="text-[13px] font-bold text-white">Yêu cầu tạm dừng</Text>
-              </TouchableOpacity>
-            )}
+              {canCloseDirectNow && (
+                <TouchableOpacity
+                  className="h-12 flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-red-600"
+                  onPress={() => setShowCloseDirect(true)}
+                  activeOpacity={0.85}
+                >
+                  <Feather name="archive" size={16} color="#FFFFFF" />
+                  <Text className="text-sm font-bold text-white" numberOfLines={1}>Đóng dự án</Text>
+                </TouchableOpacity>
+              )}
 
-            {canResumeNow && (
-              <TouchableOpacity
-                className={`h-11 flex-row items-center gap-1.5 rounded-lg bg-emerald-600 px-4 ${
-                  isResuming ? 'opacity-60' : ''
-                }`}
-                onPress={handleResumeProject}
-                disabled={isResuming}
-                activeOpacity={0.85}
-              >
-                {isResuming ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Feather name="play" size={15} color="#FFFFFF" />
-                    <Text className="text-[13px] font-bold text-white">Làm tiếp</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
+              {canRequestCloseNow && (
+                <TouchableOpacity
+                  className="h-12 flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-slate-800"
+                  onPress={() => setShowCloseRequest(true)}
+                  activeOpacity={0.85}
+                >
+                  <Feather name="archive" size={16} color="#FFFFFF" />
+                  <Text className="text-sm font-bold text-white" numberOfLines={1}>Đề nghị đóng</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
 
-            {canCloseDirectNow && (
-              <TouchableOpacity
-                style={{ borderRadius: 10 }}
-                className="h-11 flex-row items-center gap-1.5 rounded-lg bg-red-600 px-4"
-                onPress={() => setShowCloseDirect(true)}
-                activeOpacity={0.85}
-              >
-                <Feather name="archive" size={15} color="#FFFFFF" />
-                <Text className="text-[13px] font-bold text-white">Đóng dự án</Text>
-              </TouchableOpacity>
-            )}
+          {canPauseDirectNow && (
+            <TouchableOpacity
+              className="h-12 w-full flex-row items-center justify-center gap-2 rounded-2xl bg-orange-500"
+              onPress={() => setShowPauseDirect(true)}
+              activeOpacity={0.85}
+            >
+              <Feather name="pause" size={16} color="#FFFFFF" />
+              <Text className="text-sm font-bold text-white">Tạm dừng ngay</Text>
+            </TouchableOpacity>
+          )}
 
-            {canRequestCloseNow && (
-              <TouchableOpacity
-                style={{ borderRadius: 10 }}
-                className="h-11 flex-row items-center gap-1.5 rounded-lg bg-slate-700 px-4"
-                onPress={() => setShowCloseRequest(true)}
-                activeOpacity={0.85}
-              >
-                <Feather name="archive" size={15} color="#FFFFFF" />
-                <Text className="text-[13px] font-bold text-white">Đề nghị đóng dự án</Text>
-              </TouchableOpacity>
-            )}
-          </ScrollView>
+          {canRequestPauseNow && (
+            <TouchableOpacity
+              className="h-12 w-full flex-row items-center justify-center gap-2 rounded-2xl bg-orange-500"
+              onPress={() => setShowPauseRequest(true)}
+              activeOpacity={0.85}
+            >
+              <Feather name="pause" size={16} color="#FFFFFF" />
+              <Text className="text-sm font-bold text-white">Yêu cầu tạm dừng hợp đồng</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 

@@ -341,7 +341,7 @@ export default function TaskLifecycleActions({
               activeOpacity={0.85}
             >
               <Feather name="user-plus" size={15} color="#C2410C" />
-              <Text className="text-xs font-bold text-orange-700">Nhờ hỗ trợ nhân sự</Text>
+              <Text className="text-xs font-bold text-orange-700">Yêu cầu thêm người</Text>
             </TouchableOpacity>
           )}
 

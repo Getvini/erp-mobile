@@ -149,8 +149,6 @@ export default function TaskSubtaskSection({
           </View>
         </View>
 
-        {/* Nút xóa subtask: KHÔNG có endpoint DELETE /tasks/:id/subtask ở backend
-            ⇒ ẩn hoàn toàn nút xóa. TODO(backend): bổ sung route xóa rồi mở lại nút này. */}
         {canManage && (
           <TouchableOpacity
             className="flex-row items-center gap-1.5 bg-primary px-3.5 min-h-[48px] rounded-xl"
@@ -179,12 +177,6 @@ export default function TaskSubtaskSection({
           </Text>
         </View>
 
-        <View className="flex-row items-center gap-1.5 bg-emerald-50 border border-emerald-100 px-2.5 py-1.5 rounded-lg">
-          <Feather name="award" size={12} color="#047857" />
-          <Text className="text-[11px] font-bold text-emerald-700">
-            Thưởng task gốc {formatVND(parentRemainingReward, '').trim()} Vinicoin
-          </Text>
-        </View>
       </View>
 
       {/* Cảnh báo tổng vượt 100% */}
@@ -205,8 +197,6 @@ export default function TaskSubtaskSection({
           <Text className="text-xs text-slate-400">Chưa có công việc con nào</Text>
         </View>
       ) : (
-        // Danh sách công việc con luôn ngắn (bounded) và nằm trong ScrollView của tab
-        // ⇒ dùng map thay FlatList để tránh cảnh báo nested VirtualizedList.
         <View className="gap-2">
           {subtasks.map((subtask) => {
             const statusConfig = TASK_STATUS_CONFIG[subtask.status || ''] || {
@@ -257,12 +247,6 @@ export default function TaskSubtaskSection({
                     </Text>
                   </View>
 
-                  <View className="bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md">
-                    <Text className="text-[10px] font-bold text-emerald-700">
-                      {formatVND(reward, '').trim()} Vinicoin
-                    </Text>
-                  </View>
-
                   {canManage && (
                     <TouchableOpacity
                       className="w-12 h-12 rounded-xl bg-white border border-orange-200 items-center justify-center"
@@ -293,11 +277,6 @@ export default function TaskSubtaskSection({
           })}
         </View>
       )}
-
-      {/* ⚠️ KHÔNG render "Gửi phương án" / "Duyệt phương án" phân bổ:
-          backend đang TẮT tính năng (`SUBTASK_PM_APPROVAL_ENABLED = false`) nên
-          2 route POST /tasks/:id/subtask-plan/submit và PATCH /tasks/:id/subtask-plan/respond
-          LUÔN trả 409. Service/hook vẫn giữ để parity, UI không gọi khi flag còn tắt. */}
 
       <SubtaskAllocationModal
         visible={isModalOpen}

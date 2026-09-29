@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { TaskDetail, TASK_STATUS_CONFIG } from '@/services/taskService';
@@ -110,13 +110,19 @@ export default function ProjectExtraTasksTab({
       </View>
 
       {/* Filter pills */}
-      <View className="flex-row flex-wrap gap-2">
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingRight: 16 }}
+        style={{ flexGrow: 0, marginHorizontal: -16 }}
+      >
+        <View style={{ width: 8 }} />
         {pills.map((pill) => {
           const isActive = pricingFilter === pill.key;
           return (
             <TouchableOpacity
               key={pill.key}
-              className={`min-h-[48px] flex-row items-center gap-2 rounded-xl border px-3 ${
+              className={`h-10 flex-row items-center gap-2 rounded-xl border px-3 ${
                 isActive ? 'border-primary bg-orange-50' : 'border-slate-200 bg-white'
               }`}
               onPress={() => setPricingFilter(pill.key)}
@@ -124,22 +130,19 @@ export default function ProjectExtraTasksTab({
             >
               <Text
                 className={`text-xs ${isActive ? 'font-bold text-primary' : 'font-semibold text-slate-500'}`}
+                numberOfLines={1}
               >
                 {pill.label}
               </Text>
-              <View
-                className={`rounded-full px-2 py-0.5 ${isActive ? 'bg-orange-100' : 'bg-slate-100'}`}
-              >
-                <Text
-                  className={`text-[10px] font-bold ${isActive ? 'text-primary' : 'text-slate-500'}`}
-                >
+              <View className={`rounded-full px-2 py-0.5 ${isActive ? 'bg-orange-100' : 'bg-slate-100'}`}>
+                <Text className={`text-[10px] font-bold ${isActive ? 'text-primary' : 'text-slate-500'}`}>
                   {pill.count}
                 </Text>
               </View>
             </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
 
       {extraTasks.length === 0 ? (
         <View className="items-center justify-center gap-2 py-10">

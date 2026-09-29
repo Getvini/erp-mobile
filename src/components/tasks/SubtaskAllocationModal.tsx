@@ -311,13 +311,6 @@ export default function SubtaskAllocationModal({
                 <Text className="text-[11px] font-semibold text-red-600">{percentPreviewError}</Text>
               ) : null}
 
-              {/* Xem trước tiền thưởng realtime */}
-              <View className="flex-row items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-3.5 py-2.5 mt-0.5">
-                <Feather name="award" size={14} color="#059669" />
-                <Text className="flex-1 text-[12px] font-bold text-emerald-700">
-                  Thưởng dự kiến: {formatVND(previewReward ?? 0, '').trim()} Vinicoin
-                </Text>
-              </View>
             </View>
 
             {/* Mô tả */}
