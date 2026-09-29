@@ -19,8 +19,8 @@ import { Feather } from '@expo/vector-icons';
 import {
   useOpportunityDetailQuery,
   useAvailableServicesQuery,
-  useServicePackagesQuery,
 } from '@/hooks/queries/useOpportunities';
+import { useServicePackagesQuery } from '@/hooks/queries/useServicePackages';
 import {
   useQuotationDetailQuery,
   useOpportunityServicesQuery,

@@ -222,10 +222,10 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
         `Tổng tỷ lệ các đợt phải đạt đúng 100% (hiện tại: ${totalPercentage}%). Bạn có muốn kiểm tra lại không?`,
         [
           { text: 'Kiểm tra lại', style: 'cancel' },
-          {
-            text: 'Vẫn lưu',
-            onPress: () => executeSave(),
-          },
+          // {
+          //   text: 'Vẫn lưu',
+          //   onPress: () => executeSave(),
+          // },
         ]
       );
       return;

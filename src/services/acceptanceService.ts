@@ -27,28 +27,86 @@ export interface AcceptanceItem {
   status: string;
   amount?: number;
   note?: string;
+  feedback?: string;
   createdAt?: string;
-  services?: any[];
+  services?: AcceptanceServiceItem[];
   creator?: {
     id: string;
     fullName: string;
   };
+  requester?: {
+    id: string;
+    fullName?: string;
+    username?: string;
+  };
+  approver?: {
+    id: string;
+    fullName?: string;
+    username?: string;
+  } | null;
   project?: {
     id: string;
     name: string;
+    status?: string;
+    isOnHold?: boolean;
   };
 }
 
+export interface AcceptanceResult {
+  id?: string;
+  taskId: string;
+  taskCode?: string;
+  name?: string;
+  url?: string;
+  type?: string;
+  status?: string;
+  feedback?: string;
+  checklist?: { label: string; checked?: boolean }[];
+  task?: { id: string; code?: string };
+}
+
+export interface AcceptanceServiceItem {
+  id: string;
+  code?: string;
+  serviceCode?: string;
+  name?: string;
+  status?: string;
+  results?: AcceptanceResult[];
+  service?: { id: string; name?: string; code?: string };
+  tasks?: any[];
+  [key: string]: any;
+}
+
+export interface AcceptanceDecision {
+  serviceId: string;
+  status: 'APPROVED' | 'REJECTED';
+  feedback?: string;
+  resultDecisions?: {
+    taskId: string;
+    status: 'APPROVED' | 'REJECTED';
+    feedback?: string;
+  }[];
+}
+
+export interface AcceptanceListFilters {
+  projectId?: string;
+  status?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+const normalizeList = (raw: any): AcceptanceItem[] =>
+  Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+
 class AcceptanceService {
-  async getAcceptanceRequests(projectId?: string): Promise<{ data?: AcceptanceItem[]; error?: string }> {
-    const res = await apiService.get<any>('/acceptance', { projectId });
-    const raw = res.data;
-    const items = Array.isArray(raw)
-      ? raw
-      : raw?.data && Array.isArray(raw.data)
-      ? raw.data
-      : [];
-    return { data: items, error: res.error };
+  async getAcceptanceRequests(
+    filters?: string | AcceptanceListFilters,
+  ): Promise<{ data?: AcceptanceItem[]; meta?: any; error?: string }> {
+    const params =
+      typeof filters === 'string' ? { projectId: filters } : filters ?? undefined;
+    const res = await apiService.get<any>('/acceptance', params);
+    return { data: normalizeList(res.data), meta: res.data?.meta, error: res.error };
   }
 
   async getAcceptanceById(id: string): Promise<{ data?: AcceptanceItem; error?: string }> {
@@ -60,28 +118,43 @@ class AcceptanceService {
   }
 
 
+  /**
+   * POST /acceptance/request — payload ĐÚNG bằng Web (CreateAcceptanceModal.jsx:55-59):
+   * chỉ gửi `{ projectId, note, serviceIds }`, backend tự sinh `name` (NT-{contractCode}-{DD/MM/YYYY}).
+   */
   async createAcceptanceRequest(payload: {
     projectId: string;
-    name?: string;
     note?: string;
     serviceIds?: string[];
-    amount?: number;
-    tasks?: string[];
   }): Promise<{ data?: AcceptanceItem; error?: string }> {
-    const res = await apiService.post<AcceptanceItem>('/acceptance/request', payload);
+    const res = await apiService.post<AcceptanceItem>('/acceptance/request', {
+      projectId: payload.projectId,
+      note: payload.note,
+      serviceIds: payload.serviceIds ?? [],
+    });
     return { data: res.data, error: res.error };
   }
 
   async processAcceptanceRequest(
     id: string,
-    decisions: Array<{
-      serviceId: string;
-      status: 'APPROVED' | 'REJECTED';
-      feedback?: string;
-      resultDecisions?: Array<{ taskId: string; status: 'APPROVED' | 'REJECTED'; feedback?: string }>;
-    }>
+    decisions: AcceptanceDecision[],
   ): Promise<{ data?: any; error?: string }> {
     const res = await apiService.post(`/acceptance/${id}/process`, { decisions });
+    return { data: res.data, error: res.error };
+  }
+
+  /** POST /acceptance/:id/approve — BOD/Admin/PM duyệt toàn bộ yêu cầu nghiệm thu. */
+  async approveAcceptanceRequest(id: string): Promise<{ data?: AcceptanceItem; error?: string }> {
+    const res = await apiService.post<AcceptanceItem>(`/acceptance/${id}/approve`);
+    return { data: res.data, error: res.error };
+  }
+
+  /** POST /acceptance/:id/reject — Từ chối yêu cầu nghiệm thu kèm phản hồi bắt buộc. */
+  async rejectAcceptanceRequest(
+    id: string,
+    feedback: string,
+  ): Promise<{ data?: AcceptanceItem; error?: string }> {
+    const res = await apiService.post<AcceptanceItem>(`/acceptance/${id}/reject`, { feedback });
     return { data: res.data, error: res.error };
   }
 }

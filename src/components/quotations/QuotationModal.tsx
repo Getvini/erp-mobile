@@ -20,10 +20,8 @@ import {
   useCreateQuotationMutation,
   useUpdateQuotationMutation,
 } from '@/hooks/queries/useQuotations';
-import {
-  useAvailableServicesQuery,
-  useServicePackagesQuery,
-} from '@/hooks/queries/useOpportunities';
+import { useAvailableServicesQuery } from '@/hooks/queries/useOpportunities';
+import { useServicePackagesQuery } from '@/hooks/queries/useServicePackages';
 import {
   formatVND,
   formatNumberInput,

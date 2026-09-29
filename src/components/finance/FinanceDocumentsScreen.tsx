@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -93,29 +93,46 @@ const MonthCard = memo(({ item }: { item: any }) => {
 });
 MonthCard.displayName = 'MonthCard';
 
+
+const EMPTY_FILTERS: Record<FilterKey, string> = {
+  customerId: '',
+  salesOwnerId: '',
+  projectManagerId: '',
+};
+
 function FinanceFilterSheet({
   visible,
   options,
-  selected,
-  onSelect,
+  applied,
+  onApply,
   onClose,
 }: {
   visible: boolean;
   options: { customers: FilterOption[]; salesOwners: FilterOption[]; projectManagers: FilterOption[] };
-  selected: Record<FilterKey, string>;
-  onSelect: (key: FilterKey, value: string) => void;
+  applied: Record<FilterKey, string>;
+  onApply: (values: Record<FilterKey, string>) => void;
   onClose: () => void;
 }) {
+  const insets = useSafeAreaInsets();
+  const [draft, setDraft] = useState<Record<FilterKey, string>>(applied);
+
+  // Mỗi lần mở sheet, đồng bộ bản nháp với bộ lọc đang áp dụng
+  useEffect(() => {
+    if (visible) setDraft(applied);
+  }, [visible, applied]);
+
   const sections = useMemo(() => [
     { title: 'Khách hàng', keyName: 'customerId' as FilterKey, data: [{ id: '', name: 'Tất cả khách hàng' }, ...options.customers] },
     { title: 'Team kinh doanh', keyName: 'salesOwnerId' as FilterKey, data: [{ id: '', name: 'Tất cả team/người phụ trách' }, ...options.salesOwners] },
     { title: 'Quản lý dự án (PM)', keyName: 'projectManagerId' as FilterKey, data: [{ id: '', name: 'Tất cả PM' }, ...options.projectManagers] },
   ], [options]);
 
+  const activeCount = Object.values(draft).filter(Boolean).length;
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View className="flex-1 justify-end bg-black/60">
-        <View className="max-h-[82%] rounded-t-[28px] bg-white px-4 pt-3 pb-5">
+        <View className="max-h-[85%] rounded-t-[28px] bg-white px-4 pt-3">
           <View className="mb-3 h-1 w-11 self-center rounded-full bg-slate-300" />
           <View className="mb-3 flex-row items-center justify-between">
             <Text className="text-lg font-extrabold text-slate-900">Bộ lọc nâng cao</Text>
@@ -123,16 +140,21 @@ function FinanceFilterSheet({
               <Feather name="x" size={20} color="#64748B" />
             </TouchableOpacity>
           </View>
+
           <SectionList
+            style={{ flexShrink: 1 }}
             sections={sections}
+            extraData={draft}
             keyExtractor={(item, index) => `${item.id}-${index}`}
             stickySectionHeadersEnabled={false}
-            renderSectionHeader={({ section }) => <Text className="mt-3 mb-2 text-sm font-extrabold text-slate-800">{section.title}</Text>}
+            renderSectionHeader={({ section }) => (
+              <Text className="mt-3 mb-2 text-sm font-extrabold text-slate-800">{section.title}</Text>
+            )}
             renderItem={({ item, section }) => {
-              const active = selected[section.keyName] === item.id;
+              const active = draft[section.keyName] === item.id;
               return (
                 <TouchableOpacity
-                  onPress={() => onSelect(section.keyName, item.id)}
+                  onPress={() => setDraft((cur) => ({ ...cur, [section.keyName]: item.id }))}
                   className={`mb-2 min-h-12 flex-row items-center justify-between rounded-xl border px-3 ${active ? 'border-orange-300 bg-orange-50' : 'border-slate-200 bg-white'}`}
                 >
                   <Text className={`flex-1 text-sm ${active ? 'font-bold text-orange-700' : 'text-slate-700'}`}>{item.name}</Text>
@@ -141,6 +163,27 @@ function FinanceFilterSheet({
               );
             }}
           />
+
+          {/* Thanh nút cố định ở đáy */}
+          <View
+            className="flex-row gap-3 border-t border-slate-100 pt-3"
+            style={{ paddingBottom: Math.max(insets.bottom, 16) }}
+          >
+            <TouchableOpacity
+              onPress={() => setDraft(EMPTY_FILTERS)}
+              className="h-12 flex-1 items-center justify-center rounded-xl border border-slate-300"
+            >
+              <Text className="font-bold text-slate-600">Đặt lại</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => onApply(draft)}
+              className="h-12 flex-[1.4] items-center justify-center rounded-xl bg-primary"
+            >
+              <Text className="font-extrabold text-white">
+                Áp dụng{activeCount > 0 ? ` (${activeCount})` : ''}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -243,15 +286,19 @@ function DocumentUploadSheet({
   );
 }
 
-const FinanceRowCard = memo(({ row, view, onUpload, onPreview }: {
+const FinanceRowCard = memo(({ row, view, multiColumn, onUpload, onPreview }: {
   row: PaymentDashboardRow;
   view: FinanceView;
+  multiColumn: boolean;
   onUpload: (row: PaymentDashboardRow, type: 'acceptance' | 'invoice') => void;
   onPreview: (document: FinanceDocument) => void;
 }) => {
   const documents = view === 'ACCEPTANCE' ? row.acceptanceMinutes || [] : view === 'VAT' ? row.vatInvoices || [] : [];
   return (
-    <View className="mx-4 mb-3 flex-1 rounded-2xl border border-slate-200 bg-white p-4">
+     <View
+      className="mx-4 mb-3 rounded-2xl border border-slate-200 bg-white p-4"
+      style={multiColumn ? { flex: 1 } : undefined}
+    >
       <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1">
           <Text className="text-xs font-extrabold text-orange-600">{row.contractCode || 'Chưa có mã HĐ'}</Text>
@@ -329,8 +376,9 @@ export function FinanceDocumentsScreen({ initialView }: { initialView: FinanceVi
 
   const setView = (view: FinanceView) => router.replace(VIEW_ROUTES[view] as any);
   const resetPage = () => setPage(1);
+  const isTablet = width >= 700;
   const renderRow = useCallback(({ item }: { item: PaymentDashboardRow }) => (
-    <FinanceRowCard row={item} view={initialView} onUpload={(row, type) => setUploadTarget({ row, type })} onPreview={setPreview} />
+    <FinanceRowCard row={item} view={initialView} multiColumn={isTablet}onUpload={(row, type) => setUploadTarget({ row, type })} onPreview={setPreview} />
   ), [initialView]);
 
   if (!hasAccess) {
@@ -384,7 +432,22 @@ export function FinanceDocumentsScreen({ initialView }: { initialView: FinanceVi
         maxToRenderPerBatch={8}
         windowSize={5}
       />
-      <FinanceFilterSheet visible={filterVisible} options={{ customers: options.customers || [], salesOwners: options.salesOwners || [], projectManagers: options.projectManagers || [] }} selected={advanced} onSelect={(key, value) => { setAdvanced((current) => ({ ...current, [key]: value })); resetPage(); }} onClose={() => setFilterVisible(false)} />
+      
+      <FinanceFilterSheet
+        visible={filterVisible}
+        options={{
+          customers: options.customers || [],
+          salesOwners: options.salesOwners || [],
+          projectManagers: options.projectManagers || [],
+        }}
+        applied={advanced}
+        onApply={(values) => {
+          setAdvanced(values);
+          resetPage();
+          setFilterVisible(false);
+        }}
+        onClose={() => setFilterVisible(false)}
+      />
       <DocumentUploadSheet row={uploadTarget?.row || null} type={uploadTarget?.type || 'acceptance'} onClose={() => setUploadTarget(null)} />
       <DocumentPreviewModal visible={!!preview} url={preview?.fileUrl || ''} fileName={preview?.name} onClose={() => setPreview(null)} />
     </SafeAreaView>

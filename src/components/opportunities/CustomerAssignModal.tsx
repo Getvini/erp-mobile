@@ -17,9 +17,10 @@ import { BrandColors } from '@/constants/colors';
 import { CustomerItem } from '@/services/customerService';
 import { useCustomersQuery } from '@/hooks/queries/useCustomers';
 import {
-  useReferralPartnersQuery,
   useReferralPartnerDetailQuery,
-} from '@/hooks/queries/useOpportunities';
+  useReferralPartnersQuery,
+} from '@/hooks/queries/useReferralPartners';
+import { ReferralPartnerItem } from '@/services/referralPartnerService';
 import { fetchTaxInfo } from '@/utils/tax';
 import { isValidEmail, isValidPhone, isValidTaxId } from '@/utils/validators';
 
@@ -70,8 +71,8 @@ export const CustomerAssignModal: React.FC<CustomerAssignModalProps> = ({
   const allCustomers: CustomerItem[] = allCustomersData || [];
 
   const { data: referralPartnersData } = useReferralPartnersQuery();
-  const referralPartners: Array<{ id: string; name: string; phone?: string; taxId?: string }> =
-    referralPartnersData || [];
+  // Dùng thẳng type của module chuyên trách: `phone`/`taxId` có thể là null từ backend.
+  const referralPartners: ReferralPartnerItem[] = referralPartnersData || [];
 
   const { data: partnerDetailData, isLoading: isLoadingPartnerDetails } =
     useReferralPartnerDetailQuery(

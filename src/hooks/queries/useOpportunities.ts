@@ -206,49 +206,9 @@ export function useAvailableServicesQuery() {
 }
 
 /**
- * Hook to fetch service packages
+ * Phase P2: `useServicePackagesQuery`, `useReferralPartnersQuery` và
+ * `useReferralPartnerDetailQuery` đã được chuyển về module chuyên trách
+ * (`@/hooks/queries/useServicePackages`, `@/hooks/queries/useReferralPartners`)
+ * để chỉ còn MỘT query key cho mỗi resource — tránh 2 cache song song.
+ * Hãy import trực tiếp từ các module đó.
  */
-export function useServicePackagesQuery() {
-  return useQuery({
-    queryKey: ['service-packages'],
-    queryFn: async () => {
-      const res = await opportunityService.getServicePackages();
-      const raw = res?.data;
-      if (Array.isArray(raw)) return raw;
-      if (raw && Array.isArray((raw as any).data)) return (raw as any).data;
-      return [];
-    },
-    staleTime: 1000 * 60 * 10,
-  });
-}
-
-/**
- * Hook to fetch referral partners
- */
-export function useReferralPartnersQuery() {
-  return useQuery({
-    queryKey: ['referral-partners'],
-    queryFn: async () => {
-      const res = await opportunityService.getReferralPartners();
-      const raw = res?.data;
-      if (Array.isArray(raw)) return raw;
-      if (raw && Array.isArray((raw as any).data)) return (raw as any).data;
-      return [];
-    },
-    staleTime: 1000 * 60 * 10,
-  });
-}
-
-/**
- * Hook to fetch single referral partner detail
- */
-export function useReferralPartnerDetailQuery(id: string) {
-  return useQuery({
-    queryKey: ['referral-partners', id],
-    queryFn: async () => {
-      const res = await opportunityService.getReferralPartner(id);
-      return res.data;
-    },
-    enabled: Boolean(id),
-  });
-}

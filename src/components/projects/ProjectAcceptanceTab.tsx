@@ -8,11 +8,20 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { AcceptanceItem, ACCEPTANCE_STATUS_CONFIG } from '@/services/acceptanceService';
 import { formatNumber } from '@/utils/formatters';
+import { canSendAcceptance } from '@/utils/rbac';
+import { isProjectClosed, isProjectOnHold } from '@/utils/acceptance';
+import { useAuthStore } from '@/stores/useAuthStore';
 
 interface ProjectAcceptanceTabProps {
   acceptances: AcceptanceItem[];
   isLoading: boolean;
   projectStatus?: string;
+  projectIsOnHold?: boolean;
+  /**
+   * @deprecated RBAC được tính lại bên trong bằng `canSendAcceptance(role)`.
+   * Trước đây component nhận `isPmOrAdmin || isCurrentTeamLead`, khiến Account/Team Lead
+   * vẫn thấy nút "Tạo nghiệm thu" — sai so với Web (ContractInfo.jsx:357).
+   */
   isPmOrAdmin?: boolean;
   onOpenCreateAcceptance: () => void;
   onOpenReviewAcceptance?: (item: AcceptanceItem) => void;
@@ -22,10 +31,20 @@ export default function ProjectAcceptanceTab({
   acceptances,
   isLoading,
   projectStatus,
-  isPmOrAdmin = false,
+  projectIsOnHold,
   onOpenCreateAcceptance,
   onOpenReviewAcceptance,
 }: ProjectAcceptanceTabProps) {
+  const user = useAuthStore((state) => state.user);
+
+  /**
+   * Quality Gate RBAC: chỉ ADMIN/BOD/PM/ADMIN_SALE được gửi nghiệm thu.
+   * Account & Team Lead chỉ được xem — mirror erp-UI ContractInfo.jsx:357.
+   */
+  const canCreateAcceptance = canSendAcceptance((user as any)?.role);
+  const isProjectLockedForAcceptance =
+    isProjectClosed(projectStatus) || isProjectOnHold(projectStatus, projectIsOnHold);
+
   if (isLoading) {
     return (
       <View className="py-12 items-center justify-center gap-2.5">
@@ -66,7 +85,7 @@ export default function ProjectAcceptanceTab({
       {/* Top Action Bar */}
       <View className="flex-row justify-between items-center">
         <Text className="text-sm font-bold text-text-primary">Biên bản nghiệm thu ({acceptances.length})</Text>
-        {!isPendingConfirmation && isPmOrAdmin && (
+        {!isPendingConfirmation && canCreateAcceptance && !isProjectLockedForAcceptance && (
           <TouchableOpacity
             className="flex-row items-center gap-1 bg-primary px-3 py-2 rounded-xl"
             onPress={onOpenCreateAcceptance}
@@ -83,7 +102,7 @@ export default function ProjectAcceptanceTab({
           <Feather name="clipboard" size={40} color="#CBD5E1" />
           <Text className="text-sm font-bold text-slate-600">Chưa có biên bản nghiệm thu nào</Text>
           <Text className="text-xs text-slate-400 text-center max-w-[260px]">
-            Dự án này chưa gửi biên bản nghiệm thu. Bấm "Tạo nghiệm thu" để tạo yêu cầu mới.
+            {'Dự án này chưa gửi biên bản nghiệm thu. Bấm "Tạo nghiệm thu" để tạo yêu cầu mới.'}
           </Text>
         </View>
       ) : (

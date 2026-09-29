@@ -38,7 +38,10 @@ export const TEAM_MEMBER_ROLE_LABELS: Record<string, string> = {
   GRAPHIC_DESIGNER: 'Thiết kế đồ họa',
   CAMERAMAN: 'Quay phim',
   PROJECT_MANAGER: 'Quản lý dự án',
-  ACCOUNT: 'Account dự án',
+  // Chuẩn hóa nhãn theo Web 28-09-2026 (erp-UI/src/utils/enums.js:352):
+  // ACCOUNT hiển thị "Account" thay cho "Lead dự án"/"Account dự án".
+  // Enum gửi API vẫn giữ nguyên là `ACCOUNT`.
+  ACCOUNT: 'Account',
   SCRIPTER: 'Biên kịch',
   SOCIAL_MEDIA_MANAGER: 'Quản lý MXH',
   SEO_SPECIALIST: 'Chuyên viên SEO',
@@ -109,4 +112,180 @@ export const teamService = {
     const data = res.data?.data || res.data || [];
     return { data: Array.isArray(data) ? (data as CompanyUser[]) : [], error: res.error };
   },
+
+  // ==========================================================================
+  // PHASE P3 — CƠ CẤU ĐỘI NHÓM (Teams)
+  // APPEND-ONLY: không đổi/xóa bất kỳ method nào phía trên (module Projects đang dùng).
+  // Backend thật: ERP/src/modules/project/routes/ProjectTeam.Route.ts (mount `/api/teams`).
+  // GET /teams và GET /teams/:id/members trả MẢNG THÔ (không `{ data, meta }`, không phân trang).
+  //
+  // ⚠️ Hai method dưới đây buộc phải mang tên khác spec gốc vì trùng tên với export đã có:
+  //   - `getTeamMembers(teamId, month?, year?)` (positional) → thêm `getTeamMembersByTeam({ id, month, year })`
+  //   - `removeTeamMember(teamId, memberId)`               → thêm `removeTeamMemberById(memberId)`
+  //     (endpoint legacy `DELETE /teams/members/:memberId`)
+  // ==========================================================================
+
+  /** GET /teams/:id — chi tiết một đội (relations: teamLead, members.user). */
+  async getTeam(id: string) {
+    const res = await apiService.get(`/teams/${id}`);
+    const data = res.data?.data || res.data;
+    return { data: (data || undefined) as Team | undefined, error: res.error, status: res.status };
+  },
+
+  /** GET /teams/:id/members?month&year — mảng thô member (kèm `user.workload`). */
+  async getTeamMembersByTeam({
+    id,
+    month,
+    year,
+  }: {
+    id: string;
+    month?: number;
+    year?: number;
+  }) {
+    const now = new Date();
+    const m = month || now.getMonth() + 1;
+    const y = year || now.getFullYear();
+    const res = await apiService.get(`/teams/${id}/members`, { month: m, year: y });
+    const data = res.data?.data || res.data || [];
+    return {
+      data: (Array.isArray(data) ? data : []) as TeamMemberEntry[],
+      error: res.error,
+      status: res.status,
+    };
+  },
+
+  /**
+   * POST /teams — body `{ name, teamLeadId }`.
+   * ⚠️ `teamLeadId` là BẮT BUỘC ở backend (Web gửi thiếu `{ name }` nên bị lỗi server)
+   * ⇒ UI Mobile luôn yêu cầu chọn Team Lead ngay khi tạo đội.
+   */
+  async createTeam(payload: { name: string; teamLeadId: string }) {
+    const res = await apiService.post('/teams', {
+      name: payload.name,
+      teamLeadId: payload.teamLeadId,
+    });
+    return { data: res.data?.data || res.data, error: res.error, status: res.status };
+  },
+
+  /** PUT /teams/:id — chỉ gửi các field được cung cấp. */
+  async updateTeam({
+    id,
+    name,
+    teamLeadId,
+  }: {
+    id: string;
+    name?: string;
+    teamLeadId?: string;
+  }) {
+    const body: Record<string, unknown> = {};
+    if (name !== undefined) body.name = name;
+    if (teamLeadId !== undefined) body.teamLeadId = teamLeadId;
+    const res = await apiService.put(`/teams/${id}`, body);
+    return { data: res.data?.data || res.data, error: res.error, status: res.status };
+  },
+
+  /** DELETE /teams/:id */
+  async deleteTeam(id: string) {
+    const res = await apiService.delete(`/teams/${id}`);
+    return { data: res.data?.data || res.data, error: res.error, status: res.status };
+  },
+
+  /**
+   * PUT /teams/:id/lead — body `{ newLeadId }`.
+   * ⚠️ Chỉ ADMIN/BOD gọi được (PM sẽ nhận 403). Nếu người được chọn chưa là thành viên,
+   * backend tự tạo membership với vai trò `CONTENT_CREATOR`.
+   */
+  async changeTeamLead({ id, newLeadId }: { id: string; newLeadId: string }) {
+    const res = await apiService.put(`/teams/${id}/lead`, { newLeadId });
+    return { data: res.data?.data || res.data, error: res.error, status: res.status };
+  },
+
+  /**
+   * POST /teams/:id/members — body `{ userId, roles }`.
+   * LUÔN gửi `roles` dạng MẢNG; backend fallback `CONTENT_CREATOR` nếu mảng rỗng.
+   */
+  async addTeamMembers({
+    id,
+    userId,
+    roles,
+  }: {
+    id: string;
+    userId: string;
+    roles: string[];
+  }) {
+    const res = await apiService.post(`/teams/${id}/members`, {
+      userId,
+      roles: Array.isArray(roles) ? roles : [],
+    });
+    return { data: res.data?.data || res.data, error: res.error, status: res.status };
+  },
+
+  /**
+   * PUT /teams/:id/members/:userId/roles — body `{ roles: string[] }`.
+   * Backend dedupe; mảng rỗng → 400 (client chặn trước bằng `validateMemberRoles`).
+   */
+  async updateMemberRoles({
+    id,
+    userId,
+    roles,
+  }: {
+    id: string;
+    userId: string;
+    roles: string[];
+  }) {
+    const res = await apiService.put(`/teams/${id}/members/${userId}/roles`, {
+      roles: Array.isArray(roles) ? roles : [],
+    });
+    return { data: res.data?.data || res.data, error: res.error, status: res.status };
+  },
+
+  /** PATCH /teams/members/:memberId — body `{ role }` (vai trò đơn, endpoint legacy). */
+  async updateMemberLegacyRole({ memberId, role }: { memberId: string; role: string }) {
+    const res = await apiService.patch(`/teams/members/${memberId}`, { role });
+    return { data: res.data?.data || res.data, error: res.error, status: res.status };
+  },
+
+  /** DELETE /teams/members/:memberId — endpoint legacy theo `memberId`. */
+  async removeTeamMemberById(memberId: string) {
+    const res = await apiService.delete(`/teams/members/${memberId}`);
+    return { data: res.data?.data || res.data, error: res.error, status: res.status };
+  },
 };
+
+// ============================================================================
+// PHASE P3 — Types dùng cho module Teams (append-only)
+// ============================================================================
+
+/** Người dùng trong đội (rút gọn từ `/users`, kèm `workload` khi có). */
+export interface TeamMemberUser {
+  id: string;
+  fullName: string;
+  email?: string;
+  phoneNumber?: string;
+  /** Quan hệ `user.account` của backend (chứa `role`). */
+  account?: any;
+  role?: string;
+  workload?: any;
+}
+
+/** Một membership trong đội. `roles` là MẢNG STRING (không phải mảng object). */
+export interface TeamMemberEntry {
+  id: string;
+  teamId?: string;
+  userId?: string;
+  /** Legacy: `member.role` (select: false ở backend, chỉ có khi được map thủ công). */
+  role?: string;
+  roles?: (string | { role?: string })[];
+  user?: TeamMemberUser;
+}
+
+/** Đội nhóm — shape thô của GET /teams và GET /teams/:id. */
+export interface Team {
+  id: string;
+  name: string;
+  teamLeadId?: string | null;
+  teamLead?: TeamMemberUser | null;
+  members?: TeamMemberEntry[];
+  createdAt?: string;
+  updatedAt?: string;
+}

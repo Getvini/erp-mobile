@@ -54,6 +54,9 @@ export default function ProjectTasksTab({
     }));
   };
 
+  const isExtraTaskItem = (t: TaskDetail): boolean =>
+  Boolean(t.isExtraTask || (t as any).isExtra);
+
   const isTaskAssignable = (t: TaskDetail): boolean => {
     if (t.assigneeId || (t as any).assignee?.id) return false;
     const st = t.status || 'PENDING';
@@ -137,16 +140,14 @@ export default function ProjectTasksTab({
 
   const groupedTasks = useMemo(() => {
     const groups: Record<string, { jobName: string; tasks: TaskDetail[] }> = {};
-    const extraTasks: TaskDetail[] = [];
 
     tasks.forEach((t) => {
-      if (t.isExtraTask) {
-        extraTasks.push(t);
-        return;
-      }
+      const job = (t as any).job;
+      const isExtra = isExtraTaskItem(t);
 
-      const jobId = (t as any).job?.id || (t as any).jobId || 'contract_default';
-      const jobName = (t as any).job?.name || 'Hạng mục hợp đồng';
+      // Việc phát sinh không có job thì tự thành nhóm riêng, đặt tên theo tên việc (giống web)
+      const jobId = job?.id || (t as any).jobId || (isExtra ? `extra_${t.id}` : 'contract_default');
+      const jobName = job?.name || (isExtra ? t.name : 'Hạng mục hợp đồng');
 
       if (!groups[jobId]) {
         groups[jobId] = { jobName, tasks: [] };
@@ -154,23 +155,15 @@ export default function ProjectTasksTab({
       groups[jobId].tasks.push(t);
     });
 
-    const groupList = Object.keys(groups)
+    return Object.keys(groups)
       .map((key) => ({
         id: key,
         jobName: groups[key].jobName,
-        tasks: groups[key].tasks.sort((a, b) => (a.code || '').localeCompare(b.code || '', undefined, { numeric: true })),
+        tasks: groups[key].tasks.sort((a, b) =>
+          (a.code || '').localeCompare(b.code || '', undefined, { numeric: true })
+        ),
       }))
       .sort((a, b) => a.jobName.localeCompare(b.jobName, 'vi'));
-
-    if (extraTasks.length > 0) {
-      groupList.push({
-        id: 'extra_tasks',
-        jobName: 'Công việc phát sinh ngoài HĐ',
-        tasks: extraTasks.sort((a, b) => (a.code || '').localeCompare(b.code || '', undefined, { numeric: true })),
-      });
-    }
-
-    return groupList;
   }, [tasks]);
 
   if (isLoading) {
@@ -190,12 +183,17 @@ export default function ProjectTasksTab({
     const isAssigned = ['DOING', 'REWORKING', 'OVERDUE', 'REJECTED'].includes(item.status || '');
     const canAssign = isTaskAssignable(item);
     const isSelected = selectedTaskIds.includes(item.id);
-
+    const isExtra = isExtraTaskItem(item);
+    
     return (
       <TouchableOpacity
         key={item.id}
-        className={`gap-2 rounded-xl border bg-white p-3 ${
-          isSelected ? 'border-primary bg-emerald-50' : 'border-slate-200'
+        className={`relative gap-2 overflow-hidden rounded-xl border p-3 ${
+          isSelected
+            ? 'border-primary bg-emerald-50'
+            : isExtra
+              ? 'border-amber-200 bg-amber-50/60'
+              : 'border-slate-200 bg-white'
         } ${isSelectMode && !canAssign ? 'opacity-55' : ''}`}
         onPress={() => {
           if (isSelectMode) {
@@ -206,41 +204,42 @@ export default function ProjectTasksTab({
         }}
         activeOpacity={0.85}
       >
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center gap-1.5">
-            {isSelectMode && (
-              <TouchableOpacity
-                disabled={!canAssign}
-                onPress={() => canAssign && toggleSelectTask(item.id)}
-                className="pr-0.5"
-              >
-                <Feather
-                  name={isSelected ? 'check-square' : canAssign ? 'square' : 'minus-square'}
-                  size={18}
-                  color={isSelected ? BrandColors.primary : canAssign ? '#94A3B8' : '#CBD5E1'}
-                />
-              </TouchableOpacity>
-            )}
-            {item.code ? (
-              <View className="rounded bg-blue-50 px-1.5 py-0.5">
-                <Text className="text-[11px] font-bold text-primary">{item.code}</Text>
-              </View>
-            ) : null}
-            <View className="rounded-md px-2 py-[3px]" style={{ backgroundColor: statusInfo.bg }}>
-              <Text className="text-[10px] font-bold" style={{ color: statusInfo.color }}>
-                {statusInfo.label}
-              </Text>
+        {isExtra && <View className="absolute bottom-0 left-0 top-0 w-1 bg-amber-400" />}
+        <View className="flex-row flex-wrap items-center gap-1.5">
+          {isSelectMode && (
+            <TouchableOpacity
+              disabled={!canAssign}
+              onPress={() => canAssign && toggleSelectTask(item.id)}
+              className="pr-0.5"
+            >
+              <Feather
+                name={isSelected ? 'check-square' : canAssign ? 'square' : 'minus-square'}
+                size={18}
+                color={isSelected ? BrandColors.primary : canAssign ? '#94A3B8' : '#CBD5E1'}
+              />
+            </TouchableOpacity>
+          )}
+          {item.code ? (
+            <View className="rounded bg-blue-50 px-1.5 py-0.5">
+              <Text className="text-[11px] font-bold text-primary">{item.code}</Text>
             </View>
+          ) : null}
+          <View className="rounded-md px-2 py-[3px]" style={{ backgroundColor: statusInfo.bg }}>
+            <Text className="text-[10px] font-bold" style={{ color: statusInfo.color }}>
+              {statusInfo.label}
+            </Text>
           </View>
+        </View>
 
-          {item.isExtraTask && (
-            <View className="rounded bg-amber-100 px-1.5 py-0.5">
-              <Text className="text-[10px] font-bold text-amber-600">Phát sinh</Text>
+        <View className="flex-row flex-wrap items-center gap-1.5">
+          {isExtra && (
+            <View className="rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5">
+              <Text className="text-[10px] font-bold uppercase text-amber-700">Phát sinh</Text>
             </View>
           )}
         </View>
 
-        <Text className="text-[13px] font-bold text-slate-950">{item.name}</Text>
+        <Text className="text-[13px] font-bold text-slate-950">{item.nickname ?? item.name}</Text>
         {item.description ? (
           <Text className="text-xs leading-4 text-slate-500" numberOfLines={2}>
             {item.description}
@@ -330,13 +329,21 @@ export default function ProjectTasksTab({
       )}
 
       {/* Top Action Bar */}
-      <View className="flex-row items-center justify-between">
-        <Text className="text-[15px] font-bold text-slate-950">Hạng mục công việc ({tasks.length})</Text>
+      <View className="flex-row items-center justify-between gap-3">
+        <View className="flex-1">
+          <Text className="text-sm font-bold text-slate-950" numberOfLines={1}>
+            Hạng mục công việc
+          </Text>
+          <Text className="mt-0.5 text-sm text-slate-500" numberOfLines={1}>
+            Tổng cộng {tasks.length}
+          </Text>
+        </View>
+
         {!isPendingConfirmation && isPmOrAdmin && (
-          <View className="flex-row gap-1.5">
+          <View className="shrink-0 flex-row items-center gap-2">
             <TouchableOpacity
-              className={`flex-row items-center gap-1 rounded-lg border px-2 py-1.5 ${
-                isSelectMode ? 'border-primary bg-blue-50' : 'border-slate-200 bg-slate-100'
+              className={`flex-row items-center gap-1.5 rounded-xl border px-3 py-2 ${
+                isSelectMode ? 'border-primary bg-blue-50' : 'border-slate-200 bg-white'
               }`}
               onPress={() => {
                 if (onToggleSelectMode) {
@@ -350,21 +357,26 @@ export default function ProjectTasksTab({
             >
               <Feather
                 name={isSelectMode ? 'check-square' : 'square'}
-                size={13}
+                size={14}
                 color={isSelectMode ? BrandColors.primary : '#475569'}
               />
-              <Text className={`text-[11px] ${isSelectMode ? 'font-bold text-primary' : 'font-semibold text-slate-600'}`}>
+              <Text
+                className={`text-[12px] ${isSelectMode ? 'font-bold text-primary' : 'font-semibold text-slate-700'}`}
+                numberOfLines={1}
+              >
                 {isSelectMode ? 'Hủy chọn' : 'Chọn nhiều'}
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              className="flex-row items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5"
+              className="flex-row items-center gap-1.5 rounded-xl bg-primary px-3 py-2"
               onPress={onOpenAddExtraTask}
               activeOpacity={0.8}
             >
-              <Feather name="plus" size={14} color="#FFFFFF" />
-              <Text className="text-[11px] font-bold text-white">Thêm việc</Text>
+              <Feather name="plus" size={15} color="#FFFFFF" />
+              <Text className="text-[12px] font-bold text-white" numberOfLines={1}>
+                Thêm việc
+              </Text>
             </TouchableOpacity>
           </View>
         )}

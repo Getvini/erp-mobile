@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -12,32 +12,26 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptic from 'expo-haptics';
-import { financeService, PaymentPeriod, getFinanceStatusConfig } from '@/services/financeService';
+import { getFinanceStatusConfig } from '@/services/financeService';
 import { BrandColors } from '@/constants/colors';
 import { safeGoBack } from '@/utils/navigation';
+import {
+  useApprovePaymentPeriodMutation,
+  usePaymentPeriodDetailQuery,
+  useRejectPaymentPeriodMutation,
+} from '@/hooks/queries/useFinance';
 
 export default function PaymentApprovalDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
-  const [period, setPeriod] = useState<PaymentPeriod | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const paymentPeriodId = String(id || '');
+  const { data: period, isLoading: loading } = usePaymentPeriodDetailQuery(paymentPeriodId);
+  const approveMutation = useApprovePaymentPeriodMutation();
+  const rejectMutation = useRejectPaymentPeriodMutation();
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
-
-  const fetchDetail = async () => {
-    try {
-      const res = await financeService.getPaymentPeriodById(id as string);
-      if (res.data) setPeriod(res.data);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (id) fetchDetail();
-  }, [id]);
+  const submitting = approveMutation.isPending || rejectMutation.isPending;
 
   const formatVND = (amount?: number) => {
     if (amount === undefined || amount === null) return '0 ₫';
@@ -55,17 +49,14 @@ export default function PaymentApprovalDetailScreen() {
           style: 'default',
           onPress: async () => {
             try {
-              setSubmitting(true);
               Haptic.impactAsync(Haptic.ImpactFeedbackStyle.Heavy);
-              await financeService.approvePaymentPeriod(id as string);
+              await approveMutation.mutateAsync(paymentPeriodId);
               Haptic.notificationAsync(Haptic.NotificationFeedbackType.Success);
               Alert.alert('Thành công', 'Đã phê duyệt đợt thanh toán.');
               safeGoBack(router, '/finance');
             } catch (err: any) {
               Haptic.notificationAsync(Haptic.NotificationFeedbackType.Error);
               Alert.alert('Lỗi phê duyệt', err?.message || 'Không thể phê duyệt.');
-            } finally {
-              setSubmitting(false);
             }
           },
         },
@@ -80,17 +71,14 @@ export default function PaymentApprovalDetailScreen() {
     }
 
     try {
-      setSubmitting(true);
       Haptic.impactAsync(Haptic.ImpactFeedbackStyle.Medium);
-      await financeService.rejectPaymentPeriod(id as string, rejectReason);
+      await rejectMutation.mutateAsync({ id: paymentPeriodId, reason: rejectReason });
       Haptic.notificationAsync(Haptic.NotificationFeedbackType.Warning);
       Alert.alert('Đã từ chối', 'Đã từ chối đợt thanh toán này.');
       safeGoBack(router, '/finance');
     } catch (err: any) {
       Haptic.notificationAsync(Haptic.NotificationFeedbackType.Error);
       Alert.alert('Lỗi', err?.message || 'Không thể thực hiện.');
-    } finally {
-      setSubmitting(false);
     }
   };
 

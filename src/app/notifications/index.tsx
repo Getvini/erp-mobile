@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,110 +6,101 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
+  ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { notificationService, NotificationItem } from '@/services/notificationService';
+import { NotificationItem } from '@/services/notificationService';
+import {
+  NOTIFICATION_CATEGORY_LABELS,
+  NOTIFICATION_CATEGORY_ORDER,
+  NotificationCategory,
+  countNotificationsByCategory,
+  filterNotifications,
+  getNotificationCategory,
+  getNotificationCategoryIcon,
+  resolveNotificationDeepLink,
+} from '@/utils/notificationPresenter';
 import { BrandColors } from '@/constants/colors';
 import BottomNavBar from '@/components/BottomNavBar';
+import { useSSERefresh } from '@/hooks/useSSERefresh';
+import {
+  useMarkAllNotificationsReadMutation,
+  useMarkNotificationReadMutation,
+  useNotificationsQuery,
+} from '@/hooks/queries/useNotifications';
+import { formatDateTimeToDDMMYYYYHHMM } from '@/utils/formatters';
 import * as Haptic from 'expo-haptics';
 
 import { safeGoBack } from '@/utils/navigation';
 
+type NotificationFilter = 'all' | NotificationCategory;
+
 export default function NotificationsScreen() {
   const router = useRouter();
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [filter, setFilter] = useState<NotificationFilter>('all');
 
-  const fetchNotifications = async () => {
-    try {
-      const res = await notificationService.getNotifications();
-      if (res.data) {
-        setNotifications(res.data);
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const {
+    data: notifications = [],
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    refetch,
+  } = useNotificationsQuery();
 
-  useEffect(() => {
-    fetchNotifications();
-  }, []);
+  const markReadMutation = useMarkNotificationReadMutation();
+  const markAllReadMutation = useMarkAllNotificationsReadMutation();
+
+  useSSERefresh('invalidate_Notifications', refetch);
+
+  const unreadCount = notifications.filter((item) => !item.isRead).length;
+  const categoryCounts = useMemo(
+    () => countNotificationsByCategory(notifications),
+    [notifications],
+  );
+  const filtered = useMemo(
+    () => filterNotifications(notifications, filter),
+    [notifications, filter],
+  );
 
   const handleRefresh = () => {
-    setRefreshing(true);
-    fetchNotifications();
+    refetch();
   };
 
   const handleMarkAllRead = async () => {
     Haptic.impactAsync(Haptic.ImpactFeedbackStyle.Medium);
-    const unreadIds = notifications.filter((notification) => !notification.isRead).map((notification) => notification.id);
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-    await notificationService.markAllAsRead(unreadIds);
+    const unreadIds = notifications.filter((item) => !item.isRead).map((item) => item.id);
+    if (unreadIds.length === 0) return;
+    try {
+      await markAllReadMutation.mutateAsync(unreadIds);
+    } catch {
+      // Lỗi đã được rollback optimistic trong hook; im lặng để không chặn UI.
+    }
   };
 
   const handleItemPress = async (item: NotificationItem) => {
-    if (!item.isRead) {
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n))
-      );
-      notificationService.markAsRead(item.id);
-    }
-
     Haptic.selectionAsync();
 
-    // Navigate to target if available
-    if (item.type === 'TASK' && item.targetId) {
-      router.push(`/tasks/${item.targetId}` as any);
-    } else if (item.type === 'ACCEPTANCE') {
-      router.push('/acceptances' as any);
-    } else if (item.type === 'FINANCE') {
-      router.push('/finance' as any);
-    } else if (item.type === 'CONTRACT' && item.targetId) {
-      router.push(`/contracts/${item.targetId}` as any);
+    if (!item.isRead) {
+      markReadMutation.mutate(item.id);
+    }
+
+    // Quality Gate 12: deep link mở đúng màn hình chi tiết.
+    const deepLink = resolveNotificationDeepLink(item);
+    if (deepLink) {
+      router.push(deepLink as any);
     }
   };
 
-  const filtered = notifications.filter((n) => {
-    if (filter === 'unread') return !n.isRead;
-    return true;
-  });
-
-  const getNotificationIcon = (type?: string) => {
-    switch (type) {
-      case 'TASK':
-        return { name: 'check-square', color: '#3B82F6', bg: 'bg-blue-50' };
-      case 'ACCEPTANCE':
-        return { name: 'file-text', color: '#10B981', bg: 'bg-emerald-50' };
-      case 'FINANCE':
-        return { name: 'dollar-sign', color: '#F59E0B', bg: 'bg-amber-50' };
-      case 'CONTRACT':
-        return { name: 'briefcase', color: '#8B5CF6', bg: 'bg-purple-50' };
-      default:
-        return { name: 'bell', color: '#64748B', bg: 'bg-slate-100' };
-    }
-  };
-
-  const formatDate = (dateStr: string) => {
-    try {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('vi-VN', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return dateStr;
-    }
-  };
+  const formatDate = (dateStr: string) => formatDateTimeToDDMMYYYYHHMM(dateStr, dateStr);
 
   const renderNotifItem = ({ item }: { item: NotificationItem }) => {
-    const icon = getNotificationIcon(item.type);
+    const category = getNotificationCategory(item.type, item.relatedEntityType);
+    const icon = getNotificationCategoryIcon(category);
+    const hasDeepLink = Boolean(resolveNotificationDeepLink(item));
+
     return (
       <TouchableOpacity
         className={`p-4 rounded-2xl border mb-3 flex-row items-start gap-3.5 ${
@@ -124,27 +115,60 @@ export default function NotificationsScreen() {
 
         <View className="flex-1">
           <View className="flex-row items-center justify-between mb-1">
-            <Text className={`text-sm flex-1 mr-2 ${item.isRead ? 'font-semibold text-slate-800' : 'font-bold text-slate-900'}`}>
+            <Text
+              className={`text-sm flex-1 mr-2 ${
+                item.isRead ? 'font-semibold text-slate-800' : 'font-bold text-slate-900'
+              }`}
+            >
               {item.title}
             </Text>
             {!item.isRead && <View className="w-2.5 h-2.5 rounded-full bg-blue-600" />}
           </View>
 
           <Text className="text-xs text-slate-600 leading-4 mb-2">{item.message}</Text>
-          <Text className="text-[11px] font-medium text-slate-400">{formatDate(item.createdAt)}</Text>
+
+          <View className="flex-row items-center justify-between">
+            <Text className="text-[11px] font-medium text-slate-400">
+              {formatDate(item.createdAt)}
+            </Text>
+            <View className="flex-row items-center gap-1.5">
+              <View className="px-1.5 py-0.5 rounded bg-slate-100">
+                <Text className="text-[10px] font-bold text-slate-500">
+                  {NOTIFICATION_CATEGORY_LABELS[category]}
+                </Text>
+              </View>
+              {hasDeepLink && <Feather name="chevron-right" size={14} color="#94A3B8" />}
+            </View>
+          </View>
         </View>
       </TouchableOpacity>
     );
   };
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const renderFilterChip = (key: NotificationFilter, label: string, count: number) => {
+    const isActive = filter === key;
+    return (
+      <TouchableOpacity
+        key={key}
+        className={`px-3.5 py-2 rounded-xl border min-h-[38px] items-center justify-center ${
+          isActive ? 'bg-slate-900 border-slate-900' : 'bg-slate-100 border-slate-200'
+        }`}
+        onPress={() => setFilter(key)}
+        activeOpacity={0.7}
+      >
+        <Text className={`text-xs font-bold ${isActive ? 'text-white' : 'text-slate-600'}`}>
+          {label} ({count})
+        </Text>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
       {/* Header */}
       <View className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-slate-200">
         <TouchableOpacity
-          className="w-10 h-10 rounded-xl bg-slate-100 items-center justify-center min-w-[44px] min-h-[44px]"
+          className="w-10 h-10 rounded-xl bg-slate-100 items-center justify-center min-w-[48px] min-h-[48px]"
           onPress={() => safeGoBack(router, '/')}
           activeOpacity={0.7}
         >
@@ -155,7 +179,7 @@ export default function NotificationsScreen() {
 
         {unreadCount > 0 ? (
           <TouchableOpacity
-            className="px-2.5 py-1.5 rounded-lg bg-blue-50 min-h-[44px] justify-center"
+            className="px-2.5 py-1.5 rounded-lg bg-blue-50 min-h-[48px] justify-center"
             onPress={handleMarkAllRead}
             activeOpacity={0.7}
           >
@@ -166,36 +190,45 @@ export default function NotificationsScreen() {
         )}
       </View>
 
-      {/* Filter Tabs */}
-      <View className="flex-row px-4 py-3 bg-white border-b border-slate-200 gap-2">
-        <TouchableOpacity
-          className={`px-4 py-2 rounded-xl border min-h-[38px] items-center justify-center ${
-            filter === 'all' ? 'bg-slate-900 border-slate-900' : 'bg-slate-100 border-slate-200'
-          }`}
-          onPress={() => setFilter('all')}
+      {/* Filter Tabs — phân loại Công việc / Tài chính / Bảng tin */}
+      <View className="bg-white border-b border-slate-200 py-3">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
         >
-          <Text className={`text-xs font-bold ${filter === 'all' ? 'text-white' : 'text-slate-600'}`}>
-            Tất cả ({notifications.length})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          className={`px-4 py-2 rounded-xl border min-h-[38px] items-center justify-center ${
-            filter === 'unread' ? 'bg-blue-600 border-blue-600' : 'bg-slate-100 border-slate-200'
-          }`}
-          onPress={() => setFilter('unread')}
-        >
-          <Text className={`text-xs font-bold ${filter === 'unread' ? 'text-white' : 'text-slate-600'}`}>
-            Chưa đọc ({unreadCount})
-          </Text>
-        </TouchableOpacity>
+          {renderFilterChip('all', 'Tất cả', notifications.length)}
+          {NOTIFICATION_CATEGORY_ORDER.map((category) => {
+            const stats = categoryCounts.find((entry) => entry.category === category);
+            return renderFilterChip(
+              category,
+              NOTIFICATION_CATEGORY_LABELS[category],
+              stats?.total ?? 0,
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* Content List */}
-      {loading ? (
+      {isLoading ? (
         <View className="flex-1 justify-center items-center gap-2.5">
           <ActivityIndicator size="large" color={BrandColors.primary} />
           <Text className="text-xs text-slate-400">Đang đồng bộ thông báo...</Text>
+        </View>
+      ) : isError ? (
+        <View className="flex-1 justify-center items-center gap-2.5 px-8">
+          <Ionicons name="cloud-offline-outline" size={48} color="#FCA5A5" />
+          <Text className="text-base font-bold text-slate-700">Không tải được thông báo</Text>
+          <Text className="text-xs text-slate-400 text-center">
+            {(error as Error)?.message || 'Vui lòng kiểm tra kết nối và thử lại.'}
+          </Text>
+          <TouchableOpacity
+            className="mt-2 px-4 py-2.5 rounded-xl min-h-[48px] justify-center"
+            style={{ backgroundColor: BrandColors.primary }}
+            onPress={() => refetch()}
+          >
+            <Text className="text-sm font-bold text-white">Thử lại</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -205,14 +238,20 @@ export default function NotificationsScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={BrandColors.primary} />
+            <RefreshControl
+              refreshing={isFetching && !isLoading}
+              onRefresh={handleRefresh}
+              tintColor={BrandColors.primary}
+            />
           }
           ListEmptyComponent={
             <View className="py-16 items-center justify-center gap-2.5">
               <Ionicons name="notifications-off-outline" size={48} color="#CBD5E1" />
               <Text className="text-base font-bold text-slate-600">Không có thông báo nào</Text>
               <Text className="text-xs text-slate-400 text-center max-w-[240px]">
-                {filter === 'unread' ? 'Bạn đã đọc toàn bộ các thông báo.' : 'Hệ thống chưa ghi nhận thông báo mới.'}
+                {filter === 'all'
+                  ? 'Hệ thống chưa ghi nhận thông báo mới.'
+                  : `Chưa có thông báo thuộc nhóm ${NOTIFICATION_CATEGORY_LABELS[filter]}.`}
               </Text>
             </View>
           }

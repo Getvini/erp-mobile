@@ -19,8 +19,16 @@ import ReworkTaskModal from '@/components/tasks/ReworkTaskModal';
 import TaskResultModal from '@/components/tasks/TaskResultModal';
 import TaskAssignModal from '@/components/projects/TaskAssignModal';
 import TaskReviewModal from '@/components/tasks/TaskReviewModal';
+import TaskSubtaskSection from '@/components/tasks/TaskSubtaskSection';
+import TaskLifecycleActions from '@/components/tasks/TaskLifecycleActions';
+import TaskResultChecksPanel from '@/components/tasks/TaskResultChecksPanel';
+import ResultSheetSelectorPanel, {
+  type ResultCheckSource,
+} from '@/components/tasks/ResultSheetSelectorPanel';
 import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { safeGoBack } from '@/utils/navigation';
+import { isSpreadsheetFile, resolveSpellCheckLinkSource } from '@/utils/spellCheckLink';
+import { useTeamMembersQuery } from '@/hooks/queries/useProjects';
 import {
   useTaskDetailQuery,
   useTaskReviewsQuery,
@@ -31,7 +39,6 @@ import {
   useReturnSupportMutation,
   useRequestReturnSupportMutation,
   useSendTaskReminderMutation,
-  useRequestReworkMutation,
 } from '@/hooks/queries/useTasks';
 
 const formatDateTimeStr = (dateStr?: string) => {
@@ -88,7 +95,6 @@ export default function TaskDetailScreen() {
   const returnSupportMutation = useReturnSupportMutation();
   const requestReturnSupportMutation = useRequestReturnSupportMutation();
   const sendTaskReminderMutation = useSendTaskReminderMutation();
-  const requestReworkMutation = useRequestReworkMutation();
 
   const isActionLoading =
     updateTaskMutation.isPending ||
@@ -97,8 +103,7 @@ export default function TaskDetailScreen() {
     respondToSupportMutation.isPending ||
     returnSupportMutation.isPending ||
     requestReturnSupportMutation.isPending ||
-    sendTaskReminderMutation.isPending ||
-    requestReworkMutation.isPending;
+    sendTaskReminderMutation.isPending;
 
   const isUpdatingDescription = updateTaskMutation.isPending;
 
@@ -107,7 +112,10 @@ export default function TaskDetailScreen() {
     refetchReviews();
   }, [refetchTask, refetchReviews]);
 
-  useSSERefresh(['invalidate_Tasks', 'invalidate_TaskReviews'], loadTask);
+  useSSERefresh(
+    ['invalidate_Tasks', 'invalidate_TaskReviews', 'invalidate_TaskResultChecks'],
+    loadTask
+  );
 
   const currentUserId = user?.id;
   const teamLeadId = task?.project?.team?.teamLead?.id;
@@ -115,6 +123,42 @@ export default function TaskDetailScreen() {
   const isManagement = ['ADMIN', 'BOD', 'PM', 'TEAM_LEAD'].includes(user?.role || '');
   const canManageProjectTask = isManagement || isProjectLead;
   const canEditDescription = canManageProjectTask;
+
+  // Thành viên dự án để chọn người thực hiện cho công việc con
+  const { data: teamMembersData } = useTeamMembersQuery(task?.project?.team?.id);
+  const subtaskAssigneeOptions = useMemo(
+    () =>
+      (teamMembersData || [])
+        .filter((member: any) => member?.user?.id)
+        .map((member: any) => ({
+          id: member.user.id as string,
+          fullName: (member.user.fullName || member.user.name) as string | undefined,
+        })),
+    [teamMembersData]
+  );
+
+  /**
+   * ⚠️ `TaskDetail` chưa khai báo `subtasks` (theo yêu cầu KHÔNG sửa tầng service)
+   * ⇒ đọc qua ép kiểu tại chỗ cho tầng UI.
+   */
+  const subtaskCount = Array.isArray((task as any)?.subtasks)
+    ? ((task as any).subtasks as any[]).length
+    : 0;
+  // Quyền quản lý công việc con: Account phụ trách (team lead) / ADMIN / PM
+  const canManageSubtasks = canManageProjectTask;
+
+  // Tab đang xem: Tổng quan | Công việc con | QC & Kết quả
+  const [activeTab, setActiveTab] = useState<'overview' | 'subtasks' | 'qc'>('overview');
+
+  // Nguồn file kết quả đã nộp để chọn lại sheet kiểm tra trong tab QC
+  const [qcSelectedSheets, setQcSelectedSheets] = useState<string[]>([]);
+  const [qcWhitelist, setQcWhitelist] = useState<string[]>([]);
+  const resultSheetSource = useMemo<ResultCheckSource | undefined>(() => {
+    const url = task?.result?.url;
+    if (!url) return undefined;
+    const { url: fileUrl, fileName } = resolveSpellCheckLinkSource(url);
+    return isSpreadsheetFile(fileName) ? { kind: 'url', fileUrl, fileName } : undefined;
+  }, [task?.result?.url]);
 
   const handleStartEditDescription = () => {
     setEditedDescription(task?.description || '');
@@ -292,7 +336,43 @@ export default function TaskDetailScreen() {
         </View>
       </View>
 
+      {/* Tab bar: Tổng quan | Công việc con | QC & Kết quả */}
+      <View className="flex-row bg-white border-b border-slate-200 px-2">
+        {(
+          [
+            { key: 'overview', label: 'Tổng quan', badge: 0 },
+            { key: 'subtasks', label: 'Công việc con', badge: subtaskCount },
+            { key: 'qc', label: 'QC & Kết quả', badge: 0 },
+          ] as { key: 'overview' | 'subtasks' | 'qc'; label: string; badge: number }[]
+        ).map((tab) => {
+          const isActive = activeTab === tab.key;
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              className={`flex-1 min-h-[48px] flex-row items-center justify-center gap-1.5 border-b-2 ${
+                isActive ? 'border-primary' : 'border-transparent'
+              }`}
+              onPress={() => setActiveTab(tab.key)}
+              activeOpacity={0.8}
+            >
+              <Text
+                className={`text-xs ${isActive ? 'font-bold text-primary' : 'font-semibold text-slate-500'}`}
+              >
+                {tab.label}
+              </Text>
+              {tab.badge > 0 && (
+                <View className="px-1.5 py-0.5 rounded-full bg-orange-100">
+                  <Text className="text-[10px] font-bold text-orange-700">{tab.badge}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        {activeTab === 'overview' && (
+          <>
         {/* Project Back Link Banner */}
         {task.project?.name && (
           <TouchableOpacity
@@ -307,6 +387,15 @@ export default function TaskDetailScreen() {
             <Feather name="chevron-right" size={16} color="#94A3B8" />
           </TouchableOpacity>
         )}
+
+        {/* Vòng đời công việc: Bắt đầu / Nộp kết quả / Gửi duyệt / Nhờ hỗ trợ / Khách không mua / Xóa */}
+        <TaskLifecycleActions
+          task={task}
+          projectId={task.project?.id}
+          onChanged={loadTask}
+          onOpenResultModal={() => setIsResultModalOpen(true)}
+          onDeleted={() => safeGoBack(router, '/tasks')}
+        />
 
         {/* Top Action Buttons Grid */}
         <View className="flex-row flex-wrap gap-2">
@@ -667,7 +756,7 @@ export default function TaskDetailScreen() {
                     {iteration.leadFeedback && (
                       <View className="border-l-4 border-purple-600 pl-2 gap-0.5">
                         <Text className="text-[9px] font-extrabold text-slate-400 tracking-wider">PHẢN HỒI CỦA LEAD</Text>
-                        <Text className="text-xs text-slate-900 italic">"{iteration.leadFeedback}"</Text>
+                        <Text className="text-xs text-slate-900 italic">{`"${iteration.leadFeedback}"`}</Text>
                       </View>
                     )}
 
@@ -782,10 +871,68 @@ export default function TaskDetailScreen() {
             <Text className="text-xs text-slate-400 italic text-center py-2">Không có tài liệu đính kèm</Text>
           )}
         </View>
+          </>
+        )}
+
+        {/* ===== Tab: Công việc con ===== */}
+        {activeTab === 'subtasks' && (
+          <>
+            <TaskSubtaskSection
+              task={task}
+              projectId={task.project?.id}
+              canManage={canManageSubtasks}
+              assigneeOptions={subtaskAssigneeOptions}
+              onChanged={loadTask}
+            />
+
+            {/* Trạng thái rỗng khi không có công việc con và không đủ quyền quản lý */}
+            {subtaskCount === 0 && !canManageSubtasks && (
+              <View className="bg-white rounded-2xl p-6 border border-slate-200 items-center gap-2">
+                <Feather name="layers" size={32} color="#CBD5E1" />
+                <Text className="text-xs text-slate-400">
+                  Công việc này chưa được chia thành công việc con
+                </Text>
+              </View>
+            )}
+          </>
+        )}
+
+        {/* ===== Tab: QC & Kết quả =====
+            Tái sử dụng nguyên các panel có sẵn: TaskResultChecksPanel (chính tả + QC, bên trong
+            đã dùng SpellCheckWhitelist) và ResultSheetSelectorPanel (chọn sheet + whitelist + QcProductInfoPanel). */}
+        {activeTab === 'qc' && (
+          <>
+            <TaskResultChecksPanel taskId={task.id} projectId={task.project?.id} />
+
+            {resultSheetSource ? (
+              <ResultSheetSelectorPanel
+                source={resultSheetSource}
+                projectId={task.project?.id}
+                selectedSheets={qcSelectedSheets}
+                onSelectedSheetsChange={setQcSelectedSheets}
+                whitelist={qcWhitelist}
+                onWhitelistChange={setQcWhitelist}
+              />
+            ) : (
+              <View className="bg-white rounded-2xl p-4 border border-slate-200 gap-2">
+                <View className="flex-row items-center gap-2">
+                  <Feather name="file-text" size={15} color="#2563EB" />
+                  <Text className="text-sm font-bold text-slate-900">Chọn sheet kiểm tra</Text>
+                </View>
+                <Text className="text-xs text-slate-500">
+                  {task.result?.url
+                    ? 'Kết quả đã nộp không phải file bảng tính nên không cần chọn sheet kiểm tra.'
+                    : 'Chưa có kết quả nào được nộp để kiểm tra chính tả & QC.'}
+                </Text>
+              </View>
+            )}
+          </>
+        )}
       </ScrollView>
 
       {/* Modals */}
       <ReworkTaskModal
+        key={`${task.id}:${isReworkModalOpen ? 'open' : 'closed'}`}
         visible={isReworkModalOpen}
         onClose={() => setIsReworkModalOpen(false)}
         task={task}

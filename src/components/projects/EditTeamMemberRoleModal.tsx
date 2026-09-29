@@ -26,7 +26,7 @@ interface EditTeamMemberRoleModalProps {
 }
 
 const ROLES_LIST = [
-  { key: 'ACCOUNT', label: 'Account dự án', desc: 'Quản lý & duyệt công việc nhóm' },
+  { key: 'ACCOUNT', label: 'Account', desc: 'Quản lý & duyệt công việc nhóm' },
   { key: 'EDITOR', label: 'Editor', desc: 'Dựng phim & biên tập video' },
   { key: 'CONTENT_CREATOR', label: 'Nội dung', desc: 'Sáng tạo nội dung & bài viết' },
   { key: 'GRAPHIC_DESIGNER', label: 'Thiết kế đồ họa', desc: 'Thiết kế banner, hình ảnh' },
@@ -35,6 +35,10 @@ const ROLES_LIST = [
   { key: 'SOCIAL_MEDIA_MANAGER', label: 'Quản lý MXH', desc: 'Quản trị các trang MXH' },
   { key: 'SEO_SPECIALIST', label: 'Chuyên viên SEO', desc: 'Tối ưu hóa công cụ tìm kiếm' },
 ];
+
+/** Nhãn vai trò hiển thị — ACCOUNT là "Account" theo Web, không dùng "Account dự án"/"Lead dự án". */
+const getMemberRoleLabel = (role: string): string =>
+  role === 'ACCOUNT' ? 'Account' : TEAM_MEMBER_ROLE_LABELS[role] || role;
 
 export default function EditTeamMemberRoleModal({
   visible,
@@ -80,7 +84,7 @@ export default function EditTeamMemberRoleModal({
     if (roleKey === 'ACCOUNT' && selectedRoles.includes('ACCOUNT') && otherAccountsCount === 0) {
       Alert.alert(
         'Không thể bỏ vai trò',
-        'Dự án phải có ít nhất một nhân sự giữ vai trò Account/Lead dự án. Không thể bỏ vai trò này.'
+        'Dự án phải có ít nhất một nhân sự giữ vai trò Account. Không thể bỏ vai trò này.'
       );
       return;
     }
@@ -106,7 +110,7 @@ export default function EditTeamMemberRoleModal({
     if (otherAccountsCount === 0 && !selectedRoles.includes('ACCOUNT')) {
       Alert.alert(
         'Không thể cập nhật',
-        'Dự án phải có ít nhất một nhân sự giữ vai trò Account/Lead dự án. Vui lòng phân công nhân sự khác trước khi bỏ vai trò này.'
+        'Dự án phải có ít nhất một nhân sự giữ vai trò Account. Vui lòng phân công nhân sự khác trước khi bỏ vai trò này.'
       );
       return;
     }
@@ -156,7 +160,7 @@ export default function EditTeamMemberRoleModal({
               <Text className="text-xs text-slate-500">
                 Vai trò đang chọn:{' '}
                 <Text className="font-bold text-primary">
-                  {selectedRoles.map((r) => TEAM_MEMBER_ROLE_LABELS[r] || r).join(', ') || 'Chưa chọn'}
+                  {selectedRoles.map((r) => getMemberRoleLabel(r)).join(', ') || 'Chưa chọn'}
                 </Text>
               </Text>
             </View>

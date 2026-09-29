@@ -4,7 +4,7 @@ import EventSource from 'react-native-sse';
 import { useAuth } from '../context/AuthContext';
 import { apiService } from '../services/api';
 import { sseEventBus } from '../services/sseEventBus';
-import { EVENT_TO_TAGS_MAP } from '../constants/events';
+import { EVENT_TO_TAGS_MAP, getEntityTagForEvent, isProjectLifecycleEvent, isTeamMemberEvent } from '../constants/events';
 
 const DEFAULT_API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
@@ -74,6 +74,25 @@ export const useSSE = () => {
 
               // Emit tag invalidation signals (e.g. 'Opportunities', 'Quotations')
               tags.forEach((tag) => sseEventBus.emit(`invalidate_${tag}`, payload));
+
+              // Delta Web 28-09-2026: invalidation theo id entity cụ thể.
+              // Kênh: `invalidate_<Tag>_<id>` (ví dụ `invalidate_Projects_proj-1`).
+              const entityTag = getEntityTagForEvent(payload.event);
+              const entityId = payload.data?.id;
+              if (entityTag && entityId) {
+                sseEventBus.emit(`invalidate_${entityTag}_${entityId}`, payload);
+                if (isProjectLifecycleEvent(payload.event)) {
+                  sseEventBus.emit(`invalidate_PauseHistory_${entityId}`, payload);
+                }
+              }
+
+              // `team_member_*` invalidate theo teamId (không theo id thành viên).
+              if (isTeamMemberEvent(payload.event)) {
+                const teamId = payload.data?.teamId || payload.data?.team?.id;
+                if (teamId) {
+                  sseEventBus.emit(`invalidate_Teams_${teamId}`, payload);
+                }
+              }
 
               sseEventBus.emit('module_event', payload);
               return;

@@ -2,7 +2,8 @@ import { apiService } from './api';
 import { TaskItem } from './dashboardService';
 
 export const TASK_STATUS_LABELS: Record<string, string> = {
-  NOT_STARTED: 'Chưa thực hiện',
+  // NOT_STARTED: 'Chưa thực hiện',
+  NOT_STARTED: 'Sẵn sàng bắt đầu',
   PENDING: 'Chờ phân công',
   DOING: 'Đang thực hiện',
   DONE: 'Hoàn thành',
@@ -26,7 +27,8 @@ export const TASK_STATUS_CONFIG: Record<
   string,
   { text: string; color: string; bg: string }
 > = {
-  NOT_STARTED: { text: 'Chưa thực hiện', color: '#64748B', bg: '#F1F5F9' },
+  // NOT_STARTED: { text: 'Chưa thực hiện', color: '#64748B', bg: '#F1F5F9' },
+  NOT_STARTED: { text: 'Sẵn sàng bắt đầu', color: '#02f7a9ff', bg: '#ECFDF5' },
   PENDING: { text: 'Chờ phân công', color: '#D97706', bg: '#FFFBEB' },
   DOING: { text: 'Đang thực hiện', color: '#2563EB', bg: '#EFF6FF' },
   DONE: { text: 'Hoàn thành', color: '#059669', bg: '#ECFDF5' },
@@ -130,6 +132,28 @@ export interface TaskDetail extends TaskItem {
       };
     };
   };
+}
+
+/** Một ngày trong lịch tải công việc (mirror Web: getAssigneeDailyWorkload) */
+export interface TaskDailyWorkloadDay {
+  date: string;
+  taskCount: number;
+  workloadValue?: number;
+  dailyNorm?: number;
+  workloadRatio?: number;
+  workloadPercent?: number;
+  tasks?: TaskDetail[];
+}
+
+/** Response GET /tasks/assignee/:userId/daily-workload */
+export interface TaskDailyWorkload {
+  userId: string;
+  startDate: string;
+  endDate: string;
+  role?: string;
+  monthlyNorm?: number;
+  dailyNorm?: number;
+  days: TaskDailyWorkloadDay[];
 }
 
 class TaskService {
@@ -352,6 +376,269 @@ class TaskService {
   async sendTaskReminder(id: string): Promise<{ data?: any; error?: string }> {
     const res = await apiService.post(`/tasks/${id}/remind`, {});
     return { data: res.data, error: res.error };
+  }
+
+  // ============================================================
+  // BỔ SUNG PARITY MODULE CÔNG VIỆC
+  // Đối chiếu ERP/src/modules/task/routes/Task.Route.ts + erp-UI/src/api/tasks.js
+  // ⚠️ Backend KHÔNG có các route sau (gọi sẽ 404) ⇒ KHÔNG implement ở đây:
+  //    - GET  /tasks/assignee/:userId
+  //    - GET  /tasks/opportunity/:opportunityId
+  //    - PATCH /tasks/:id/status   (method updateTaskStatus() phía trên là code cũ, giữ nguyên)
+  //    - PUT  /tasks/:id/pricing   (chỉ tồn tại POST /tasks/:id/pricing)
+  //    - Các route support cross-team (respond-support, return-support, request-return-support,
+  //      assign-support-team) đã bị COMMENT OUT ở backend — method cũ phía trên giữ nguyên, không thêm mới.
+  // ============================================================
+
+  /** Đổi nickname công việc — mirror Web: PATCH /tasks/:id/nickname */
+  async updateTaskNickname({
+    id,
+    nickname,
+  }: {
+    id: string;
+    nickname?: string | null;
+  }): Promise<{ data?: TaskDetail; error?: string }> {
+    const res = await apiService.patch<TaskDetail>(`/tasks/${id}/nickname`, { nickname });
+    return { data: res.data, error: res.error };
+  }
+
+  /** Bắt đầu thực hiện công việc — PATCH /tasks/:id/start (KHÔNG body) */
+  async startTask(id: string): Promise<{ data?: TaskDetail; error?: string }> {
+    const res = await apiService.patch<TaskDetail>(`/tasks/${id}/start`);
+    return { data: res.data, error: res.error };
+  }
+
+  /** Gửi kết quả để duyệt — PATCH /tasks/:id/submit-result-review (KHÔNG body) */
+  async submitResultForReview(id: string): Promise<{ data?: TaskDetail; error?: string }> {
+    const res = await apiService.patch<TaskDetail>(`/tasks/${id}/submit-result-review`);
+    return { data: res.data, error: res.error };
+  }
+
+  /**
+   * Định giá công việc phát sinh (extra task) — POST /tasks/:id/pricing.
+   * ⚠️ Chỉ có POST, backend KHÔNG có PUT /tasks/:id/pricing.
+   */
+  async assessExtraTask({
+    id,
+    isBillable,
+    sellingPrice,
+    isRejected,
+    serviceId,
+  }: {
+    id: string;
+    isBillable: boolean;
+    sellingPrice?: number;
+    isRejected?: boolean;
+    serviceId?: string;
+  }): Promise<{ data?: TaskDetail; error?: string }> {
+    const res = await apiService.post<TaskDetail>(`/tasks/${id}/pricing`, {
+      isBillable,
+      isRejected,
+      sellingPrice,
+      serviceId,
+    });
+    return { data: res.data, error: res.error };
+  }
+
+  /**
+   * Tạo công việc nội bộ (không gắn dự án) — POST /tasks/internal
+   * Payload mirror erp-UI TaskCreateModal.jsx:297-304: `supervisorId` là BẮT BUỘC
+   * (backend Task.CreationService.createInternalTask đọc `data.supervisorId`).
+   */
+  async createInternalTask(payload: {
+    name: string;
+    supervisorId: string;
+    projectId?: string;
+    opportunityId?: string;
+    opportunityServiceJobId?: string;
+    jobId?: string;
+    assigneeId?: string;
+    description?: string;
+    plannedStartDate?: string;
+    plannedEndDate?: string;
+    isOutput?: boolean;
+    isExtra?: boolean;
+    attachments?: any[];
+  }): Promise<{ data?: TaskDetail; error?: string }> {
+    const res = await apiService.post<TaskDetail>('/tasks/internal', payload);
+    return { data: res.data, error: res.error };
+  }
+
+  /** Gửi yêu cầu điều phối nhân sự — POST /tasks/:id/request-staffing */
+  async requestTaskStaffing({
+    id,
+    note,
+  }: {
+    id: string;
+    note: string;
+  }): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.post(`/tasks/${id}/request-staffing`, { note });
+    return { data: res.data, error: res.error };
+  }
+
+  /** Phản hồi yêu cầu điều phối nhân sự — PATCH /tasks/:id/respond-staffing */
+  async respondTaskStaffing({
+    id,
+    action,
+  }: {
+    id: string;
+    action: 'RESOLVE' | 'REJECT';
+  }): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.patch(`/tasks/${id}/respond-staffing`, { action });
+    return { data: res.data, error: res.error };
+  }
+
+  /** Thêm công việc con — POST /tasks/:id/subtasks */
+  async addSubtask({
+    id,
+    name,
+    assigneeId,
+    allocationPercent,
+    description,
+  }: {
+    id: string;
+    name: string;
+    assigneeId?: string;
+    allocationPercent: number;
+    description?: string;
+  }): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.post(`/tasks/${id}/subtasks`, {
+      name,
+      assigneeId,
+      allocationPercent,
+      description,
+    });
+    return { data: res.data, error: res.error };
+  }
+
+  /**
+   * Cập nhật công việc con — PATCH /tasks/:id/subtask.
+   * ⚠️ `:id` ở đây là ID của SUBTASK (không phải task cha).
+   */
+  async updateSubtask({
+    id,
+    name,
+    assigneeId,
+    allocationPercent,
+    description,
+  }: {
+    id: string;
+    name: string;
+    assigneeId?: string;
+    allocationPercent: number;
+    description?: string;
+  }): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.patch(`/tasks/${id}/subtask`, {
+      name,
+      assigneeId,
+      allocationPercent,
+      description,
+    });
+    return { data: res.data, error: res.error };
+  }
+
+  /**
+   * Gửi phương án phân bổ subtask để PM duyệt — POST /tasks/:id/subtask-plan/submit.
+   * ⚠️ Tính năng đang TẮT ở backend (`SUBTASK_PM_APPROVAL_ENABLED = false`
+   * trong ERP/src/modules/task/constants/SubtaskPlan.constants.ts) nên endpoint LUÔN trả 409.
+   * Chỉ giữ để parity, UI không nên gọi khi flag còn tắt.
+   */
+  async submitSubtaskPlan(id: string): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.post(`/tasks/${id}/subtask-plan/submit`);
+    return { data: res.data, error: res.error };
+  }
+
+  /**
+   * PM phản hồi phương án phân bổ subtask — PATCH /tasks/:id/subtask-plan/respond.
+   * ⚠️ Cũng bị tắt bởi `SUBTASK_PM_APPROVAL_ENABLED = false` (luôn 409).
+   */
+  async respondSubtaskPlan({
+    id,
+    action,
+    note,
+  }: {
+    id: string;
+    action: 'APPROVE' | 'REJECT';
+    note?: string;
+  }): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.patch(`/tasks/${id}/subtask-plan/respond`, { action, note });
+    return { data: res.data, error: res.error };
+  }
+
+  /** Bỏ phân công nhiều công việc — PATCH /tasks/bulk-unassign */
+  async bulkUnassignTasks({
+    projectId,
+    taskIds,
+  }: {
+    projectId: string;
+    taskIds: string[];
+  }): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.patch('/tasks/bulk-unassign', { projectId, taskIds });
+    return { data: res.data, error: res.error };
+  }
+
+  /** Bắt đầu nhiều công việc — PATCH /tasks/bulk-start */
+  async bulkStartTasks({
+    projectId,
+    taskIds,
+  }: {
+    projectId: string;
+    taskIds: string[];
+  }): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.patch('/tasks/bulk-start', { projectId, taskIds });
+    return { data: res.data, error: res.error };
+  }
+
+  /** Khách hàng không mua — PATCH /tasks/:id/customer-not-purchase (KHÔNG body) */
+  async customerNotPurchase(id: string): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.patch(`/tasks/${id}/customer-not-purchase`);
+    return { data: res.data, error: res.error };
+  }
+
+  /** Xóa công việc — DELETE /tasks/:id */
+  async deleteTask(id: string): Promise<{ data?: any; error?: string }> {
+    const res = await apiService.delete(`/tasks/${id}`);
+    return { data: res.data, error: res.error };
+  }
+
+  /**
+   * Lịch tải công việc theo ngày của người thực hiện.
+   * GET /tasks/assignee/:userId/daily-workload?startDate&endDate (mirror Web erp-UI/src/api/tasks.js).
+   */
+  async getAssigneeDailyWorkload({
+    userId,
+    startDate,
+    endDate,
+  }: {
+    userId: string;
+    startDate: string;
+    endDate: string;
+  }): Promise<{ data?: TaskDailyWorkload; error?: string }> {
+    const res = await apiService.get<any>(`/tasks/assignee/${userId}/daily-workload`, {
+      startDate,
+      endDate,
+    });
+    const raw = res.data;
+    const item =
+      raw?.data && typeof raw.data === 'object' && !Array.isArray(raw.data) ? raw.data : raw;
+    return { data: item, error: res.error };
+  }
+
+  /**
+   * Danh sách công việc theo dự án (route riêng của backend).
+   * GET /tasks/project/:projectId — mirror Web `getTasksByProject`.
+   * ⚠️ Tên method thêm hậu tố `Route` để KHÔNG override method cũ `getTasksByProject`
+   * (method cũ gọi GET /tasks?projectId=…). Cùng dữ liệu, khác endpoint.
+   */
+  async getTasksByProjectRoute(projectId: string): Promise<{ data?: TaskDetail[]; error?: string }> {
+    const res = await apiService.get<any>(`/tasks/project/${projectId}`);
+    const raw = res.data;
+    const items = Array.isArray(raw)
+      ? raw
+      : raw?.data && Array.isArray(raw.data)
+      ? raw.data
+      : [];
+    return { data: items, error: res.error };
   }
 }
 

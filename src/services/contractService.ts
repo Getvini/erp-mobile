@@ -106,6 +106,31 @@ export enum ContractServiceStatus {
   COMPLETED = "COMPLETED",
 }
 
+// 100% đồng bộ erp-UI/src/utils/enums.js:29-35 (CONTRACT_SERVICE_STATUS_LABELS)
+export const CONTRACT_SERVICE_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: 'Đang thực hiện',
+  AWAITING_ACCEPTANCE: 'Sẵn sàng nghiệm thu',
+  ACCEPTANCE_REJECTED: 'Từ chối nghiệm thu',
+  COMPLETED: 'Hoàn thành',
+  CANCELLED: 'Đã hủy',
+};
+
+export const CONTRACT_SERVICE_STATUS_CONFIG: Record<
+  string,
+  { text: string; color: string; bg: string; border: string }
+> = {
+  ACTIVE: { text: 'Đang thực hiện', color: '#C2410C', bg: '#FFF7ED', border: '#FFEDD5' },
+  AWAITING_ACCEPTANCE: {
+    text: 'Sẵn sàng nghiệm thu',
+    color: '#854D0E',
+    bg: '#FEFCE8',
+    border: '#FEF08A',
+  },
+  ACCEPTANCE_REJECTED: { text: 'Từ chối nghiệm thu', color: '#B91C1C', bg: '#FEF2F2', border: '#FECACA' },
+  COMPLETED: { text: 'Hoàn thành', color: '#047857', bg: '#ECFDF5', border: '#A7F3D0' },
+  CANCELLED: { text: 'Đã hủy', color: '#64748B', bg: '#F1F5F9', border: '#E2E8F0' },
+};
+
 export interface ContractCustomer {
   id: string;
   name: string;
@@ -199,16 +224,16 @@ export interface CreateContractPayload {
     referralPartnerId?: string;
     status?: string;
   };
-  services?: Array<{
+  services?: {
     serviceId: string;
     quantity: number;
     sellingPrice?: number;
-  }>;
-  packages?: Array<{
+  }[];
+  packages?: {
     servicePackageId: string;
     quantity: number;
     customPrices?: Record<string, number>;
-  }>;
+  }[];
 }
 
 export const contractService = {
@@ -295,4 +320,83 @@ export const contractService = {
       { reason },
     );
   },
+
+  /**
+   * Cập nhật hợp đồng — ⚠️ KHÔNG khả dụng: backend KHÔNG expose `PUT /contracts/:id`
+   * (xem ERP/src/modules/contract/routes/Contract.Route.ts). Web khai báo nhưng không dùng.
+   * Giữ chỗ để tài liệu hóa; mọi cập nhật hợp đồng đi qua luồng proposal/signed/milestone.
+   */
+  async updateContract(_id: string, _data: Record<string, any>) {
+    return {
+      data: undefined as ContractItem | undefined,
+      error: 'Backend chưa expose PUT /contracts/:id',
+    };
+  },
+
+  /**
+   * Xóa hợp đồng (DELETE /contracts/:id) — route có thật ở backend.
+   * Lưu ý: backend không guard role/status, nên UI phải tự khóa khi hợp đồng đã ký.
+   */
+  async deleteContract(id: string) {
+    return apiService.delete<{ message?: string }>(`/contracts/${id}`);
+  },
+
+  /**
+   * Cập nhật nickname dịch vụ trong hợp đồng (PATCH /contracts/services/:id/nickname)
+   */
+  async updateContractServiceNickname(payload: { id: string; nickname: string }) {
+    return apiService.patch<{ message?: string }>(
+      `/contracts/services/${payload.id}/nickname`,
+      { nickname: payload.nickname },
+    );
+  },
+
+  /**
+   * Thêm mốc thanh toán cho hợp đồng (POST /contracts/:id/milestones)
+   * Web gửi `title`; controller backend map sang `name`.
+   */
+  async addMilestone(payload: { id: string } & Record<string, any>) {
+    const { id, ...data } = payload;
+    return apiService.post<ContractItem>(`/contracts/${id}/milestones`, data);
+  },
+
+  /**
+   * Cập nhật mốc thanh toán (PUT /contracts/milestones/:id)
+   * Lưu ý: response KHÔNG có `contractId` top-level, chỉ có relation `contract`.
+   */
+  async updateMilestone(payload: { id: string } & Record<string, any>) {
+    const { id, ...data } = payload;
+    return apiService.put<ContractItem>(`/contracts/milestones/${id}`, data);
+  },
+
+  /**
+   * Xóa mốc thanh toán (DELETE /contracts/milestones/:id)
+   */
+  async deleteMilestone(id: string) {
+    return apiService.delete<{ message?: string }>(`/contracts/milestones/${id}`);
+  },
+
+  /**
+   * Đổi trạng thái hợp đồng — ⚠️ KHÔNG khả dụng: backend KHÔNG expose
+   * `PATCH /contracts/:id/status` (Contract.Route.ts). Web khai báo nhưng không dùng.
+   */
+  async updateContractStatus(_id: string, _status: string) {
+    return {
+      data: undefined as ContractItem | undefined,
+      error: 'Backend chưa expose PATCH /contracts/:id/status',
+    };
+  },
 };
+
+/**
+ * Quality Gate: hợp đồng đã ký duyệt (SIGNED / COMPLETED / CANCELLED) thì
+ * khóa hoàn toàn thao tác chỉnh sửa & xóa — đồng bộ erp-UI ContractDetailPage.
+ */
+export const LOCKED_CONTRACT_STATUSES: string[] = [
+  ContractStatus.SIGNED,
+  ContractStatus.COMPLETED,
+  ContractStatus.CANCELLED,
+];
+
+export const isContractLocked = (status?: string): boolean =>
+  Boolean(status) && LOCKED_CONTRACT_STATUSES.includes(status as string);

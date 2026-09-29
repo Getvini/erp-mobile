@@ -16,8 +16,13 @@ import {
   canAccessCustomers,
   canAccessContracts,
   canAccessFinance,
+  canAccessJobs,
   canAccessOpportunities,
-  isManagementRole,
+  canAccessReferralPartners,
+  canAccessServiceCatalog,
+  canAccessTeams,
+  canAccessUsers,
+  canAccessVendors,
 } from '@/utils/rbac';
 
 const MODULES = [
@@ -79,11 +84,75 @@ const MODULES = [
   },
   {
     id: 'teams',
-    title: 'Đội ngũ & Nhân sự',
-    desc: 'Phân quyền tài khoản (RBAC), phòng ban và đánh giá hiệu suất nhân viên.',
-    icon: 'shield-checkmark-outline' as const,
+    title: 'Đội dự án',
+    desc: 'Cơ cấu đội nhóm theo dự án, vai trò thành viên, tải công việc và Team Lead.',
+    icon: 'people-circle-outline' as const,
     color: '#EC4899',
     badge: 'Nhân sự',
+  },
+  {
+    id: 'users',
+    title: 'Nhân sự nội bộ',
+    desc: 'Danh bạ nhân sự toàn công ty, vai trò hệ thống, hợp đồng lao động và công việc.',
+    icon: 'id-card-outline' as const,
+    color: '#DB2777',
+    badge: 'Nhân sự',
+  },
+  {
+    id: 'services',
+    title: 'Dịch vụ niêm yết',
+    desc: 'Danh mục dịch vụ, cấu hình hạng mục công việc và giá vốn tự động.',
+    icon: 'pricetags-outline' as const,
+    color: '#0EA5E9',
+    badge: 'Danh mục',
+  },
+  {
+    id: 'service-packages',
+    title: 'Gói dịch vụ',
+    desc: 'Gói combo dịch vụ bán theo template, số lượng mặc định và giá vốn gói.',
+    icon: 'cube-outline' as const,
+    color: '#8B5CF6',
+    badge: 'Danh mục',
+  },
+  {
+    id: 'jobs',
+    title: 'Hạng mục công việc',
+    desc: 'Hạng mục công việc, giá vốn, Vinicoin, nhóm nghề và tiêu chí nghiệm thu QC.',
+    icon: 'list-outline' as const,
+    color: '#14B8A6',
+    badge: 'Danh mục',
+  },
+  {
+    id: 'vendors',
+    title: 'Nhà cung cấp',
+    desc: 'Hồ sơ nhà cung cấp, KOL/KOC, tài khoản ngân hàng và giá mua ngoài theo hạng mục.',
+    icon: 'storefront-outline' as const,
+    color: '#F97316',
+    badge: 'Đối tác',
+  },
+  {
+    id: 'referral-partners',
+    title: 'Đối tác giới thiệu',
+    desc: 'Mạng lưới CTV/đối tác, khách hàng – cơ hội – hợp đồng giới thiệu và hoa hồng.',
+    icon: 'share-social-outline' as const,
+    color: '#0891B2',
+    badge: 'Đối tác',
+  },
+  {
+    id: 'announcements',
+    title: 'Bảng tin công ty',
+    desc: 'Thông báo nội bộ theo phạm vi, sự kiện, bình luận và thống kê người đã đọc.',
+    icon: 'megaphone-outline' as const,
+    color: '#6366F1',
+    badge: 'Nội bộ',
+  },
+  {
+    id: 'documents',
+    title: 'Kho biểu mẫu & tài liệu',
+    desc: 'Thư viện biểu mẫu, tải lên – tải về, lịch sử phiên bản và khôi phục file.',
+    icon: 'folder-open-outline' as const,
+    color: '#64748B',
+    badge: 'Tài liệu',
   },
   {
     id: 'notifications',
@@ -181,17 +250,81 @@ export default function ExploreScreen() {
         break;
 
       case 'teams':
-        if (isManagementRole(role)) {
-          Alert.alert(
-            'Phân hệ Đội ngũ & Nhân sự',
-            'Tính năng quản lý thành viên đang được phát triển giao diện.'
-          );
+        router.push('/teams' as any);
+        break;
+
+      case 'users':
+        if (canAccessUsers(role)) {
+          router.push('/users' as any);
         } else {
           Alert.alert(
             'Giới hạn quyền truy cập',
-            'Phân hệ Quản lý Đội ngũ chỉ dành cho Ban giám đốc.'
+            'Phân hệ Nhân sự nội bộ chỉ dành cho Ban giám đốc (BOD/ADMIN).'
           );
         }
+        break;
+
+      case 'services':
+        if (canAccessServiceCatalog(role)) {
+          router.push('/services' as any);
+        } else {
+          Alert.alert(
+            'Giới hạn quyền truy cập',
+            'Phân hệ Dịch vụ niêm yết chỉ dành cho Ban giám đốc và Bộ phận Kinh doanh.'
+          );
+        }
+        break;
+
+      case 'service-packages':
+        if (canAccessServiceCatalog(role)) {
+          router.push('/service-packages' as any);
+        } else {
+          Alert.alert(
+            'Giới hạn quyền truy cập',
+            'Phân hệ Gói dịch vụ chỉ dành cho Ban giám đốc và Bộ phận Kinh doanh.'
+          );
+        }
+        break;
+
+      case 'jobs':
+        if (canAccessJobs(role)) {
+          router.push('/jobs' as any);
+        } else {
+          Alert.alert(
+            'Giới hạn quyền truy cập',
+            'Phân hệ Hạng mục công việc chỉ dành cho Ban giám đốc, Kinh doanh và PM.'
+          );
+        }
+        break;
+
+      case 'vendors':
+        if (canAccessVendors(role)) {
+          router.push('/vendors' as any);
+        } else {
+          Alert.alert(
+            'Giới hạn quyền truy cập',
+            'Phân hệ Nhà cung cấp chỉ dành cho Ban giám đốc (BOD/ADMIN).'
+          );
+        }
+        break;
+
+      case 'referral-partners':
+        if (canAccessReferralPartners(role)) {
+          router.push('/referral-partners' as any);
+        } else {
+          Alert.alert(
+            'Giới hạn quyền truy cập',
+            'Phân hệ Đối tác giới thiệu chỉ dành cho Ban giám đốc và Bộ phận Kinh doanh.'
+          );
+        }
+        break;
+
+      case 'announcements':
+        router.push('/announcements' as any);
+        break;
+
+      case 'documents':
+        router.push('/documents' as any);
         break;
 
       case 'notifications':
@@ -218,7 +351,15 @@ export default function ExploreScreen() {
     if (moduleId === 'customers') return !canAccessCustomers(role);
     if (moduleId === 'contracts') return !canAccessContracts(role);
     if (moduleId === 'finance') return !canAccessFinance(role);
-    if (moduleId === 'teams') return !isManagementRole(role);
+    // Phase P2 — Danh mục & Đối tác ngoài
+    if (moduleId === 'services' || moduleId === 'service-packages') {
+      return !canAccessServiceCatalog(role);
+    }
+    if (moduleId === 'vendors') return !canAccessVendors(role);
+    if (moduleId === 'referral-partners') return !canAccessReferralPartners(role);
+    // Phase P3 — Quản trị hành chính & nội bộ
+    if (moduleId === 'teams' || moduleId === 'jobs') return !canAccessTeams(role);
+    if (moduleId === 'users') return !canAccessUsers(role);
     return false;
   };
 

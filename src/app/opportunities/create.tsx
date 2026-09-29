@@ -27,9 +27,9 @@ import { CreateOpportunityPayload } from '@/services/opportunityService';
 import {
   useCreateOpportunityMutation,
   useAvailableServicesQuery,
-  useServicePackagesQuery,
   useOpportunityDetailQuery } from
 '@/hooks/queries/useOpportunities';
+import { useServicePackagesQuery } from '@/hooks/queries/useServicePackages';
 
 import {
   formatNumber,

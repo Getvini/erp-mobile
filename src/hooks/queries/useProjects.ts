@@ -591,3 +591,261 @@ export function useCreateMonthlyWorkAddendumMutation() {
   });
 }
 
+// ==========================================
+// TẠM DỪNG / LÀM TIẾP / ĐÓNG DỰ ÁN (P1.11)
+// ==========================================
+
+/** Invalidation dùng chung cho mọi thao tác pause/close: dự án, task, công nợ, lịch sử. */
+const invalidateProjectPauseScope = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  projectId?: string,
+) => {
+  queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+  if (projectId) {
+    queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(projectId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.projects.pauseHistory(projectId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.projects.holdSummary(projectId) });
+  }
+  queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
+  queryClient.invalidateQueries({ queryKey: queryKeys.debts.all });
+  queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
+};
+
+export function useMyProjectsQuery() {
+  return useQuery({
+    queryKey: queryKeys.projects.myProjects(),
+    queryFn: async () => {
+      const res = await projectService.getMyProjects();
+      if (res.error) throw new Error(res.error);
+      return res.data || [];
+    },
+  });
+}
+
+export function usePauseHistoryQuery(projectId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.projects.pauseHistory(projectId),
+    queryFn: async () => {
+      const res = await projectService.getPauseHistory(projectId);
+      if (res.error) throw new Error(res.error);
+      return res.data || [];
+    },
+    enabled: Boolean(projectId) && enabled,
+  });
+}
+
+export function useHoldSummaryQuery(projectId: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.projects.holdSummary(projectId),
+    queryFn: async () => {
+      const res = await projectService.getHoldSummary(projectId);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    enabled: Boolean(projectId) && enabled,
+  });
+}
+
+export function useRequestPauseProjectMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const res = await projectService.requestPauseProject(id, reason);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: (_, variables) => invalidateProjectPauseScope(queryClient, variables.id),
+  });
+}
+
+export function usePauseProjectDirectMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const res = await projectService.pauseProjectDirect(id, reason);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: (_, variables) => invalidateProjectPauseScope(queryClient, variables.id),
+  });
+}
+
+export function useApprovePauseRequestMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ requestId, projectId }: { requestId: string; projectId?: string }) => {
+      const res = await projectService.approvePauseRequest(requestId);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: (_, variables) => invalidateProjectPauseScope(queryClient, variables.projectId),
+  });
+}
+
+export function useRejectPauseRequestMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      requestId,
+      feedback,
+      projectId,
+    }: {
+      requestId: string;
+      feedback: string;
+      projectId?: string;
+    }) => {
+      const res = await projectService.rejectPauseRequest(requestId, feedback);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: (_, variables) => invalidateProjectPauseScope(queryClient, variables.projectId),
+  });
+}
+
+export function useResumeProjectMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, resumeReason }: { id: string; resumeReason?: string }) => {
+      const res = await projectService.resumeProject(id, resumeReason);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: (_, variables) => invalidateProjectPauseScope(queryClient, variables.id),
+  });
+}
+
+export function useCloseProjectDirectMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const res = await projectService.closeProjectDirect(id, reason);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: (_, variables) => invalidateProjectPauseScope(queryClient, variables.id),
+  });
+}
+
+export function useRequestCloseProjectMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason?: string }) => {
+      const res = await projectService.requestCloseProject(id, reason);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: (_, variables) => invalidateProjectPauseScope(queryClient, variables.id),
+  });
+}
+
+export function useApproveCloseRequestMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ requestId, projectId }: { requestId: string; projectId?: string }) => {
+      const res = await projectService.approveCloseRequest(requestId);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: (_, variables) => invalidateProjectPauseScope(queryClient, variables.projectId),
+  });
+}
+
+export function useRejectCloseRequestMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      requestId,
+      feedback,
+      projectId,
+    }: {
+      requestId: string;
+      feedback: string;
+      projectId?: string;
+    }) => {
+      const res = await projectService.rejectCloseRequest(requestId, feedback);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: (_, variables) => invalidateProjectPauseScope(queryClient, variables.projectId),
+  });
+}
+
+export function useRequestStaffingMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, note }: { id: string; note: string }) => {
+      const res = await projectService.requestStaffing(id, note);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: (_, variables) => invalidateProjectPauseScope(queryClient, variables.id),
+  });
+}
+
+export function useCreateProjectMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      name: string;
+      contractId: string;
+      teamId: string;
+      plannedStartDate?: string;
+      plannedEndDate?: string;
+    }) => {
+      const res = await projectService.createProject(payload);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.projects.all }),
+  });
+}
+
+export function useDeleteProjectMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await projectService.deleteProject(id);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.projects.all }),
+  });
+}
+
+export function useSyncServiceJobsMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await projectService.syncServiceJobs(id);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
+    },
+  });
+}
+
+export function useCreateProjectServiceAddendumMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      projectId,
+      payload,
+    }: {
+      projectId: string;
+      payload: Parameters<typeof projectService.createProjectServiceAddendum>[1];
+    }) => {
+      const res = await projectService.createProjectServiceAddendum(projectId, payload);
+      if (res.error) throw new Error(res.error);
+      return res.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(variables.projectId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
+    },
+  });
+}
+

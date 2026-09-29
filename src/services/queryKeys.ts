@@ -51,6 +51,14 @@ export const queryKeys = {
     detail: (id: string) => [...queryKeys.contracts.details(), id] as const,
   },
 
+  // Contract Addendums / Phụ lục hợp đồng
+  // (Backend không có GET /contract-addendums ⇒ dữ liệu đọc từ contracts.detail(id).addendums)
+  contractAddendums: {
+    all: ['contractAddendums'] as const,
+    byContract: (contractId: string) =>
+      [...queryKeys.contractAddendums.all, 'contract', contractId] as const,
+  },
+
   // Projects / Dự án
   projects: {
     all: ['projects'] as const,
@@ -58,7 +66,12 @@ export const queryKeys = {
     list: (filters?: Record<string, any>) => [...queryKeys.projects.lists(), filters || {}] as const,
     details: () => [...queryKeys.projects.all, 'detail'] as const,
     detail: (id: string) => [...queryKeys.projects.details(), id] as const,
+    myProjects: () => [...queryKeys.projects.all, 'my-projects'] as const,
     productDescriptions: (projectId: string) => [...queryKeys.projects.detail(projectId), 'product-descriptions'] as const,
+    pauseHistory: (projectId: string) => [...queryKeys.projects.detail(projectId), 'pause-history'] as const,
+    holdSummary: (projectId: string) => [...queryKeys.projects.detail(projectId), 'hold-summary'] as const,
+    serviceAddendums: (projectId: string) =>
+      [...queryKeys.projects.detail(projectId), 'service-addendums'] as const,
   },
 
   // Tasks / Công việc
@@ -68,6 +81,14 @@ export const queryKeys = {
     list: (filters?: Record<string, any>) => [...queryKeys.tasks.lists(), filters || {}] as const,
     details: () => [...queryKeys.tasks.all, 'detail'] as const,
     detail: (id: string) => [...queryKeys.tasks.details(), id] as const,
+    byProject: (projectId: string) => [...queryKeys.tasks.all, 'project', projectId] as const,
+    byAssignee: (userId: string, filters?: Record<string, any>) =>
+      [...queryKeys.tasks.all, 'assignee', userId, filters || {}] as const,
+    byOpportunity: (opportunityId: string) =>
+      [...queryKeys.tasks.all, 'opportunity', opportunityId] as const,
+    dailyWorkload: (userId: string, startDate?: string, endDate?: string) =>
+      [...queryKeys.tasks.all, 'daily-workload', userId, startDate || '', endDate || ''] as const,
+    comments: (taskId: string) => [...queryKeys.tasks.detail(taskId), 'comments'] as const,
   },
 
   // Acceptances / Nghiệm thu
@@ -101,13 +122,18 @@ export const queryKeys = {
   // Notifications
   notifications: {
     all: ['notifications'] as const,
+    list: (filters?: Record<string, any>) =>
+      [...queryKeys.notifications.all, 'list', filters || {}] as const,
     unread: ['notifications', 'unread'] as const,
+    unreadCount: () => [...queryKeys.notifications.all, 'unread-count'] as const,
   },
 
   // Finance / Tài chính & Công nợ
   finance: {
     all: ['finance'] as const,
     contractDebts: () => [...queryKeys.finance.all, 'contract-debts'] as const,
+    paymentPeriods: () => [...queryKeys.finance.all, 'payment-periods'] as const,
+    paymentPeriod: (id: string) => [...queryKeys.finance.paymentPeriods(), id] as const,
   },
 
   // Payment Milestones / Đợt thanh toán
@@ -158,5 +184,107 @@ export const queryKeys = {
     all: ['settings'] as const,
     qc: () => [...queryKeys.settings.all, 'qc'] as const,
     workloadNorms: () => [...queryKeys.settings.all, 'workload-norms'] as const,
+  },
+
+  // ==========================================================================
+  // PHASE P2 — Danh mục & Đối tác ngoài
+  // ==========================================================================
+
+  // Vendors / Nhà cung cấp
+  vendors: {
+    all: ['vendors'] as const,
+    lists: () => [...queryKeys.vendors.all, 'list'] as const,
+    list: (filters?: Record<string, any>) => [...queryKeys.vendors.lists(), filters || {}] as const,
+    details: () => [...queryKeys.vendors.all, 'detail'] as const,
+    detail: (id: string) => [...queryKeys.vendors.details(), id] as const,
+    byJob: (jobId: string) => [...queryKeys.vendors.all, 'by-job', jobId] as const,
+    jobs: (vendorId: string) => [...queryKeys.vendors.detail(vendorId), 'jobs'] as const,
+  },
+
+  // Referral Partners / Đối tác giới thiệu & hoa hồng CTV
+  referralPartners: {
+    all: ['referralPartners'] as const,
+    lists: () => [...queryKeys.referralPartners.all, 'list'] as const,
+    list: (filters?: Record<string, any>) =>
+      [...queryKeys.referralPartners.lists(), filters || {}] as const,
+    details: () => [...queryKeys.referralPartners.all, 'detail'] as const,
+    detail: (id: string) => [...queryKeys.referralPartners.details(), id] as const,
+    statistics: (id: string) => [...queryKeys.referralPartners.detail(id), 'statistics'] as const,
+  },
+
+  // Services / Dịch vụ niêm yết (catalog)
+  services: {
+    all: ['services'] as const,
+    lists: () => [...queryKeys.services.all, 'list'] as const,
+    list: (filters?: Record<string, any>) => [...queryKeys.services.lists(), filters || {}] as const,
+    details: () => [...queryKeys.services.all, 'detail'] as const,
+    detail: (id: string) => [...queryKeys.services.details(), id] as const,
+  },
+
+  // Service Packages / Gói dịch vụ niêm yết
+  servicePackages: {
+    all: ['servicePackages'] as const,
+    lists: () => [...queryKeys.servicePackages.all, 'list'] as const,
+    list: (filters?: Record<string, any>) =>
+      [...queryKeys.servicePackages.lists(), filters || {}] as const,
+    details: () => [...queryKeys.servicePackages.all, 'detail'] as const,
+    detail: (id: string) => [...queryKeys.servicePackages.details(), id] as const,
+  },
+
+  // ==========================================================================
+  // PHASE P3 — Quản trị hành chính & nội bộ
+  // ==========================================================================
+
+  // Users / Danh bạ nhân sự nội bộ
+  users: {
+    all: ['users'] as const,
+    lists: () => [...queryKeys.users.all, 'list'] as const,
+    list: (filters?: Record<string, any>) => [...queryKeys.users.lists(), filters || {}] as const,
+    details: () => [...queryKeys.users.all, 'detail'] as const,
+    detail: (id: string) => [...queryKeys.users.details(), id] as const,
+    tasks: (userId: string) => [...queryKeys.users.detail(userId), 'tasks'] as const,
+  },
+
+  // Teams / Cơ cấu phòng ban & đội nhóm
+  teams: {
+    all: ['teams'] as const,
+    lists: () => [...queryKeys.teams.all, 'list'] as const,
+    list: (filters?: Record<string, any>) => [...queryKeys.teams.lists(), filters || {}] as const,
+    details: () => [...queryKeys.teams.all, 'detail'] as const,
+    detail: (id: string) => [...queryKeys.teams.details(), id] as const,
+    members: (id: string) => [...queryKeys.teams.detail(id), 'members'] as const,
+  },
+
+  // Jobs / Công việc mẫu
+  jobs: {
+    all: ['jobs'] as const,
+    lists: () => [...queryKeys.jobs.all, 'list'] as const,
+    list: (filters?: Record<string, any>) => [...queryKeys.jobs.lists(), filters || {}] as const,
+    details: () => [...queryKeys.jobs.all, 'detail'] as const,
+    detail: (id: string) => [...queryKeys.jobs.details(), id] as const,
+    criteria: (jobId: string) => [...queryKeys.jobs.detail(jobId), 'criteria'] as const,
+  },
+
+  // Announcements / Bảng tin & thông báo công ty
+  announcements: {
+    all: ['announcements'] as const,
+    lists: () => [...queryKeys.announcements.all, 'list'] as const,
+    list: (filters?: Record<string, any>) =>
+      [...queryKeys.announcements.lists(), filters || {}] as const,
+    details: () => [...queryKeys.announcements.all, 'detail'] as const,
+    detail: (id: string) => [...queryKeys.announcements.details(), id] as const,
+    comments: (id: string) => [...queryKeys.announcements.detail(id), 'comments'] as const,
+    unreadCount: () => [...queryKeys.announcements.all, 'unread-count'] as const,
+  },
+
+  // Document Library / Thư viện biểu mẫu & tài liệu
+  documents: {
+    all: ['documents'] as const,
+    lists: () => [...queryKeys.documents.all, 'list'] as const,
+    list: (filters?: Record<string, any>) => [...queryKeys.documents.lists(), filters || {}] as const,
+    details: () => [...queryKeys.documents.all, 'detail'] as const,
+    detail: (id: string) => [...queryKeys.documents.details(), id] as const,
+    tags: () => [...queryKeys.documents.all, 'tags'] as const,
+    versions: (id: string) => [...queryKeys.documents.detail(id), 'versions'] as const,
   },
 };
