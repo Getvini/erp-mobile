@@ -14,11 +14,12 @@ import { useUserProfileQuery, useLogoutMutation } from '@/hooks/queries';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { BrandColors } from '@/constants/colors';
 import BottomNavBar from '@/components/BottomNavBar';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const storeUser = useAuthStore((state) => state.user);
-
+  const queryClient = useQueryClient();
   // TanStack Query Hooks
   const { data: queryUser, isLoading, refetch, isRefetching } = useUserProfileQuery();
   const logoutMutation = useLogoutMutation();
@@ -36,6 +37,7 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             await logoutMutation.mutateAsync();
+            queryClient.clear();
             router.replace('/(auth)/login');
           },
         },
