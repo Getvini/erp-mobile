@@ -223,6 +223,7 @@ export default function ServiceSelectorModal({
             contentContainerClassName="px-5 pb-5 gap-2.5"
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
+            nestedScrollEnabled={true}
           >
             {activeTab === 'SERVICE' ? (
               <>

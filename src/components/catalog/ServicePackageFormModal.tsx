@@ -249,6 +249,7 @@ export default function ServicePackageFormModal({
             showsVerticalScrollIndicator={false}
             contentContainerClassName="gap-3.5 px-5 pb-6"
             keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled={true}
           >
             <View>
               <Text className="mb-1.5 text-xs font-bold text-slate-700">
@@ -277,27 +278,6 @@ export default function ServicePackageFormModal({
                 onChangeText={setDescription}
               />
             </View>
-
-            {isEditMode ? (
-              <TouchableOpacity
-                className="min-h-[48px] flex-row items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5"
-                onPress={() => setIsActive((prev) => !prev)}
-                activeOpacity={0.8}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: isActive }}
-              >
-                <View
-                  className={`h-6 w-6 items-center justify-center rounded-lg border-2 ${
-                    isActive ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300 bg-white'
-                  }`}
-                >
-                  {isActive ? <Feather name="check" size={14} color="#FFFFFF" /> : null}
-                </View>
-                <Text className="text-sm font-semibold text-slate-700">
-                  Đang bán (hiển thị trong danh mục)
-                </Text>
-              </TouchableOpacity>
-            ) : null}
 
             {/* Bộ chọn dịch vụ trong gói */}
             <View className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
@@ -384,7 +364,12 @@ export default function ServicePackageFormModal({
                             Không có dịch vụ nào phù hợp.
                           </Text>
                         ) : (
-                          <ScrollView className="max-h-[200px]" keyboardShouldPersistTaps="handled">
+                          <ScrollView
+                            className="max-h-[200px]"
+                            keyboardShouldPersistTaps="handled"
+                            nestedScrollEnabled={true}
+                            showsVerticalScrollIndicator={false}
+                          >
                             {filteredServices(row.key)
                               .slice(0, 40)
                               .map((service) => (
