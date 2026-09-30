@@ -419,7 +419,7 @@ function VendorFormSheet({ onClose, onSuccess, vendor }: VendorFormSheetProps) {
                   <TouchableOpacity
                     key={type}
                     testID={`vendorType-${type}`}
-                    className={`min-h-[48px] flex-1 items-center justify-center rounded-xl border px-1 ${
+                    className={`min-h-[48px] flex-1 items-center justify-center rounded-xl border px-2 py-2 ${
                       isActive ? 'border-primary bg-primary' : 'border-slate-200 bg-slate-50'
                     }`}
                     onPress={() => setField('type', type)}
@@ -428,7 +428,7 @@ function VendorFormSheet({ onClose, onSuccess, vendor }: VendorFormSheetProps) {
                     accessibilityState={{ selected: isActive }}
                   >
                     <Text
-                      className={`text-[11px] ${isActive ? 'font-bold text-white' : 'font-semibold text-slate-600'}`}
+                      className={`text-center text-[11px] ${isActive ? 'font-bold text-white' : 'font-semibold text-slate-600'}`}
                     >
                       {VENDOR_TYPE_LABELS[type]}
                     </Text>
