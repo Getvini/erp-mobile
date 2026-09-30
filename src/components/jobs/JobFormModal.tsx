@@ -158,6 +158,10 @@ function JobFormSheet({
   );
   const [isBriefVideo, setIsBriefVideo] = useState<boolean>(() => Boolean(job?.isBriefVideo));
   const [isQuotationItem, setIsQuotationItem] = useState<boolean>(() => job?.isQuotationItem !== false);
+  // isAiRelated là trạng thái "cha" (giống Web): true khi isBriefVideo=true HOẶC isQuotationItem=false khi edit.
+  const [isAiRelated, setIsAiRelated] = useState<boolean>(
+    () => Boolean(job?.isBriefVideo) || job?.isQuotationItem === false
+  );
   const [criteria, setCriteria] = useState<JobCriteriaInput[]>(() =>
     (Array.isArray(job?.criteria) ? job?.criteria || [] : []).map((item) => ({
       id: item.id,
@@ -178,8 +182,15 @@ function JobFormSheet({
 
   const handleToggleBriefVideo = (next: boolean) => {
     setIsBriefVideo(next);
-    // Server ép `isQuotationItem = false` khi `isBriefVideo = true` (Job.Service.ts:17-19).
-    setIsQuotationItem(next ? false : true);
+  };
+
+  const handleAiRelatedChange = (next: boolean) => {
+    setIsAiRelated(next);
+    if (!next) {
+      // Bỏ tick cha → reset về mặc định (giống Web)
+      setIsBriefVideo(false);
+      setIsQuotationItem(true);
+    }
   };
 
   const validate = (): boolean => {
@@ -214,8 +225,8 @@ function JobFormSheet({
       timeToComplete: hours.trim() && Number.isFinite(parsedHours) ? parsedHours : 0,
       unit: unit.trim() || null,
       categories,
-      isBriefVideo,
-      isQuotationItem: isBriefVideo ? false : isQuotationItem,
+      isBriefVideo: isAiRelated ? isBriefVideo : false,
+      isQuotationItem: isAiRelated ? isQuotationItem : true,
       defaultPerformerType: performerType,
     };
   };
@@ -501,23 +512,26 @@ function JobFormSheet({
 
           {/* Cờ AI / báo giá */}
           <View className="gap-2">
+            {/* Checkbox cha: giống Web - tick cha mới hiện 2 checkbox con */}
             <CheckboxRow
               label="Công việc liên quan tới AI"
-              description="Yêu cầu nhập brief video (isBriefVideo)"
-              value={isBriefVideo}
-              onToggle={handleToggleBriefVideo}
+              value={isAiRelated}
+              onToggle={handleAiRelatedChange}
             />
-            <CheckboxRow
-              label="Là hạng mục báo giá"
-              description={
-                isBriefVideo
-                  ? 'Tự động tắt khi hạng mục yêu cầu brief video'
-                  : 'Được tính vào giá vốn dịch vụ'
-              }
-              value={isQuotationItem}
-              onToggle={setIsQuotationItem}
-              disabled={isBriefVideo}
-            />
+            {isAiRelated ? (
+              <View className="gap-2 pl-4">
+                <CheckboxRow
+                  label="Yêu cầu nhập brief video"
+                  value={isBriefVideo}
+                  onToggle={handleToggleBriefVideo}
+                />
+                <CheckboxRow
+                  label="Được tính vào giá vốn dịch vụ"
+                  value={isQuotationItem}
+                  onToggle={setIsQuotationItem}
+                />
+              </View>
+            ) : null}
           </View>
 
           {/* Tiêu chí đánh giá */}
