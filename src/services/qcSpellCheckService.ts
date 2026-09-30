@@ -23,11 +23,12 @@ class QcSpellCheckService {
 
   async getSheetsFromFile(file: LocalPickedFile): Promise<{ data?: string[]; error?: string }> {
     const formData = new FormData();
-    formData.append('file', {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (formData as any).append('file', {
       uri: file.uri,
       name: file.name,
       type: file.mimeType || 'application/octet-stream',
-    } as any);
+    });
     const res = await apiService.postForm<{ sheets?: string[] }>('/spelling-check/sheets', formData);
     return { data: res.data?.sheets || [], error: res.error };
   }

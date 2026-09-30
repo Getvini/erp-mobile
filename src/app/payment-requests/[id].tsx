@@ -172,11 +172,12 @@ export default function PaymentRequestDetailScreen() {
     const uploaded: any[] = [];
     for (const file of actionFiles) {
       const formData = new FormData();
-      formData.append('file', {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (formData as any).append('file', {
         uri: file.uri,
         name: file.name,
         type: file.type || 'application/octet-stream',
-      } as any);
+      });
       const response = await paymentRequestService.uploadPaymentRequestInvoiceFile(formData);
       if (response.error || !response.data) {
         throw new Error(response.error || `Không thể tải tệp ${file.name}`);

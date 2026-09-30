@@ -114,14 +114,19 @@ export interface DocumentVersionDownloadPayload {
 type ServiceResult<T> = { data?: T; error?: string };
 
 /**
- * Nguyên nhân phải tự append thủ công: FormData của React Native yêu cầu object
- * `{ uri, name, type }` chứ không nhận `Blob`/`File` như web.
+ * React Native FormData.append() nhận object `{ uri, name, type }` cho file.
+ * Phải cast qua `unknown as Blob` vì TypeScript FormData chỉ chấp nhận Blob/string,
+ * nhưng RN runtime xử lý object này đặc biệt cho multipart upload.
  */
-const toFormDataFile = (file: DocumentUploadFile) => ({
-  uri: file.uri,
-  name: file.name,
-  type: file.type || file.mimeType || 'application/octet-stream',
-});
+const appendFileToForm = (formData: FormData, fieldName: string, file: DocumentUploadFile) => {
+  const filePart = {
+    uri: file.uri,
+    name: file.name,
+    type: file.type || file.mimeType || 'application/octet-stream',
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (formData as any).append(fieldName, filePart);
+};
 
 class DocumentLibraryService {
   /**
@@ -194,7 +199,7 @@ class DocumentLibraryService {
     tags,
   }: UploadDocumentPayload): Promise<ServiceResult<DocumentEntity>> {
     const formData = new FormData();
-    formData.append('file', toFormDataFile(file) as any);
+    appendFileToForm(formData, 'file', file);
     formData.append('displayName', displayName);
     if (description) formData.append('description', description);
     if (tags && tags.length > 0) formData.append('tags', JSON.stringify(tags));
@@ -211,7 +216,7 @@ class DocumentLibraryService {
     file,
   }: UploadDocumentVersionPayload): Promise<ServiceResult<DocumentEntity>> {
     const formData = new FormData();
-    formData.append('file', toFormDataFile(file) as any);
+    appendFileToForm(formData, 'file', file);
 
     const res = await apiService.postForm<DocumentEntity>(
       `/document-library/${id}/versions`,
