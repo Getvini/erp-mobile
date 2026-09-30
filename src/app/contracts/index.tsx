@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -281,8 +282,11 @@ export default function ContractsScreen() {
           data={contracts}
           keyExtractor={(item) => item.id}
           renderItem={renderContractCard}
-          contentContainerClassName="p-4 pb-8"
           contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === 'android'}
           refreshControl={
             <RefreshControl
               refreshing={isFetching}

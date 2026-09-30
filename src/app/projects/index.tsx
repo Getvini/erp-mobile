@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   RefreshControl,
   ScrollView,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -32,6 +33,79 @@ const STATUS_FILTERS = [
   { key: 'COMPLETED', label: 'Hoàn thành' },
   { key: 'CANCELLED', label: 'Đã hủy' },
 ];
+
+const ProjectCardItem = React.memo(function ProjectCardItem({
+  item,
+  getStatusColor,
+  onPress,
+}: {
+  item: ProjectItem;
+  getStatusColor: (status: string) => { bg: string; text: string; label: string };
+  onPress: (id: string) => void;
+}) {
+  const status = getStatusColor(item.status);
+  const progress = item.progress ?? 0;
+
+  return (
+    <TouchableOpacity
+      className="bg-surface rounded-2xl p-4 border border-border shadow-xs"
+      activeOpacity={0.8}
+      onPress={() => onPress(item.id)}
+    >
+      <View className="flex-row justify-between items-center mb-2">
+        <View className="px-2 py-0.5 rounded-md" style={{ backgroundColor: status.bg }}>
+          <Text className="text-[11px] font-bold" style={{ color: status.text }}>{status.label}</Text>
+        </View>
+        {item.contract?.contractCode && (
+          <Text className="text-xs color-slate-400 font-semibold">#{item.contract.contractCode}</Text>
+        )}
+      </View>
+
+      <Text className="text-base font-bold text-text-primary leading-5 mb-1.5" numberOfLines={2}>
+        {item.name}
+      </Text>
+
+      {item.contract?.customer?.name && (
+        <View className="flex-row items-center gap-1.5 mb-3">
+          <Feather name="briefcase" size={13} color="#64748B" />
+          <Text className="text-xs text-slate-500 font-medium flex-1" numberOfLines={1}>
+            {item.contract.customer.name}
+          </Text>
+        </View>
+      )}
+
+      {/* Progress Bar */}
+      <View className="bg-background rounded-xl p-2.5 mb-3">
+        <View className="flex-row justify-between items-center mb-1.5">
+          <Text className="text-[11px] text-slate-500 font-medium">Tiến độ hoàn thành</Text>
+          <Text className="text-xs font-bold text-primary">{progress}%</Text>
+        </View>
+        <View className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+          <View
+            className="h-full bg-primary rounded-full"
+            style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+          />
+        </View>
+      </View>
+
+      {/* Card Footer */}
+      <View className="flex-row justify-between items-center border-t border-slate-100 pt-2.5">
+        <View className="flex-row items-center gap-1.5 flex-1 mr-2 overflow-hidden">
+          <Feather name="users" size={13} color="#64748B" />
+          <Text className="text-xs text-slate-500 flex-1" numberOfLines={1}>
+            {item.team?.name || 'Nhóm dự án Getvini'}
+          </Text>
+        </View>
+
+        {item.contract?.sellingPrice ? (
+          <Text className="text-xs font-bold text-text-primary flex-shrink-0">
+            {formatNumber(item.contract.sellingPrice)} đ
+          </Text>
+        ) : null}
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 export default function ProjectsScreen() {
   const router = useRouter();
@@ -67,78 +141,23 @@ export default function ProjectsScreen() {
     );
   });
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = useCallback((status: string) => {
     const config = PROJECT_STATUS_CONFIG[status];
     if (config) {
       return { bg: config.bg, text: config.color, label: config.text };
     }
     return { bg: '#F1F5F9', text: '#64748B', label: status || 'Khởi tạo' };
-  };
+  }, []);
 
-  const renderProjectCard = ({ item }: { item: ProjectItem }) => {
-    const status = getStatusColor(item.status);
-    const progress = item.progress ?? 0;
+  const handleProjectPress = useCallback((id: string) => {
+    router.push(`/projects/${id}` as any);
+  }, [router]);
 
-    return (
-      <TouchableOpacity
-        className="bg-surface rounded-2xl p-4 border border-border shadow-xs"
-        activeOpacity={0.8}
-        onPress={() => router.push(`/projects/${item.id}` as any)}
-      >
-        <View className="flex-row justify-between items-center mb-2">
-          <View className="px-2 py-0.5 rounded-md" style={{ backgroundColor: status.bg }}>
-            <Text className="text-[11px] font-bold" style={{ color: status.text }}>{status.label}</Text>
-          </View>
-          {item.contract?.contractCode && (
-            <Text className="text-xs color-slate-400 font-semibold">#{item.contract.contractCode}</Text>
-          )}
-        </View>
+  const renderProjectCard = useCallback(({ item }: { item: ProjectItem }) => {
+    return <ProjectCardItem item={item} getStatusColor={getStatusColor} onPress={handleProjectPress} />;
+  }, [getStatusColor, handleProjectPress]);
 
-        <Text className="text-base font-bold text-text-primary leading-5 mb-1.5" numberOfLines={2}>
-          {item.name}
-        </Text>
-
-        {item.contract?.customer?.name && (
-          <View className="flex-row items-center gap-1.5 mb-3">
-            <Feather name="briefcase" size={13} color="#64748B" />
-            <Text className="text-xs text-slate-500 font-medium flex-1" numberOfLines={1}>
-              {item.contract.customer.name}
-            </Text>
-          </View>
-        )}
-
-        {/* Progress Bar */}
-        <View className="bg-background rounded-xl p-2.5 mb-3">
-          <View className="flex-row justify-between items-center mb-1.5">
-            <Text className="text-[11px] text-slate-500 font-medium">Tiến độ hoàn thành</Text>
-            <Text className="text-xs font-bold text-primary">{progress}%</Text>
-          </View>
-          <View className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
-            <View
-              className="h-full bg-primary rounded-full"
-              style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-            />
-          </View>
-        </View>
-
-        {/* Card Footer */}
-        <View className="flex-row justify-between items-center border-t border-slate-100 pt-2.5">
-          <View className="flex-row items-center gap-1.5 flex-1 mr-2 overflow-hidden">
-            <Feather name="users" size={13} color="#64748B" />
-            <Text className="text-xs text-slate-500 flex-1" numberOfLines={1}>
-              {item.team?.name || 'Nhóm dự án Getvini'}
-            </Text>
-          </View>
-
-          {item.contract?.sellingPrice ? (
-            <Text className="text-xs font-bold text-text-primary flex-shrink-0">
-              {formatNumber(item.contract.sellingPrice)} đ
-            </Text>
-          ) : null}
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  const keyExtractor = useCallback((item: ProjectItem) => item.id, []);
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -212,11 +231,11 @@ export default function ProjectsScreen() {
           <Text className="text-xs text-slate-400">Đang tải dữ liệu dự án Getvini...</Text>
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={filteredProjects}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractor}
           renderItem={renderProjectCard}
-          contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 24 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl

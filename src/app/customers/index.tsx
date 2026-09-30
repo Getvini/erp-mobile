@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Linking,
   Alert,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -27,6 +28,80 @@ const SOURCE_TABS = [
   { key: 'INTERNAL', label: 'Nội bộ' },
   { key: 'REFERRAL_PARTNER', label: 'Đối tác giới thiệu' },
 ];
+
+const CustomerCardItem = React.memo(function CustomerCardItem({
+  item,
+  onPress,
+  onCall,
+  onEmail,
+}: {
+  item: CustomerItem;
+  onPress: (id: string) => void;
+  onCall: (phone?: string) => void;
+  onEmail: (email?: string) => void;
+}) {
+  return (
+    <TouchableOpacity
+      testID={`customerCard-${item.id}`}
+      className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm"
+      onPress={() => onPress(item.id)}
+      activeOpacity={0.8}
+    >
+      <View className="flex-row items-center mb-2.5">
+        <View className="w-[42px] h-[42px] rounded-xl bg-blue-50 border border-blue-100 items-center justify-center mr-3">
+          <Text className="text-lg font-extrabold text-blue-500">{(item.name || 'C').charAt(0).toUpperCase()}</Text>
+        </View>
+        <View className="flex-1">
+          <Text className="text-[15px] font-bold text-slate-900" numberOfLines={1}>
+            {item.name}
+          </Text>
+        </View>
+        {item.code && <Text className="text-[11px] font-bold text-slate-400">#{item.code}</Text>}
+      </View>
+
+      {item.address ? (
+        <View className="flex-row items-start gap-1.5 mb-3 bg-slate-50 p-2.5 rounded-lg">
+          <Feather name="map-pin" size={13} color="#64748B" />
+          <Text className="text-xs text-slate-500 leading-[18px] flex-1" numberOfLines={2}>
+            {item.address}
+          </Text>
+        </View>
+      ) : null}
+
+      <View className="flex-row justify-between items-center border-t border-slate-100 pt-2.5">
+        <View className="flex-row items-center gap-2">
+          {item.phoneNumber && (
+            <TouchableOpacity
+              className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 min-h-[48px]"
+              onPress={() => onCall(item.phoneNumber)}
+              activeOpacity={0.7}
+            >
+              <Feather name="phone" size={14} color="#10B981" />
+              <Text className="text-xs font-bold text-emerald-600">Gọi điện</Text>
+            </TouchableOpacity>
+          )}
+
+          {item.email && (
+            <TouchableOpacity
+              className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 min-h-[48px]"
+              onPress={() => onEmail(item.email)}
+              activeOpacity={0.7}
+            >
+              <Feather name="mail" size={14} color="#3B82F6" />
+              <Text className="text-xs font-bold text-blue-600">Gửi mail</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {item.contracts && item.contracts.length > 0 ? (
+          <Text className="text-[11px] font-semibold text-slate-500">
+            {item.contracts.length} hợp đồng
+          </Text>
+        ) : null}
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 export default function CustomersScreen() {
   const router = useRouter();
@@ -48,21 +123,25 @@ export default function CustomersScreen() {
     refetch();
   };
 
-  const handleCall = (phone?: string) => {
+  const handleCustomerPress = useCallback((id: string) => {
+    router.push(`/customers/${id}` as any);
+  }, [router]);
+
+  const handleCall = useCallback((phone?: string) => {
     if (!phone) {
       Alert.alert('Thông báo', 'Khách hàng này chưa cập nhật số điện thoại.');
       return;
     }
     Linking.openURL(`tel:${phone}`);
-  };
+  }, []);
 
-  const handleEmail = (email?: string) => {
+  const handleEmail = useCallback((email?: string) => {
     if (!email) {
       Alert.alert('Thông báo', 'Khách hàng này chưa cập nhật email liên hệ.');
       return;
     }
     Linking.openURL(`mailto:${email}`);
-  };
+  }, []);
 
   const filteredCustomers = customers.filter((c) => {
     if (activeSourceTab !== 'ALL') {
@@ -79,69 +158,18 @@ export default function CustomersScreen() {
     );
   });
 
-  const renderCustomerCard = ({ item }: { item: CustomerItem }) => {
+  const renderCustomerCard = useCallback(({ item }: { item: CustomerItem }) => {
     return (
-      <TouchableOpacity
-        testID={`customerCard-${item.id}`}
-        className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm"
-        onPress={() => router.push(`/customers/${item.id}` as any)}
-        activeOpacity={0.8}
-      >
-        <View className="flex-row items-center mb-2.5">
-          <View className="w-[42px] h-[42px] rounded-xl bg-blue-50 border border-blue-100 items-center justify-center mr-3">
-            <Text className="text-lg font-extrabold text-blue-500">{(item.name || 'C').charAt(0).toUpperCase()}</Text>
-          </View>
-          <View className="flex-1">
-            <Text className="text-[15px] font-bold text-slate-900" numberOfLines={1}>
-              {item.name}
-            </Text>
-          </View>
-          {item.code && <Text className="text-[11px] font-bold text-slate-400">#{item.code}</Text>}
-        </View>
-
-        {item.address ? (
-          <View className="flex-row items-start gap-1.5 mb-3 bg-slate-50 p-2.5 rounded-lg">
-            <Feather name="map-pin" size={13} color="#64748B" />
-            <Text className="text-xs text-slate-500 leading-[18px] flex-1" numberOfLines={2}>
-              {item.address}
-            </Text>
-          </View>
-        ) : null}
-
-        <View className="flex-row justify-between items-center border-t border-slate-100 pt-2.5">
-          <View className="flex-row items-center gap-2">
-            {item.phoneNumber && (
-              <TouchableOpacity
-                className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 min-h-[48px]"
-                onPress={() => handleCall(item.phoneNumber)}
-                activeOpacity={0.7}
-              >
-                <Feather name="phone" size={14} color="#10B981" />
-                <Text className="text-xs font-bold text-emerald-600">Gọi điện</Text>
-              </TouchableOpacity>
-            )}
-
-            {item.email && (
-              <TouchableOpacity
-                className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 min-h-[48px]"
-                onPress={() => handleEmail(item.email)}
-                activeOpacity={0.7}
-              >
-                <Feather name="mail" size={14} color="#3B82F6" />
-                <Text className="text-xs font-bold text-blue-600">Gửi mail</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {item.contracts && item.contracts.length > 0 ? (
-            <Text className="text-[11px] font-semibold text-slate-500">
-              {item.contracts.length} hợp đồng
-            </Text>
-          ) : null}
-        </View>
-      </TouchableOpacity>
+      <CustomerCardItem
+        item={item}
+        onPress={handleCustomerPress}
+        onCall={handleCall}
+        onEmail={handleEmail}
+      />
     );
-  };
+  }, [handleCustomerPress, handleCall, handleEmail]);
+
+  const keyExtractor = useCallback((item: CustomerItem) => item.id, []);
 
   if (!hasAccess) {
     return (
@@ -261,12 +289,12 @@ export default function CustomersScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <FlatList
+        <FlashList
           testID="customersList"
           data={filteredCustomers}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractor}
           renderItem={renderCustomerCard}
-          contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 100 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl

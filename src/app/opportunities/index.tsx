@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -250,6 +251,19 @@ export default function OpportunitiesScreen() {
     );
   }
 
+  const handleOpportunityPress = useCallback((id: string) => {
+    router.push(`/opportunities/${id}` as any);
+  }, [router]);
+
+  const renderOpportunityCard = useCallback(({ item }: { item: OpportunityItem }) => (
+    <OpportunityCard
+      item={item}
+      onPress={() => handleOpportunityPress(item.id)}
+    />
+  ), [handleOpportunityPress]);
+
+  const keyExtractor = useCallback((item: OpportunityItem) => item.id, []);
+
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
       {/* Top Header */}
@@ -330,16 +344,15 @@ export default function OpportunitiesScreen() {
       ) : (
         <FlatList
           data={opportunities}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractor}
           ListHeaderComponent={renderListHeader}
-          renderItem={({ item }) => (
-            <OpportunityCard
-              item={item}
-              onPress={() => router.push(`/opportunities/${item.id}` as any)}
-            />
-          )}
+          renderItem={renderOpportunityCard}
           contentContainerStyle={{ paddingTop: 8, paddingBottom: 24 }}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === 'android'}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}

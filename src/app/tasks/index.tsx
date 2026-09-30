@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -59,6 +60,71 @@ const STATUS_TABS: Array<{ id: StatusFilter; label: string }> = [
   { id: 'ON_HOLD', label: 'Tạm dừng' },
   { id: 'CANCELLED', label: 'Đã hủy' },
 ];
+
+const TaskCardItem = React.memo(function TaskCardItem({
+  item,
+  getStatusBadge,
+  onPress,
+}: {
+  item: TaskItem;
+  getStatusBadge: (status: string) => { bg: string; text: string; label: string };
+  onPress: (id: string) => void;
+}) {
+  const badge = getStatusBadge(item.status);
+  const isExtra = Boolean((item as any).isExtraTask || (item as any).isExtra);
+  return (
+    <TouchableOpacity
+      className={`relative overflow-hidden rounded-2xl border bg-white p-4 shadow-sm ${
+        isExtra ? 'border-amber-200 bg-amber-50/40' : 'border-slate-200'
+      }`}
+      onPress={() => onPress(item.id)}
+      activeOpacity={0.75}
+    >
+      {/* Sọc phát sinh bên trái */}
+      {isExtra && <View className="absolute bottom-0 left-0 top-0 w-1 bg-amber-400" />}
+
+      <View className="mb-2 flex-row flex-wrap items-center gap-1.5">
+        <View className="rounded-md px-2 py-[3px]" style={{ backgroundColor: badge.bg }}>
+          <Text className="text-[11px] font-bold" style={{ color: badge.text }}>{badge.label}</Text>
+        </View>
+        {isExtra && (
+          <View className="rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5">
+            <Text className="text-[10px] font-bold uppercase text-amber-700">Phát sinh</Text>
+          </View>
+        )}
+        {item.code && <Text className="ml-auto text-xs font-semibold text-slate-400">#{item.code}</Text>}
+      </View>
+
+      <Text className="mb-2.5 text-[15px] font-bold leading-[22px] text-slate-900" numberOfLines={2}>
+        {item.name}
+      </Text>
+
+      <View className="mb-2.5 h-px bg-slate-100" />
+
+      <View className="flex-row items-center justify-between">
+        <View className="flex-1 flex-row items-center gap-3.5">
+          {item.project?.name && (
+            <View className="flex-row items-center gap-[5px]">
+              <Feather name="folder" size={12} color="#64748B" />
+              <Text className="max-w-[160px] text-xs text-slate-500" numberOfLines={1}>
+                {item.project.name}
+              </Text>
+            </View>
+          )}
+          {item.plannedEndDate && (
+            <View className="flex-row items-center gap-[5px]">
+              <Feather name="clock" size={12} color="#64748B" />
+              <Text className="max-w-[160px] text-xs text-slate-500">
+                {new Date(item.plannedEndDate).toLocaleDateString('vi-VN')}
+              </Text>
+            </View>
+          )}
+        </View>
+        <Feather name="chevron-right" size={16} color="#94A3B8" />
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 export default function TasksScreen() {
   const router = useRouter();
@@ -130,70 +196,23 @@ export default function TasksScreen() {
     );
   });
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = useCallback((status: string) => {
     const config = TASK_STATUS_CONFIG[status];
     if (config) {
       return { bg: config.bg, text: config.color, label: config.text };
     }
     return { bg: '#F1F5F9', text: '#64748B', label: status || 'Chờ xử lý' };
-  };
+  }, []);
 
-  const renderTaskCard = ({ item }: { item: TaskItem }) => {
-    const badge = getStatusBadge(item.status);
-    const isExtra = Boolean((item as any).isExtraTask || (item as any).isExtra);
-    return (
-      <TouchableOpacity
-        className={`relative overflow-hidden rounded-2xl border bg-white p-4 shadow-sm ${
-          isExtra ? 'border-amber-200 bg-amber-50/40' : 'border-slate-200'
-        }`}
-        onPress={() => router.push(`/tasks/${item.id}` as any)}
-        activeOpacity={0.75}
-      >
-        {/* Sọc phát sinh bên trái */}
-        {isExtra && <View className="absolute bottom-0 left-0 top-0 w-1 bg-amber-400" />}
+  const handleTaskPress = useCallback((id: string) => {
+    router.push(`/tasks/${id}` as any);
+  }, [router]);
 
-        <View className="mb-2 flex-row flex-wrap items-center gap-1.5">
-          <View className="rounded-md px-2 py-[3px]" style={{ backgroundColor: badge.bg }}>
-            <Text className="text-[11px] font-bold" style={{ color: badge.text }}>{badge.label}</Text>
-          </View>
-          {isExtra && (
-            <View className="rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5">
-              <Text className="text-[10px] font-bold uppercase text-amber-700">Phát sinh</Text>
-            </View>
-          )}
-          {item.code && <Text className="ml-auto text-xs font-semibold text-slate-400">#{item.code}</Text>}
-        </View>
+  const renderTaskCard = useCallback(({ item }: { item: TaskItem }) => {
+    return <TaskCardItem item={item} getStatusBadge={getStatusBadge} onPress={handleTaskPress} />;
+  }, [getStatusBadge, handleTaskPress]);
 
-        <Text className="mb-2.5 text-[15px] font-bold leading-[22px] text-slate-900" numberOfLines={2}>
-          {item.name}
-        </Text>
-
-        <View className="mb-2.5 h-px bg-slate-100" />
-
-        <View className="flex-row items-center justify-between">
-          <View className="flex-1 flex-row items-center gap-3.5">
-            {item.project?.name && (
-              <View className="flex-row items-center gap-[5px]">
-                <Feather name="folder" size={12} color="#64748B" />
-                <Text className="max-w-[160px] text-xs text-slate-500" numberOfLines={1}>
-                  {item.project.name}
-                </Text>
-              </View>
-            )}
-            {item.plannedEndDate && (
-              <View className="flex-row items-center gap-[5px]">
-                <Feather name="clock" size={12} color="#64748B" />
-                <Text className="max-w-[160px] text-xs text-slate-500">
-                  {new Date(item.plannedEndDate).toLocaleDateString('vi-VN')}
-                </Text>
-              </View>
-            )}
-          </View>
-          <Feather name="chevron-right" size={16} color="#94A3B8" />
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  const keyExtractor = useCallback((item: TaskItem) => item.id, []);
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
@@ -337,11 +356,11 @@ export default function TasksScreen() {
           <Text className="text-[13px] text-slate-400">Đang tải danh sách công việc...</Text>
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={filteredTasks}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractor}
           renderItem={renderTaskCard}
-          contentContainerClassName="gap-3 p-4 pb-6"
+          contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
           showsVerticalScrollIndicator={false}
           onEndReachedThreshold={0.4}
           onEndReached={() => {

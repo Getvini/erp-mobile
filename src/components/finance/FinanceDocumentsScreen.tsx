@@ -431,6 +431,7 @@ export function FinanceDocumentsScreen({ initialView }: { initialView: FinanceVi
         initialNumToRender={8}
         maxToRenderPerBatch={8}
         windowSize={5}
+        removeClippedSubviews={Platform.OS === 'android'}
       />
       
       <FinanceFilterSheet
