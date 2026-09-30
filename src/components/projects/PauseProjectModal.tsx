@@ -8,8 +8,10 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Pressable,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import {
   usePauseProjectDirectMutation,
   useRequestPauseProjectMutation,
@@ -58,6 +60,7 @@ export default function PauseProjectModal({
     }
 
     try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       if (isDirect) {
         await pauseDirectMutation.mutateAsync({ id: projectId, reason: trimmed });
         Alert.alert('Thành công', 'Đã tạm dừng dự án.');
@@ -75,8 +78,16 @@ export default function PauseProjectModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View className="flex-1 justify-end bg-slate-900/50">
-        <View className="max-h-[85%] gap-3 rounded-t-[24px] bg-white p-5">
+      <Pressable className="flex-1 justify-end bg-slate-900/50" onPress={onClose}>
+        <Pressable
+          className="max-h-[85%] gap-3 rounded-t-[24px] bg-white p-5"
+          onPress={(e) => e.stopPropagation()}
+        >
+          {/* Draggable Handle Indicator Bar */}
+          <View className="items-center mb-1">
+            <View className="w-12 h-1.5 rounded-full bg-slate-300" />
+          </View>
+
           {/* Header */}
           <View className="flex-row items-center justify-between border-b border-slate-100 pb-3">
             <View className="flex-1 flex-row items-center gap-2.5">
@@ -194,8 +205,8 @@ export default function PauseProjectModal({
               )}
             </TouchableOpacity>
           </View>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }

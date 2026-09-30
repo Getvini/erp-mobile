@@ -26,6 +26,7 @@ import {
 } from '@/services/referralPartnerService';
 import PartnerCommissionTab from '@/components/referral-partners/PartnerCommissionTab';
 import PartnerFormModal from '@/components/referral-partners/PartnerFormModal';
+import { ContactActionGroup } from '@/components/common/ContactActionGroup';
 import { BrandColors } from '@/constants/colors';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { canAccessReferralPartners, canManageReferralPartners } from '@/utils/rbac';
@@ -620,6 +621,9 @@ export default function ReferralPartnerDetailScreen() {
                 >
                   {typeLabel}
                 </Text>
+              </View>
+              <View className="mt-3 w-full">
+                <ContactActionGroup phone={partner.phone || undefined} email={partner.email || undefined} />
               </View>
             </View>
 

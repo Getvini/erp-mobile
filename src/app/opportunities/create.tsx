@@ -22,6 +22,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Feather } from '@expo/vector-icons';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { DatePickerModal } from '@/components/common/DatePickerModal';
+import { ServicePackageBottomSheet, ServiceSelectionBottomSheet } from '@/components/opportunities';
 import { BrandColors } from '@/constants/colors';
 import { CreateOpportunityPayload } from '@/services/opportunityService';
 import {
@@ -2117,120 +2118,36 @@ export default function CreateOpportunityScreen() {
         </View>
       </Modal>
 
-      {/* Package Template Selection Modal */}
-      <Modal
+      {/* Draggable Service Package Bottom Sheet */}
+      <ServicePackageBottomSheet
         visible={activePackageIndex !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setActivePackageIndex(null)}>
-        
-        <View className="flex-1 bg-[rgba(0,_0,_0,_0.45)] justify-center items-center p-[20px]">
-          <View
-            style={
+        onClose={() => setActivePackageIndex(null)}
+        packages={availablePackages}
+        selectedPackageId={
+          activePackageIndex !== null ? packages[activePackageIndex]?.servicePackageId : undefined
+        }
+        onSelectPackage={(pkg) => {
+          if (activePackageIndex !== null) {
+            handleSelectPackageTemplate(activePackageIndex, pkg.id);
+          }
+        }}
+      />
 
-            {
-              width: isTablet ? 520 : Math.min(width * 0.94, 420),
-              maxHeight: isLandscape ? height * 0.88 : '80%'
-            }} className="w-full max-h-[80%] bg-white rounded-[16px] p-[16px] shadow-lg">
-
-            
-            <View className="flex-row justify-between items-center pb-[12px] border-b border-b-slate-200">
-              <Text className="text-[16px] font-bold text-slate-900">Chọn gói dịch vụ mẫu</Text>
-              <TouchableOpacity
-                onPress={() => setActivePackageIndex(null)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                
-                <Feather name="x" size={20} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView className="my-[10px]">
-              <TouchableOpacity
-
-                onPress={() => {
-                  if (activePackageIndex !== null) handleSelectPackageTemplate(activePackageIndex, '');
-                }} className="flex-row items-center justify-between py-[12px] px-[8px] border-b border-b-slate-100">
-                
-                <Text className="text-[14px] text-slate-700">-- Chọn gói mẫu --</Text>
-              </TouchableOpacity>
-
-              {availablePackages.map((pkg) =>
-              <TouchableOpacity
-                key={pkg.id}
-
-                onPress={() => {
-                  if (activePackageIndex !== null) handleSelectPackageTemplate(activePackageIndex, pkg.id);
-                }} className="flex-row items-center justify-between py-[12px] px-[8px] border-b border-b-slate-100">
-                
-                  <View style={{ flex: 1 }}>
-                    <Text className="text-[14px] font-semibold text-slate-900">{pkg.name}</Text>
-                    {pkg.description ?
-                  <Text numberOfLines={2} className="text-[12px] text-slate-500 mt-[2px]">
-                        {pkg.description}
-                      </Text> :
-                  null}
-                  </View>
-                  <Feather name="chevron-right" size={16} color="#94A3B8" />
-                </TouchableOpacity>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Service Selection Modal (Supports both Standalone and Package Sub-Services) */}
-      <Modal
+      {/* Draggable Service Selection Bottom Sheet */}
+      <ServiceSelectionBottomSheet
         visible={activeServiceTarget !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setActiveServiceTarget(null)}>
-        
-        <View className="flex-1 bg-[rgba(0,_0,_0,_0.45)] justify-center items-center p-[20px]">
-          <View
-            style={{
-              width: isTablet ? 520 : Math.min(width * 0.94, 420),
-              maxHeight: isLandscape ? height * 0.88 : '80%'
-            }}
-            className="w-full max-h-[80%] bg-white rounded-[16px] p-[16px] shadow-lg">
-            
-            <View className="flex-row justify-between items-center pb-[12px] border-b border-b-slate-200">
-              <Text className="text-[16px] font-bold text-slate-900">
-                {activeServiceTarget?.type === 'package' ? 'Chọn dịch vụ trong gói' : 'Chọn dịch vụ lẻ'}
-              </Text>
-              <TouchableOpacity
-                onPress={() => setActiveServiceTarget(null)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Feather name="x" size={20} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView className="my-[10px]">
-              <TouchableOpacity
-                onPress={() => handleSelectServiceFromModal('')}
-                className="flex-row items-center justify-between py-[12px] px-[8px] border-b border-b-slate-100">
-                <Text className="text-[14px] text-slate-700">-- Chọn dịch vụ --</Text>
-              </TouchableOpacity>
-
-              {availableServices.map((serv) => (
-                <TouchableOpacity
-                  key={serv.id}
-                  onPress={() => handleSelectServiceFromModal(serv.id)}
-                  className="flex-row items-center justify-between py-[12px] px-[8px] border-b border-b-slate-100">
-                  <View style={{ flex: 1 }}>
-                    <Text className="text-[14px] font-semibold text-slate-900">{serv.name}</Text>
-                    {serv.costPrice ? (
-                      <Text className="text-[12px] text-slate-500 mt-[2px]">
-                        Giá vốn: {formatVNDFull(serv.costPrice)}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <Feather name="chevron-right" size={16} color="#94A3B8" />
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setActiveServiceTarget(null)}
+        title={activeServiceTarget?.type === 'package' ? 'Chọn Dịch Vụ Trong Gói' : 'Chọn Dịch Vụ Lẻ'}
+        services={availableServices}
+        selectedServiceId={
+          activeServiceTarget?.type === 'standalone'
+            ? services[activeServiceTarget.index]?.serviceId
+            : activeServiceTarget?.type === 'package'
+            ? packages[activeServiceTarget.pkgIndex]?.services?.[activeServiceTarget.serviceIndex]?.serviceId
+            : undefined
+        }
+        onSelectService={(servId) => handleSelectServiceFromModal(servId)}
+      />
     </SafeAreaView>);
 
 }

@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { BrandColors } from '@/constants/colors';
 import { useAddSubtaskMutation, useUpdateSubtaskMutation } from '@/hooks/queries/useTasks';
 import {
@@ -294,6 +295,64 @@ export default function SubtaskAllocationModal({
               <Text className="text-xs font-bold text-slate-700">
                 % phân bổ <Text className="text-red-500">*</Text>
               </Text>
+              
+              {/* Quick Percent Selector Pills */}
+              <View className="flex-row items-center gap-1.5 mb-1 flex-wrap">
+                {[25, 33, 50, 100].map((preset) => {
+                  const isAvailable = preset <= editablePercent;
+                  return (
+                    <TouchableOpacity
+                      key={preset}
+                      disabled={!isAvailable}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setPercentInput(String(preset));
+                      }}
+                      className={`px-2.5 py-1 rounded-lg border ${
+                        percentInput === String(preset)
+                          ? 'bg-orange-50 border-primary'
+                          : isAvailable
+                          ? 'bg-slate-50 border-slate-200'
+                          : 'bg-slate-100 border-slate-200 opacity-40'
+                      }`}
+                    >
+                      <Text
+                        className={`text-[11px] ${
+                          percentInput === String(preset)
+                            ? 'font-extrabold text-primary'
+                            : 'font-semibold text-slate-600'
+                        }`}
+                      >
+                        {preset}%
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                {editablePercent > 0 && !([25, 33, 50, 100].includes(editablePercent)) && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setPercentInput(String(editablePercent));
+                    }}
+                    className={`px-2.5 py-1 rounded-lg border ${
+                      percentInput === String(editablePercent)
+                        ? 'bg-orange-50 border-primary'
+                        : 'bg-slate-50 border-slate-200'
+                    }`}
+                  >
+                    <Text
+                      className={`text-[11px] ${
+                        percentInput === String(editablePercent)
+                          ? 'font-extrabold text-primary'
+                          : 'font-semibold text-slate-600'
+                      }`}
+                    >
+                      Còn lại ({editablePercent}%)
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
               <View className="flex-row items-center border border-slate-200 rounded-xl px-3.5 bg-white">
                 <TextInput
                   className="flex-1 py-3 min-h-[48px] text-[13px] text-slate-900"
@@ -310,7 +369,6 @@ export default function SubtaskAllocationModal({
               {percentPreviewError ? (
                 <Text className="text-[11px] font-semibold text-red-600">{percentPreviewError}</Text>
               ) : null}
-
             </View>
 
             {/* Mô tả */}

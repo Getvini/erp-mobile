@@ -8,6 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Pressable,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import {
@@ -541,12 +542,15 @@ export default function AddendumDetailModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View className="flex-1 bg-slate-900/50 justify-end">
-        <View className="bg-white rounded-t-[24px] max-h-[90%]">
+      <Pressable className="flex-1 bg-slate-900/50 justify-end" onPress={onClose}>
+        <Pressable
+          className="bg-white rounded-t-[24px] max-h-[90%]"
+          onPress={(e) => e.stopPropagation()}
+        >
           {/* Header */}
           <View className="px-[20px] pt-[10px] pb-[12px] border-b border-b-slate-100">
             <View className="items-center mb-[10px]">
-              <View className="w-[44px] h-[4px] rounded-full bg-slate-200" />
+              <View className="w-[44px] h-[4px] rounded-full bg-slate-300" />
             </View>
 
             <View className="flex-row items-start justify-between gap-[10px]">
@@ -870,8 +874,8 @@ export default function AddendumDetailModal({
               )}
             </View>
           </View>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
 
       {/* Bottom sheet nhập lý do không duyệt (lý do BẮT BUỘC) */}
       <AddendumRejectModal

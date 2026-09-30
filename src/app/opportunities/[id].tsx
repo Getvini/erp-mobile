@@ -45,6 +45,7 @@ import {
   OpportunityFinancialTab,
   OpportunityTimeLocationTab,
   OpportunityQuotationsTab,
+  OpportunityBottomActionBar,
 } from '@/components/opportunities';
 import { formatVNDFull, formatNumber } from '@/utils/formatters';
 import { DocumentCard } from '@/components/common/DocumentCard';
@@ -1138,57 +1139,19 @@ export default function OpportunityDetailScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* 12. STICKY BOTTOM BAR: NÚT DUYỆT CƠ HỘI CHO BOD / ADMIN */}
-      {isAdminOrBod && isAwaitingApproval && (
-        <View className="p-4 bg-white border-t border-slate-200">
-          {hasCustomer ? (
-            <View className="flex-row gap-3">
-              <TouchableOpacity
-                className="h-12 flex-1 flex-row items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50"
-                onPress={() => setIsRejectModalVisible(true)}
-                disabled={isApproving || isRejecting}
-              >
-                <Feather name="x-circle" size={18} color="#DC2626" />
-                <Text className="text-sm font-extrabold text-red-600">Từ chối</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                className={`h-12 flex-[1.5] flex-row items-center justify-center gap-2 bg-primary rounded-2xl shadow-lg ${
-                  isApproving ? 'opacity-60' : ''
-                }`}
-                onPress={handleApproveOpportunity}
-                disabled={isApproving || isRejecting}
-                activeOpacity={0.85}
-              >
-                {isApproving ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Feather name="check-circle" size={18} color="#FFFFFF" />
-                    <Text className="text-sm font-extrabold text-white">Phê duyệt</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View className="flex-row gap-3">
-              <TouchableOpacity
-                className="h-12 flex-1 items-center justify-center rounded-2xl border border-red-200 bg-red-50"
-                onPress={() => setIsRejectModalVisible(true)}
-              >
-                <Text className="text-sm font-extrabold text-red-600">Từ chối</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                className="h-12 flex-[1.8] flex-row items-center justify-center gap-2 bg-amber-600 rounded-2xl shadow-lg"
-                onPress={() => setIsCustomerModalVisible(true)}
-                activeOpacity={0.85}
-              >
-                <Feather name="user-plus" size={17} color="#FFFFFF" />
-                <Text className="text-sm font-extrabold text-white">Thêm khách hàng để duyệt</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      )}
+      {/* 12. STICKY BOTTOM BAR */}
+      <OpportunityBottomActionBar
+        stage={(opportunity as any)?.stage || opportunity?.status}
+        isPending={isApproving || isRejecting}
+        canApprove={isAdminOrBod && isAwaitingApproval}
+        onApprove={handleApproveOpportunity}
+        onReject={() => setIsRejectModalVisible(true)}
+        onCreateQuotation={
+          (opportunity as any)?.stage === 'QUALIFIED' || (opportunity as any)?.stage === 'PROPOSAL' || opportunity?.status === 'QUALIFIED' || opportunity?.status === 'PROPOSAL'
+            ? () => router.push(`/opportunities/${id}/quotations/create`)
+            : undefined
+        }
+      />
     </SafeAreaView>
   );
 }

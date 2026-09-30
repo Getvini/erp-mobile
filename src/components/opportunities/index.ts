@@ -7,3 +7,7 @@ export * from './OpportunityEvaluationTab';
 export * from './OpportunityFinancialTab';
 export * from './OpportunityTimeLocationTab';
 export * from './OpportunityQuotationsTab';
+export * from './OpportunityBottomActionBar';
+export * from './ServicePackageBottomSheet';
+export * from './ServiceSelectionBottomSheet';
+

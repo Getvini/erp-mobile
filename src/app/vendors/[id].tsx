@@ -15,6 +15,7 @@ import * as Haptic from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import VendorFormModal from '@/components/vendors/VendorFormModal';
 import VendorJobModal from '@/components/vendors/VendorJobModal';
+import { ContactActionGroup } from '@/components/common/ContactActionGroup';
 import {
   getVendorTypeLabel,
   handleVendorCall,
@@ -444,6 +445,9 @@ export default function VendorDetailScreen() {
                     {vendorJobs.length} hạng mục
                   </Text>
                 </View>
+              </View>
+              <View className="mt-3 w-full">
+                <ContactActionGroup phone={vendor.phone || undefined} email={vendor.email || undefined} />
               </View>
             </View>
 

@@ -21,6 +21,7 @@ import { ContractDebtGroup } from '@/services/financeService';
 import { BrandColors } from '@/constants/colors';
 import BottomNavBar from '@/components/BottomNavBar';
 import DatePickerModal from '@/components/common/DatePickerModal';
+import { DebtProgressRing } from '@/components/finance/DebtProgressRing';
 import { safeGoBack } from '@/utils/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { canAccessFinance } from '@/utils/rbac';
@@ -713,13 +714,19 @@ export default function FinanceDashboardScreen() {
             </View>
 
             {/* 2. Bộ lọc thời gian (Presets) */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row gap-2">
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingRight: 16 }}
+              className="flex-row"
+            >
               {PRESET_OPTIONS.map((opt) => {
                 const isSelected = preset === opt.key;
                 return (
                   <TouchableOpacity
                     key={opt.key}
-                    className={`px-3 py-1.5 rounded-lg border min-h-[32px] justify-center items-center mr-1.5 ${
+                    activeOpacity={0.8}
+                    className={`shrink-0 px-3.5 py-1.5 rounded-lg border min-h-[32px] justify-center items-center mr-2 ${
                       isSelected
                         ? 'bg-indigo-50 border-indigo-200'
                         : 'bg-slate-50 border-slate-200'
@@ -730,6 +737,7 @@ export default function FinanceDashboardScreen() {
                     }}
                   >
                     <Text
+                      numberOfLines={1}
                       className={`text-xs font-bold ${
                         isSelected ? 'text-indigo-600' : 'text-slate-600'
                       }`}
@@ -743,13 +751,19 @@ export default function FinanceDashboardScreen() {
 
             {/* 3. Bộ lọc trạng thái công nợ & Reset */}
             <View className="flex-row items-center justify-between gap-2 pt-1 border-t border-slate-100">
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-1 flex-row">
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingRight: 12 }}
+                className="flex-1 flex-row"
+              >
                 {DEBT_STATUS_OPTIONS.map((opt) => {
                   const isSelected = debtStatusFilter === opt.key;
                   return (
                     <TouchableOpacity
                       key={opt.key}
-                      className={`px-2.5 py-1 rounded-md border min-h-[28px] justify-center items-center mr-1.5 ${
+                      activeOpacity={0.8}
+                      className={`shrink-0 px-3 py-1.5 rounded-md border min-h-[30px] justify-center items-center mr-2 ${
                         isSelected
                           ? 'bg-slate-900 border-slate-900'
                           : 'bg-white border-slate-200'
@@ -760,6 +774,7 @@ export default function FinanceDashboardScreen() {
                       }}
                     >
                       <Text
+                        numberOfLines={1}
                         className={`text-[11px] font-bold ${
                           isSelected ? 'text-white' : 'text-slate-600'
                         }`}
@@ -783,6 +798,13 @@ export default function FinanceDashboardScreen() {
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* Debt Progress Ring Component */}
+          <DebtProgressRing
+            totalAmount={stats.planned || (stats.collected + stats.pending)}
+            paidAmount={stats.collected}
+            remainingAmount={stats.pending}
+          />
 
           {/* Executive 4 Metric Cards */}
           <View className="gap-3 mb-4">

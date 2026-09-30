@@ -6,6 +6,7 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -32,6 +33,7 @@ export const InvoiceUploadPicker: React.FC<InvoiceUploadPickerProps> = ({
   maxFiles = 5,
 }) => {
   const [compressing, setCompressing] = useState(false);
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
 
   // 1. Chụp ảnh từ Camera
   const handleTakeCamera = async () => {
@@ -236,8 +238,14 @@ export const InvoiceUploadPicker: React.FC<InvoiceUploadPickerProps> = ({
       {files.map((file, idx) => {
         const isPdf = file.type?.includes('pdf') || file.name?.endsWith('.pdf');
         return (
-          <View
+          <TouchableOpacity
             key={`${file.uri}_${idx}`}
+            activeOpacity={0.85}
+            onPress={() => {
+              if (!isPdf) {
+                setPreviewUri(file.uri);
+              }
+            }}
             style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -276,7 +284,7 @@ export const InvoiceUploadPicker: React.FC<InvoiceUploadPickerProps> = ({
                 {file.name}
               </Text>
               <Text style={{ fontSize: 11, color: '#94A3B8' }}>
-                {isPdf ? 'Tệp PDF' : 'Ảnh đã nén (JPEG)'}
+                {isPdf ? 'Tệp PDF' : 'Ảnh đã nén (Bấm để xem)'}
               </Text>
             </View>
 
@@ -294,9 +302,33 @@ export const InvoiceUploadPicker: React.FC<InvoiceUploadPickerProps> = ({
             >
               <Feather name="trash-2" size={14} color="#EF4444" />
             </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
         );
       })}
+
+      {/* Full-Screen Image Preview Modal */}
+      {previewUri && (
+        <Modal
+          visible={Boolean(previewUri)}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPreviewUri(null)}
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+            <TouchableOpacity
+              onPress={() => setPreviewUri(null)}
+              style={{ position: 'absolute', top: 48, right: 20, zIndex: 10, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Feather name="x" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Image
+              source={{ uri: previewUri }}
+              style={{ width: '100%', height: '80%' }}
+              resizeMode="contain"
+            />
+          </View>
+        </Modal>
+      )}
     </View>
   );
 };

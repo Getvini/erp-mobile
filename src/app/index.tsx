@@ -12,11 +12,13 @@ import {
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/context/AuthContext';
 import BottomNavBar from '@/components/BottomNavBar';
 import { FocusBanner } from '@/components/dashboard/FocusBanner';
 import { QuickActionGrid } from '@/components/dashboard/QuickActionGrid';
 import { MonthYearPickerModal } from '@/components/dashboard/MonthYearPickerModal';
+import { DashboardFAB } from '@/components/dashboard/DashboardFAB';
 import { AdminDashboardView } from '@/components/dashboard/views/AdminDashboardView';
 import { SalesDashboardView } from '@/components/dashboard/views/SalesDashboardView';
 import { TeamLeadDashboardView } from '@/components/dashboard/views/TeamLeadDashboardView';
@@ -89,6 +91,7 @@ export default function HomeScreen() {
   }, [isAuthenticated, isLoading]);
 
   const handleRefresh = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     refetchDashboard();
     refetchMyTasks();
     if (isLeadOrAdmin) {
@@ -108,6 +111,7 @@ export default function HomeScreen() {
   };
 
   const handleNotificationPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push('/notifications' as any);
   };
 
@@ -190,7 +194,7 @@ export default function HomeScreen() {
 
       <ScrollView
         contentContainerClassName="px-4 pt-4 pb-6"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 80 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -270,7 +274,10 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             className="flex-row items-center gap-1.5 bg-surface px-2.5 py-1.5 rounded-xl border border-border shadow-xs"
-            onPress={() => setIsPickerVisible(true)}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setIsPickerVisible(true);
+            }}
             activeOpacity={0.75}
           >
             <Feather name="calendar" size={13} color="#F38820" />
@@ -314,6 +321,9 @@ export default function HomeScreen() {
 
       </ScrollView>
 
+      {/* Floating Action Button (Thumb Zone) */}
+      <DashboardFAB userRole={user?.role} />
+
       {/* Month & Year Picker Modal */}
       <MonthYearPickerModal
         visible={isPickerVisible}
@@ -327,4 +337,5 @@ export default function HomeScreen() {
     </SafeAreaView>
   );
 }
+
 
