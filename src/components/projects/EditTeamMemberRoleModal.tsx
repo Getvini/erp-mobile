@@ -27,13 +27,12 @@ interface EditTeamMemberRoleModalProps {
 
 const ROLES_LIST = [
   { key: 'ACCOUNT', label: 'Account', desc: 'Quản lý & duyệt công việc nhóm' },
-  { key: 'EDITOR', label: 'Editor', desc: 'Dựng phim & biên tập video' },
+  { key: 'EDITOR', label: 'Biên tập', desc: 'Biên tập nội dung' },
   { key: 'CONTENT_CREATOR', label: 'Nội dung', desc: 'Sáng tạo nội dung & bài viết' },
-  { key: 'GRAPHIC_DESIGNER', label: 'Thiết kế đồ họa', desc: 'Thiết kế banner, hình ảnh' },
-  { key: 'CAMERAMAN', label: 'Quay phim', desc: 'Quay hình & kỹ thuật hình ảnh' },
-  { key: 'SCRIPTER', label: 'Biên kịch', desc: 'Viết kịch bản truyền thông' },
+  { key: 'DESIGNER', label: 'Thiết kế', desc: 'Thiết kế banner, hình ảnh' },
+  { key: 'CAMERAMAN', label: 'Quay', desc: 'Quay hình & kỹ thuật hình ảnh' },
+  { key: 'VIDEO_EDITOR', label: 'Dựng video', desc: 'Dựng video & hậu kỳ' },
   { key: 'SOCIAL_MEDIA_MANAGER', label: 'Quản lý MXH', desc: 'Quản trị các trang MXH' },
-  { key: 'SEO_SPECIALIST', label: 'Chuyên viên SEO', desc: 'Tối ưu hóa công cụ tìm kiếm' },
 ];
 
 /** Nhãn vai trò hiển thị — ACCOUNT là "Account" theo Web, không dùng "Account dự án"/"Lead dự án". */

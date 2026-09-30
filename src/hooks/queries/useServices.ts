@@ -26,7 +26,10 @@ function invalidateServiceDependents(
   }
 }
 
-export function useServicesQuery(filters: ServiceListFilters = {}) {
+export function useServicesQuery(
+  filters: ServiceListFilters = {},
+  options: { enabled?: boolean } = {},
+) {
   return useQuery({
     queryKey: queryKeys.services.list(filters),
     queryFn: async () => {
@@ -36,6 +39,7 @@ export function useServicesQuery(filters: ServiceListFilters = {}) {
       }
       return res.data;
     },
+    enabled: options.enabled,
   });
 }
 

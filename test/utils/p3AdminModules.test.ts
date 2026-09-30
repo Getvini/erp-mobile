@@ -33,13 +33,13 @@ import {
 const member = (id: string, roles: unknown) => ({ id: `m-${id}`, user: { id }, roles });
 
 describe('P3 — Vai trò thành viên đội dự án', () => {
-  it('có đúng 9 vai trò, và PROJECT_MANAGER không gán được qua endpoint member', () => {
-    expect(ALL_MEMBER_ROLES).toHaveLength(9);
-    expect(ASSIGNABLE_MEMBER_ROLES).toHaveLength(8);
+  it('có đúng 8 vai trò, và PROJECT_MANAGER không gán được qua endpoint member', () => {
+    expect(ALL_MEMBER_ROLES).toHaveLength(8);
+    expect(ASSIGNABLE_MEMBER_ROLES).toHaveLength(7);
     expect(ASSIGNABLE_MEMBER_ROLES).not.toContain('PROJECT_MANAGER');
     expect(ASSIGNABLE_MEMBER_ROLES).toContain('ACCOUNT');
     expect(TEAM_MEMBER_ROLE_LABELS.ACCOUNT).toBe('Account');
-    expect(TEAM_MEMBER_ROLE_LABELS.PROJECT_MANAGER).toBe('Quản lý dự án');
+    expect(TEAM_MEMBER_ROLE_LABELS.PROJECT_MANAGER).toBe('PM');
   });
 
   it('chuẩn hóa mọi dạng roles về mảng string không trùng', () => {

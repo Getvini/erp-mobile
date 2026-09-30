@@ -16,6 +16,7 @@ import * as Haptic from 'expo-haptics';
 import { JobReference, ServiceItem, ServiceJobConfig } from '@/services/catalogService';
 import {
   useCreateServiceMutation,
+  useServicesQuery,
   useUpdateServiceMutation,
 } from '@/hooks/queries/useServices';
 import { useJobsQuery } from '@/hooks/queries/useJobs';
@@ -53,9 +54,6 @@ export default function ServiceFormModal({
   const createServiceMutation = useCreateServiceMutation();
   const updateServiceMutation = useUpdateServiceMutation();
 
-  // ⚠️ Component KHÔNG tự reset state bằng useEffect (tránh cascading render).
-  // Màn hình cha truyền `key` mới mỗi lần mở sheet ⇒ mỗi lần mở là một instance
-  // mới, state được khởi tạo trực tiếp từ prop `service`.
   const [name, setName] = useState(service?.name ?? '');
   const [code, setCode] = useState(service?.code ?? '');
   const [description, setDescription] = useState(service?.description ?? '');
@@ -70,9 +68,14 @@ export default function ServiceFormModal({
   );
   const [jobSearch, setJobSearch] = useState('');
   const [isJobPickerOpen, setIsJobPickerOpen] = useState(false);
+  const [pickerTab, setPickerTab] = useState<'JOB' | 'SERVICE'>('JOB');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { data: jobs = [], isLoading: isLoadingJobs } = useJobsQuery({}, { enabled: visible });
+  const { data: services = [], isLoading: isLoadingServices } = useServicesQuery(
+    {},
+    { enabled: visible && isJobPickerOpen && pickerTab === 'SERVICE' },
+  );
 
   const originalJobConfigs = useMemo<ServiceJobConfig[]>(
     () =>
@@ -107,6 +110,22 @@ export default function ServiceFormModal({
     });
   }, [jobConfigs, jobSearch, jobs]);
 
+  const availableServices = useMemo(() => {
+    const selectedIds = new Set(jobConfigs.map((config) => config.jobId));
+    const keyword = jobSearch.trim().toLowerCase();
+    return services.filter((s) => {
+      if (service?.id && s.id === service.id) return false;
+      const sJobs = s.serviceJobs ?? [];
+      const newJobs = sJobs.filter((sj) => !selectedIds.has(sj.jobId));
+      if (newJobs.length === 0) return false;
+      if (!keyword) return true;
+      return (
+        (s.name || '').toLowerCase().includes(keyword) ||
+        (s.code || '').toLowerCase().includes(keyword)
+      );
+    });
+  }, [jobConfigs, jobSearch, service?.id, services]);
+
   const handleAddJob = useCallback((jobId: string) => {
     setJobConfigs((prev) =>
       prev.some((config) => config.jobId === jobId)
@@ -116,6 +135,34 @@ export default function ServiceFormModal({
     setJobSearch('');
     setIsJobPickerOpen(false);
   }, []);
+
+  const handleAddJobsFromService = useCallback(
+    (sourceService: ServiceItem) => {
+      const existingJobIds = new Set(jobConfigs.map((c) => c.jobId));
+      const sourceJobs = sourceService.serviceJobs ?? [];
+      const jobsToAdd = sourceJobs.filter((sj) => !existingJobIds.has(sj.jobId));
+
+      if (jobsToAdd.length === 0) {
+        Alert.alert(
+          'Thông báo',
+          `Tất cả hạng mục của dịch vụ "${sourceService.name}" đã có trong danh sách.`,
+        );
+        return;
+      }
+
+      const newConfigs: JobConfigRow[] = jobsToAdd.map((sj) => ({
+        jobId: sj.jobId,
+        quantityText: formatNumberInput(Number(sj.quantity || 1)),
+        isOutput: Boolean(sj.isOutput),
+      }));
+
+      setJobConfigs((prev) => [...prev, ...newConfigs]);
+      setJobSearch('');
+      setIsJobPickerOpen(false);
+      Haptic.notificationAsync(Haptic.NotificationFeedbackType.Success);
+    },
+    [jobConfigs],
+  );
 
   const handleRemoveJob = useCallback((jobId: string) => {
     setJobConfigs((prev) => prev.filter((config) => config.jobId !== jobId));
@@ -428,7 +475,7 @@ export default function ServiceFormModal({
                           </TouchableOpacity>
                         </View>
 
-                        <View className="mt-2.5 flex-row items-center gap-2.5">
+                        <View className="mt-2.5 flex-row items-end gap-2.5">
                           <View className="flex-1">
                             <Text className="mb-1 text-[10px] font-bold uppercase text-slate-400">
                               Số lượng
@@ -442,7 +489,7 @@ export default function ServiceFormModal({
                           </View>
 
                           <TouchableOpacity
-                            className={`min-h-[44px] flex-row items-center gap-2 rounded-xl border px-3 ${
+                            className={`h-[44px] flex-row items-center gap-2 rounded-xl border px-3 ${
                               config.isOutput
                                 ? 'border-emerald-300 bg-emerald-50'
                                 : 'border-slate-200 bg-white'
@@ -493,48 +540,133 @@ export default function ServiceFormModal({
 
               {isJobPickerOpen ? (
                 <View className="mt-2.5 rounded-xl border border-slate-200 bg-white p-2.5">
+                  {/* Tabs chọn nguồn thêm */}
+                  <View className="mb-2.5 flex-row gap-2">
+                    <TouchableOpacity
+                      className={`min-h-[38px] flex-1 items-center justify-center rounded-lg border ${
+                        pickerTab === 'JOB'
+                          ? 'border-primary bg-primary'
+                          : 'border-slate-200 bg-slate-100'
+                      }`}
+                      onPress={() => setPickerTab('JOB')}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        className={`text-xs ${
+                          pickerTab === 'JOB' ? 'font-bold text-white' : 'font-semibold text-slate-600'
+                        }`}
+                      >
+                        Hạng mục mẫu
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      className={`min-h-[38px] flex-1 items-center justify-center rounded-lg border ${
+                        pickerTab === 'SERVICE'
+                          ? 'border-primary bg-primary'
+                          : 'border-slate-200 bg-slate-100'
+                      }`}
+                      onPress={() => setPickerTab('SERVICE')}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        className={`text-xs ${
+                          pickerTab === 'SERVICE' ? 'font-bold text-white' : 'font-semibold text-slate-600'
+                        }`}
+                      >
+                        Từ dịch vụ khác
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
                   <View className="mb-2 flex-row items-center gap-2 rounded-xl bg-slate-100 px-3 h-[44px]">
                     <Feather name="search" size={16} color="#94A3B8" />
                     <TextInput
                       className="flex-1 text-sm text-slate-900"
-                      placeholder="Tìm theo tên hoặc mã công việc..."
+                      placeholder={
+                        pickerTab === 'JOB'
+                          ? 'Tìm theo tên hoặc mã công việc...'
+                          : 'Tìm theo tên hoặc mã dịch vụ...'
+                      }
                       placeholderTextColor="#94A3B8"
                       value={jobSearch}
                       onChangeText={setJobSearch}
                     />
                   </View>
 
-                  {isLoadingJobs ? (
+                  {pickerTab === 'JOB' ? (
+                    isLoadingJobs ? (
+                      <View className="items-center py-4">
+                        <ActivityIndicator size="small" color={BrandColors.primary} />
+                      </View>
+                    ) : availableJobs.length === 0 ? (
+                      <Text className="py-3 text-center text-[11px] italic text-slate-400">
+                        {jobs.length === 0
+                          ? 'Chưa có công việc mẫu nào trong hệ thống.'
+                          : 'Không còn hạng mục nào phù hợp để thêm.'}
+                      </Text>
+                    ) : (
+                      <ScrollView className="max-h-[220px]" keyboardShouldPersistTaps="handled">
+                        {availableJobs.slice(0, 40).map((job) => (
+                          <TouchableOpacity
+                            key={job.id}
+                            className="min-h-[48px] flex-row items-center justify-between border-b border-slate-100 px-1"
+                            onPress={() => handleAddJob(job.id)}
+                            activeOpacity={0.75}
+                          >
+                            <View className="flex-1 pr-2">
+                              <Text className="text-xs font-semibold text-slate-800" numberOfLines={1}>
+                                {job.name || 'Hạng mục'}
+                              </Text>
+                              <Text className="text-[11px] text-slate-400">
+                                {job.code ? `#${job.code} • ` : ''}
+                                {formatVND(job.costPrice ?? 0)}
+                              </Text>
+                            </View>
+                            <Feather name="plus-circle" size={18} color="#F38820" />
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    )
+                  ) : isLoadingServices ? (
                     <View className="items-center py-4">
                       <ActivityIndicator size="small" color={BrandColors.primary} />
                     </View>
-                  ) : availableJobs.length === 0 ? (
+                  ) : availableServices.length === 0 ? (
                     <Text className="py-3 text-center text-[11px] italic text-slate-400">
-                      {jobs.length === 0
-                        ? 'Chưa có công việc mẫu nào trong hệ thống.'
-                        : 'Không còn hạng mục nào phù hợp để thêm.'}
+                      {services.length === 0
+                        ? 'Chưa có dịch vụ nào khác trong hệ thống.'
+                        : 'Không có dịch vụ nào có hạng mục mới để thêm.'}
                     </Text>
                   ) : (
                     <ScrollView className="max-h-[220px]" keyboardShouldPersistTaps="handled">
-                      {availableJobs.slice(0, 40).map((job) => (
-                        <TouchableOpacity
-                          key={job.id}
-                          className="min-h-[48px] flex-row items-center justify-between border-b border-slate-100 px-1"
-                          onPress={() => handleAddJob(job.id)}
-                          activeOpacity={0.75}
-                        >
-                          <View className="flex-1 pr-2">
-                            <Text className="text-xs font-semibold text-slate-800" numberOfLines={1}>
-                              {job.name || 'Hạng mục'}
-                            </Text>
-                            <Text className="text-[11px] text-slate-400">
-                              {job.code ? `#${job.code} • ` : ''}
-                              {formatVND(job.costPrice ?? 0)}
-                            </Text>
-                          </View>
-                          <Feather name="plus-circle" size={18} color="#F38820" />
-                        </TouchableOpacity>
-                      ))}
+                      {availableServices.slice(0, 40).map((s) => {
+                        const sJobs = s.serviceJobs ?? [];
+                        const selectedIds = new Set(jobConfigs.map((c) => c.jobId));
+                        const availableCount = sJobs.filter((sj) => !selectedIds.has(sj.jobId)).length;
+                        return (
+                          <TouchableOpacity
+                            key={s.id}
+                            className="min-h-[52px] flex-row items-center justify-between border-b border-slate-100 px-1 py-1.5"
+                            onPress={() => handleAddJobsFromService(s)}
+                            activeOpacity={0.75}
+                          >
+                            <View className="flex-1 pr-2">
+                              <Text className="text-xs font-bold text-slate-800" numberOfLines={1}>
+                                {s.name}
+                              </Text>
+                              <Text className="text-[11px] text-slate-400" numberOfLines={1}>
+                                {s.code ? `#${s.code} • ` : ''}
+                                {availableCount} hạng mục có thể thêm
+                              </Text>
+                            </View>
+                            <View className="flex-row items-center gap-1 rounded-lg bg-orange-50 px-2 py-1">
+                              <Feather name="copy" size={13} color="#F38820" />
+                              <Text className="text-[11px] font-bold text-primary">Thêm</Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
                     </ScrollView>
                   )}
                 </View>

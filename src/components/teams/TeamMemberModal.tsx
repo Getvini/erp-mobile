@@ -29,13 +29,12 @@ const ACCOUNT_ROLE_MESSAGE = 'Đội dự án phải có ít nhất 1 nhân sự
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
   CONTENT_CREATOR: 'Sáng tạo nội dung & bài viết',
-  EDITOR: 'Dựng phim & biên tập video',
-  GRAPHIC_DESIGNER: 'Thiết kế banner, hình ảnh',
+  EDITOR: 'Biên tập nội dung & kịch bản',
+  DESIGNER: 'Thiết kế banner, hình ảnh',
   CAMERAMAN: 'Quay hình & kỹ thuật hình ảnh',
   ACCOUNT: 'Quản lý & duyệt công việc nhóm',
-  SCRIPTER: 'Viết kịch bản truyền thông',
+  VIDEO_EDITOR: 'Dựng phim & video chuyên nghiệp',
   SOCIAL_MEDIA_MANAGER: 'Quản trị các trang mạng xã hội',
-  SEO_SPECIALIST: 'Tối ưu hoá công cụ tìm kiếm',
 };
 
 /** Vai trò có thể gán qua endpoint member (loại PROJECT_MANAGER — backend trả 400). */

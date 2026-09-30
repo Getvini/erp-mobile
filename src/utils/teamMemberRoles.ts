@@ -20,17 +20,16 @@ import { getTeamMemberRoles } from '@/utils/teamMember';
  */
 export { TEAM_MEMBER_ROLE_LABELS };
 
-/** 9 giá trị vai trò hợp lệ theo backend (enum TeamMemberRole). */
+/** 8 giá trị vai trò hợp lệ theo backend & web (enum MemberRole). */
 export const ALL_MEMBER_ROLES: string[] = [
   'CONTENT_CREATOR',
   'EDITOR',
-  'GRAPHIC_DESIGNER',
+  'DESIGNER',
+  'VIDEO_EDITOR',
   'CAMERAMAN',
   'PROJECT_MANAGER',
   'ACCOUNT',
-  'SCRIPTER',
   'SOCIAL_MEDIA_MANAGER',
-  'SEO_SPECIALIST',
 ];
 
 /**

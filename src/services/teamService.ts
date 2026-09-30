@@ -25,26 +25,21 @@ export const TEAM_MEMBER_ROLE = {
   ACCOUNT: 'ACCOUNT',
   CONTENT_CREATOR: 'CONTENT_CREATOR',
   EDITOR: 'EDITOR',
-  GRAPHIC_DESIGNER: 'GRAPHIC_DESIGNER',
+  DESIGNER: 'DESIGNER',
   CAMERAMAN: 'CAMERAMAN',
-  SCRIPTER: 'SCRIPTER',
+  VIDEO_EDITOR: 'VIDEO_EDITOR',
   SOCIAL_MEDIA_MANAGER: 'SOCIAL_MEDIA_MANAGER',
-  SEO_SPECIALIST: 'SEO_SPECIALIST',
 };
 
 export const TEAM_MEMBER_ROLE_LABELS: Record<string, string> = {
   CONTENT_CREATOR: 'Nội dung',
-  EDITOR: 'Editor',
-  GRAPHIC_DESIGNER: 'Thiết kế đồ họa',
-  CAMERAMAN: 'Quay phim',
-  PROJECT_MANAGER: 'Quản lý dự án',
-  // Chuẩn hóa nhãn theo Web 28-09-2026 (erp-UI/src/utils/enums.js:352):
-  // ACCOUNT hiển thị "Account" thay cho "Lead dự án"/"Account dự án".
-  // Enum gửi API vẫn giữ nguyên là `ACCOUNT`.
+  EDITOR: 'Biên tập',
+  DESIGNER: 'Thiết kế',
+  VIDEO_EDITOR: 'Dựng video',
+  CAMERAMAN: 'Quay',
+  PROJECT_MANAGER: 'PM',
   ACCOUNT: 'Account',
-  SCRIPTER: 'Biên kịch',
   SOCIAL_MEDIA_MANAGER: 'Quản lý MXH',
-  SEO_SPECIALIST: 'Chuyên viên SEO',
 };
 
 export const USER_ROLE: Record<string, string> = {

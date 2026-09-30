@@ -46,12 +46,11 @@ export const ROLE_DISPLAY_ORDER = [
   'PROJECT_MANAGER',
   'ACCOUNT',
   'EDITOR',
-  'GRAPHIC_DESIGNER',
+  'DESIGNER',
   'CONTENT_CREATOR',
   'CAMERAMAN',
-  'SCRIPTER',
+  'VIDEO_EDITOR',
   'SOCIAL_MEDIA_MANAGER',
-  'SEO_SPECIALIST',
 ];
 
 export const sortRoles = (roles: string[]): string[] =>
