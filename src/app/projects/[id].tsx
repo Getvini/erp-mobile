@@ -128,8 +128,7 @@ export default function ProjectDetailScreen() {
   const [showCloseDirect, setShowCloseDirect] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
 
-  // Multi-select task state
-  const [isSelectMode, setIsSelectMode] = useState(false);
+  // Multi-select task state (không cần isSelectMode — checkbox luôn visible)
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
 
   // RBAC & Permission Calculations
@@ -305,41 +304,44 @@ export default function ProjectDetailScreen() {
   }, []);
 
   const assignableTasks = useMemo(() => tasks.filter(isTaskAssignable), [tasks, isTaskAssignable]);
+  const assignableTaskIdSet = useMemo(
+    () => new Set(assignableTasks.map((t) => t.id)),
+    [assignableTasks]
+  );
 
   const validSelectedTaskIds = useMemo(() => {
-    return selectedTaskIds.filter((id) => {
-      const t = tasks.find((item) => item.id === id);
-      return t ? isTaskAssignable(t) : false;
-    });
-  }, [selectedTaskIds, tasks, isTaskAssignable]);
+    return selectedTaskIds.filter((id) => assignableTaskIdSet.has(id));
+  }, [selectedTaskIds, assignableTaskIdSet]);
 
-  const handleToggleSelectTask = (taskId: string) => {
+  const handleToggleSelectTask = useCallback((taskId: string) => {
     setSelectedTaskIds((prev) =>
       prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]
     );
-  };
+  }, []);
 
-  const handleToggleSelectGroup = (groupTasks: TaskDetail[]) => {
-    const groupAssignable = groupTasks.filter(isTaskAssignable);
-    if (groupAssignable.length === 0) return;
+  const handleToggleSelectGroup = useCallback((groupTasks: TaskDetail[]) => {
+    const assignableIds = groupTasks.filter(isTaskAssignable).map((t) => t.id);
+    if (assignableIds.length === 0) return;
 
-    const assignableIds = groupAssignable.map((t) => t.id);
-    const isAllGroupSelected = assignableIds.every((id) => validSelectedTaskIds.includes(id));
+    setSelectedTaskIds((prev) => {
+      const prevSet = new Set(prev);
+      const isAllGroupSelected = assignableIds.every((id) => prevSet.has(id));
+      if (isAllGroupSelected) {
+        return prev.filter((id) => !assignableIds.includes(id));
+      }
+      return Array.from(new Set([...prev, ...assignableIds]));
+    });
+  }, [isTaskAssignable]);
 
-    if (isAllGroupSelected) {
-      setSelectedTaskIds((prev) => prev.filter((id) => !assignableIds.includes(id)));
-    } else {
-      setSelectedTaskIds((prev) => Array.from(new Set([...prev, ...assignableIds])));
-    }
-  };
-
-  const handleSelectAllTasks = () => {
-    if (validSelectedTaskIds.length === assignableTasks.length) {
-      setSelectedTaskIds([]);
-    } else {
-      setSelectedTaskIds(assignableTasks.map((t) => t.id));
-    }
-  };
+  const handleSelectAllTasks = useCallback(() => {
+    setSelectedTaskIds((prev) => {
+      const validIds = prev.filter((id) => assignableTaskIdSet.has(id));
+      if (validIds.length === assignableTasks.length) {
+        return [];
+      }
+      return assignableTasks.map((t) => t.id);
+    });
+  }, [assignableTaskIdSet, assignableTasks]);
 
   const handleRefresh = () => {
     refetchProject();
@@ -643,7 +645,7 @@ export default function ProjectDetailScreen() {
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: activeTab === 'TASKS' && isSelectMode ? 90 : 30 }}
+          contentContainerStyle={{ paddingBottom: activeTab === 'TASKS' && validSelectedTaskIds.length > 0 ? 90 : 30 }}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
@@ -683,17 +685,12 @@ export default function ProjectDetailScreen() {
           )}
 
           {activeTab === 'TASKS' && (
-            <ProjectTasksTab
+          <ProjectTasksTab
               tasks={tasks}
               isLoading={isLoadingTasks}
               projectStatus={project?.status}
               isPmOrAdmin={isPmOrAdmin}
-              isSelectMode={isSelectMode}
               selectedTaskIds={validSelectedTaskIds}
-              onToggleSelectMode={() => {
-                setIsSelectMode((prev) => !prev);
-                if (isSelectMode) setSelectedTaskIds([]);
-              }}
               onToggleSelectTask={handleToggleSelectTask}
               onToggleSelectGroup={handleToggleSelectGroup}
               onOpenUpdateTask={(t) => {
@@ -750,15 +747,24 @@ export default function ProjectDetailScreen() {
         </ScrollView>
       )}
 
-      {/* Floating Bulk Action Bar - Fixed at screen bottom */}
-      {activeTab === 'TASKS' && isSelectMode && (
-        <View className="absolute bottom-5 left-4 right-4 flex-row justify-between items-center bg-slate-900 px-4 py-3 rounded-2xl z-50">
+      {/* Floating Bulk Action Bar — hiện khi có ít nhất 1 task được tích chọn */}
+      {activeTab === 'TASKS' && validSelectedTaskIds.length > 0 && (
+        <View
+          className="absolute bottom-5 left-4 right-4 flex-row justify-between items-center bg-white px-4 py-3 rounded-2xl z-50 border border-orange-100"
+          style={{
+            shadowColor: '#F38820',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.18,
+            shadowRadius: 12,
+            elevation: 8,
+          }}
+        >
           <TouchableOpacity
             className="py-1.5 px-2"
             onPress={handleSelectAllTasks}
             activeOpacity={0.7}
           >
-            <Text className="text-[13px] font-semibold text-slate-400">
+            <Text className="text-[13px] font-semibold text-slate-600">
               {validSelectedTaskIds.length > 0 && validSelectedTaskIds.length === assignableTasks.length
                 ? 'Bỏ chọn tất cả'
                 : 'Chọn tất cả'}
@@ -766,8 +772,7 @@ export default function ProjectDetailScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            className={`flex-row items-center gap-2 bg-primary px-4 py-2.5 rounded-xl ${validSelectedTaskIds.length === 0 ? 'opacity-50' : ''}`}
-            disabled={validSelectedTaskIds.length === 0}
+            className="flex-row items-center gap-2 bg-primary px-4 py-2.5 rounded-xl"
             onPress={() => {
               const selectedList = tasks.filter((t) => validSelectedTaskIds.includes(t.id));
               if (selectedList.length > 0) {
@@ -779,27 +784,29 @@ export default function ProjectDetailScreen() {
           >
             <Feather name="users" size={15} color="#FFFFFF" />
             <Text className="text-[13px] font-bold text-white">
-              Phân công {validSelectedTaskIds.length > 0 ? `(${validSelectedTaskIds.length}) ` : ''}công việc
+              Phân công ({validSelectedTaskIds.length}) công việc
             </Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Modals */}
+      {/* Modals — chỉ render khi visible để giảm tải cây DOM và tránh re-render thừa */}
       {id && (
         <>
-          <AssignPmModal
-            visible={showAssignPm}
-            onClose={() => setShowAssignPm(false)}
-            projectId={id}
-            contractId={project?.contract?.id || (project as any)?.contractId || (project as any)?.contract_id}
-            currentPmId={assignedPmId}
-            onSuccess={() => {
-              loadProjectDetail();
-            }}
-          />
+          {showAssignPm && (
+            <AssignPmModal
+              visible={showAssignPm}
+              onClose={() => setShowAssignPm(false)}
+              projectId={id}
+              contractId={project?.contract?.id || (project as any)?.contractId || (project as any)?.contract_id}
+              currentPmId={assignedPmId}
+              onSuccess={() => {
+                loadProjectDetail();
+              }}
+            />
+          )}
 
-          {project?.team?.id && (
+          {showAddTeamMember && project?.team?.id && (
             <AddTeamMemberModal
               visible={showAddTeamMember}
               onClose={() => setShowAddTeamMember(false)}
@@ -816,7 +823,7 @@ export default function ProjectDetailScreen() {
             />
           )}
 
-          {project?.team?.id && (
+          {showEditMemberRole && project?.team?.id && (
             <EditTeamMemberRoleModal
               visible={showEditMemberRole}
               onClose={() => {
@@ -834,120 +841,140 @@ export default function ProjectDetailScreen() {
             />
           )}
 
-          <TaskUpdateModal
-            visible={showTaskUpdate}
-            onClose={() => {
-              setShowTaskUpdate(false);
-              setSelectedTask(null);
-            }}
-            task={selectedTask}
-            onSuccess={() => {
-              loadTasks();
-              loadProjectDetail();
-            }}
-          />
+          {showTaskUpdate && (
+            <TaskUpdateModal
+              visible={showTaskUpdate}
+              onClose={() => {
+                setShowTaskUpdate(false);
+                setSelectedTask(null);
+              }}
+              task={selectedTask}
+              onSuccess={() => {
+                loadTasks();
+                loadProjectDetail();
+              }}
+            />
+          )}
 
-          <TaskAssignModal
-            visible={showAssignTask}
-            onClose={() => {
-              setShowAssignTask(false);
-              setAssigningTask(null);
-            }}
-            task={assigningTask}
-            project={project}
-            teamMembers={project?.team?.members || []}
-            onSuccess={() => {
-              loadTasks();
-              loadProjectDetail();
-              if (Array.isArray(assigningTask)) {
-                const assignedIds = assigningTask.map((t) => t.id);
-                setSelectedTaskIds((prev) => prev.filter((id) => !assignedIds.includes(id)));
-              } else if (assigningTask) {
-                setSelectedTaskIds((prev) => prev.filter((id) => id !== assigningTask.id));
-              }
-            }}
-          />
+          {showAssignTask && (
+            <TaskAssignModal
+              visible={showAssignTask}
+              onClose={() => {
+                setShowAssignTask(false);
+                setAssigningTask(null);
+              }}
+              task={assigningTask}
+              project={project}
+              teamMembers={project?.team?.members || []}
+              onSuccess={() => {
+                loadTasks();
+                loadProjectDetail();
+                if (Array.isArray(assigningTask)) {
+                  const assignedIds = assigningTask.map((t) => t.id);
+                  setSelectedTaskIds((prev) => prev.filter((id) => !assignedIds.includes(id)));
+                } else if (assigningTask) {
+                  setSelectedTaskIds((prev) => prev.filter((id) => id !== assigningTask.id));
+                }
+              }}
+            />
+          )}
 
-          <AddExtraTaskModal
-            visible={showAddExtraTask}
-            onClose={() => setShowAddExtraTask(false)}
-            projectId={id}
-            onSuccess={() => {
-              loadTasks();
-              loadProjectDetail();
-            }}
-          />
+          {showAddExtraTask && (
+            <AddExtraTaskModal
+              visible={showAddExtraTask}
+              onClose={() => setShowAddExtraTask(false)}
+              projectId={id}
+              onSuccess={() => {
+                loadTasks();
+                loadProjectDetail();
+              }}
+            />
+          )}
 
-          <CreateAcceptanceModal
-            visible={showCreateAcceptance}
-            onClose={() => setShowCreateAcceptance(false)}
-            contract={project?.contract}
-            projectId={id}
-            onSuccess={() => {
-              loadAcceptances();
-              loadProjectDetail();
-            }}
-          />
+          {showCreateAcceptance && (
+            <CreateAcceptanceModal
+              visible={showCreateAcceptance}
+              onClose={() => setShowCreateAcceptance(false)}
+              contract={project?.contract}
+              projectId={id}
+              onSuccess={() => {
+                loadAcceptances();
+                loadProjectDetail();
+              }}
+            />
+          )}
 
-          <AcceptanceReviewModal
-            visible={showReviewAcceptance}
-            onClose={() => {
-              setShowReviewAcceptance(false);
-              setReviewingAcceptance(null);
-            }}
-            request={reviewingAcceptance}
-            onSuccess={() => {
-              loadAcceptances();
-              loadProjectDetail();
-            }}
-          />
+          {showReviewAcceptance && (
+            <AcceptanceReviewModal
+              visible={showReviewAcceptance}
+              onClose={() => {
+                setShowReviewAcceptance(false);
+                setReviewingAcceptance(null);
+              }}
+              request={reviewingAcceptance}
+              onSuccess={() => {
+                loadAcceptances();
+                loadProjectDetail();
+              }}
+            />
+          )}
 
-          <CreateMonthlyWorkModal
-            visible={showCreateMonthlyWork}
-            onClose={() => setShowCreateMonthlyWork(false)}
-            projectId={id}
-            onSuccess={() => {
-              loadProjectDetail();
-              loadTasks();
-            }}
-          />
+          {showCreateMonthlyWork && (
+            <CreateMonthlyWorkModal
+              visible={showCreateMonthlyWork}
+              onClose={() => setShowCreateMonthlyWork(false)}
+              projectId={id}
+              onSuccess={() => {
+                loadProjectDetail();
+                loadTasks();
+              }}
+            />
+          )}
 
           {/* P1.11 — Tạm dừng / Đóng dự án */}
-          <PauseProjectModal
-            visible={showPauseRequest}
-            onClose={() => setShowPauseRequest(false)}
-            projectId={id}
-            projectName={project?.name}
-            isDirect={false}
-            onSuccess={handleRefresh}
-          />
+          {showPauseRequest && (
+            <PauseProjectModal
+              visible={showPauseRequest}
+              onClose={() => setShowPauseRequest(false)}
+              projectId={id}
+              projectName={project?.name}
+              isDirect={false}
+              onSuccess={handleRefresh}
+            />
+          )}
 
-          <PauseProjectModal
-            visible={showPauseDirect}
-            onClose={() => setShowPauseDirect(false)}
-            projectId={id}
-            projectName={project?.name}
-            isDirect
-            onSuccess={handleRefresh}
-          />
+          {showPauseDirect && (
+            <PauseProjectModal
+              visible={showPauseDirect}
+              onClose={() => setShowPauseDirect(false)}
+              projectId={id}
+              projectName={project?.name}
+              isDirect
+              onSuccess={handleRefresh}
+            />
+          )}
 
-          <CloseProjectModal
-            visible={showCloseRequest}
-            onClose={() => setShowCloseRequest(false)}
-            projectId={id}
-            projectName={project?.name}
-            isDirect={false}
-            onSuccess={handleRefresh}
-          />
+          {showCloseRequest && (
+            <CloseProjectModal
+              visible={showCloseRequest}
+              onClose={() => setShowCloseRequest(false)}
+              projectId={id}
+              projectName={project?.name}
+              isDirect={false}
+              onSuccess={handleRefresh}
+            />
+          )}
 
-          <CloseProjectModal
-            visible={showCloseDirect}
-            onClose={() => setShowCloseDirect(false)}
-            projectId={id}
-            projectName={project?.name}
-            isDirect
-            onSuccess={handleRefresh}
-          />
+          {showCloseDirect && (
+            <CloseProjectModal
+              visible={showCloseDirect}
+              onClose={() => setShowCloseDirect(false)}
+              projectId={id}
+              projectName={project?.name}
+              isDirect
+              onSuccess={handleRefresh}
+            />
+          )}
         </>
       )}
     </SafeAreaView>

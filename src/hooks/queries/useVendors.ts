@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/services/queryKeys';
 import {
@@ -9,6 +10,7 @@ import {
   VendorListFilters,
   vendorService,
 } from '@/services/vendorService';
+import { getEligibleVendorsForJobs } from '@/utils/vendorEligibility';
 
 /**
  * ============================================================================
@@ -62,6 +64,36 @@ export function useVendorsByJobQuery(jobId: string, enabled: boolean = true) {
       return res.data;
     },
     enabled: Boolean(jobId) && enabled,
+  });
+}
+
+/**
+ * Nhà cung cấp đáp ứng ĐỒNG THỜI (AND) cho nhiều hạng mục (Jobs) khi phân công hàng loạt.
+ * Giao (intersection) các danh sách vendor theo từng jobId.
+ */
+export function useBulkVendorsByJobsQuery(jobIds: string[], enabled: boolean = true) {
+  const sortedJobIds = useMemo(
+    () => [...new Set(jobIds.filter(Boolean))].sort(),
+    [jobIds]
+  );
+  const requestKey = sortedJobIds.join('|');
+
+  return useQuery({
+    queryKey: [...queryKeys.vendors.all, 'by-jobs', requestKey],
+    queryFn: async (): Promise<VendorItem[]> => {
+      if (sortedJobIds.length === 0) return [];
+      const results = await Promise.all(
+        sortedJobIds.map(async (jId) => {
+          const res = await vendorService.getVendorsByJob(jId);
+          if (res.error) {
+            throw new Error(res.error);
+          }
+          return Array.isArray(res.data) ? res.data : [];
+        })
+      );
+      return getEligibleVendorsForJobs(results);
+    },
+    enabled: enabled && sortedJobIds.length > 0,
   });
 }
 

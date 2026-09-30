@@ -22,11 +22,12 @@ import {
   useTaskDetailQuery,
   useTaskDailyWorkloadQuery,
 } from '@/hooks/queries/useTasks';
-import { useVendorsByJobQuery } from '@/hooks/queries/useVendors';
+import { useVendorsByJobQuery, useBulkVendorsByJobsQuery } from '@/hooks/queries/useVendors';
 import { useTeamsQuery } from '@/hooks/queries/useTeams';
 import { uploadToCloudinary, PickedFile } from '@/services/cloudinaryService';
 import { BrandColors } from '@/constants/colors';
 import { isValidUrl, normalizeUrl } from '@/utils/validators';
+import { getTaskJobId } from '@/utils/vendorEligibility';
 import {
   formatDateToDDMMYYYY,
   formatDateToYYYYMMDD,
@@ -505,20 +506,40 @@ export default function TaskAssignModal({
     (representativeTask as any)?.contractService?.job?.id ||
     '';
 
-  const { data: vendorsData, isLoading: isLoadingVendors } = useVendorsByJobQuery(
-    performerType === 'VENDOR' ? jobId : ''
+  const selectedTaskJobIds = useMemo(
+    () => [...new Set(tasks.map(getTaskJobId).filter(Boolean))],
+    [tasks]
   );
-  const vendors = vendorsData || [];
+  const hasTaskWithoutJob = useMemo(
+    () => tasks.some((t) => !getTaskJobId(t)),
+    [tasks]
+  );
+
+  const { data: singleJobVendorsData, isLoading: isLoadingSingleJobVendors } = useVendorsByJobQuery(
+    performerType === 'VENDOR' && !isBulk ? jobId : '',
+    performerType === 'VENDOR' && !isBulk
+  );
+
+  const { data: bulkVendorsData, isLoading: isLoadingBulkVendors } = useBulkVendorsByJobsQuery(
+    selectedTaskJobIds,
+    performerType === 'VENDOR' && isBulk && !hasTaskWithoutJob
+  );
+
+  const vendors = isBulk
+    ? hasTaskWithoutJob
+      ? []
+      : bulkVendorsData || []
+    : singleJobVendorsData || [];
+
+  const isLoadingVendors = isBulk
+    ? hasTaskWithoutJob
+      ? false
+      : isLoadingBulkVendors
+    : isLoadingSingleJobVendors;
 
   const { data: teamsData, isLoading: isLoadingTeams } = useTeamsQuery();
   const allTeams = teamsData || [];
 
-  /**
-   * Nạp lại form mỗi lần mở modal cho một công việc (khác) — điều chỉnh state trong lúc
-   * render theo React khuyến nghị (KHÔNG setState trong useEffect để tránh cascading render).
-   * Khoá theo `id` công việc đại diện nên dữ liệu người dùng đang nhập không bị reset
-   * khi danh sách task được refetch (object identity đổi nhưng cùng id).
-   */
   const [syncedAssignTaskKey, setSyncedAssignTaskKey] = useState('closed');
   const nextAssignTaskKey = visible && representativeTask ? `open:${representativeTask.id || ''}` : 'closed';
   if (nextAssignTaskKey !== syncedAssignTaskKey) {
@@ -539,14 +560,8 @@ export default function TaskAssignModal({
     }
   }
 
-  // ============================================================
-  // LỊCH TẢI NHÂN SỰ KHI PHÂN CÔNG (mirror erp-UI TaskAssignModal.jsx)
-  // ============================================================
-
-  /** Ngày/giờ deadline đang chọn trong form */
   const parsedDeadline = useMemo(() => parseDateObj(dueDate), [dueDate]);
 
-  /** Khoá ngày (YYYY-MM-DD) của deadline đang chọn — dùng để tô ô trên lịch tải */
   const selectedDeadlineDateKey = useMemo(
     () => (dueDate ? formatDateToYYYYMMDD(parsedDeadline.date) : ''),
     [dueDate, parsedDeadline.date]
@@ -1006,10 +1021,19 @@ export default function TaskAssignModal({
                       <ActivityIndicator size="small" color={BrandColors.primary} />
                       <Text className="text-[13px] text-slate-500">Đang tải danh sách Vendor...</Text>
                     </View>
+                  ) : isBulk && hasTaskWithoutJob ? (
+                    <View className="flex-row items-center gap-2 bg-amber-50 border border-amber-200 p-2.5 rounded-xl">
+                      <Feather name="alert-triangle" size={16} color="#D97706" />
+                      <Text className="text-xs font-bold text-amber-700 flex-1">
+                        Có công việc chưa xác định hạng mục nên chưa thể chọn vendor.
+                      </Text>
+                    </View>
                   ) : vendors.length === 0 ? (
                     <View className="flex-row items-center gap-2 bg-red-50 border border-red-200 p-2.5 rounded-xl">
                       <Feather name="alert-circle" size={16} color="#DC2626" />
-                      <Text className="text-xs font-bold text-red-600">Chưa có vendor cung cấp dịch vụ này</Text>
+                      <Text className="text-xs font-bold text-red-600 flex-1">
+                        Chưa có vendor cung cấp {isBulk ? 'đồng thời các' : ''} dịch vụ này
+                      </Text>
                     </View>
                   ) : (
                     <View className="gap-1.5">
@@ -1043,8 +1067,8 @@ export default function TaskAssignModal({
                 </View>
               )}
 
-              {/* Lịch tải nhân sự — chỉ khi đã chọn nhân sự INTERNAL và có deadline */}
-              {performerType === 'INTERNAL' && !isTeamAssignment && Boolean(selectedAssigneeId) && Boolean(dueDate) && (
+              {/* Lịch tải nhân sự — hiện ngay khi đã chọn nhân sự INTERNAL (không cần phải chọn ngày trước) */}
+              {performerType === 'INTERNAL' && !isTeamAssignment && Boolean(selectedAssigneeId) && (
                 <View className="mt-3 gap-1.5">
                   <View className="flex-row items-center gap-1.5">
                     <Feather name="bar-chart-2" size={13} color={BrandColors.primary} />

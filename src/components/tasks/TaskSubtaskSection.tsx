@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { BrandColors } from '@/constants/colors';
 import { TASK_STATUS_CONFIG, type TaskDetail } from '@/services/taskService';
@@ -71,6 +72,7 @@ export default function TaskSubtaskSection({
   assigneeOptions = [],
   onChanged,
 }: TaskSubtaskSectionProps) {
+  const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSubtask, setEditingSubtask] = useState<TaskSubtask | null>(null);
 
@@ -208,9 +210,15 @@ export default function TaskSubtaskSection({
             const percent = getPercent(subtask);
 
             return (
-              <View
+              <TouchableOpacity
                 key={subtask.id}
                 className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 gap-2"
+                activeOpacity={0.7}
+                onPress={() => {
+                  if (subtask.id) {
+                    router.push(`/tasks/${subtask.id}` as any);
+                  }
+                }}
               >
                 <View className="flex-row items-start gap-2">
                   <View className="flex-1">
@@ -222,10 +230,13 @@ export default function TaskSubtaskSection({
                     ) : null}
                   </View>
 
-                  <View className="px-2 py-1 rounded-md" style={{ backgroundColor: statusConfig.bg }}>
-                    <Text className="text-[10px] font-bold" style={{ color: statusConfig.color }}>
-                      {statusConfig.text}
-                    </Text>
+                  <View className="flex-row items-center gap-1.5">
+                    <View className="px-2 py-1 rounded-md" style={{ backgroundColor: statusConfig.bg }}>
+                      <Text className="text-[10px] font-bold" style={{ color: statusConfig.color }}>
+                        {statusConfig.text}
+                      </Text>
+                    </View>
+                    <Feather name="chevron-right" size={16} color="#94A3B8" />
                   </View>
                 </View>
 
@@ -249,8 +260,11 @@ export default function TaskSubtaskSection({
 
                   {canManage && (
                     <TouchableOpacity
-                      className="w-12 h-12 rounded-xl bg-white border border-orange-200 items-center justify-center"
-                      onPress={() => openEditModal(subtask)}
+                      className="w-10 h-10 rounded-xl bg-white border border-orange-200 items-center justify-center"
+                      onPress={(e) => {
+                        e.stopPropagation?.();
+                        openEditModal(subtask);
+                      }}
                       activeOpacity={0.8}
                     >
                       <Feather name="edit-2" size={14} color={BrandColors.primary} />
@@ -272,7 +286,7 @@ export default function TaskSubtaskSection({
                     </Text>
                   </View>
                 ) : null}
-              </View>
+              </TouchableOpacity>
             );
           })}
         </View>

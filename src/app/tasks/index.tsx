@@ -140,17 +140,28 @@ export default function TasksScreen() {
 
   const renderTaskCard = ({ item }: { item: TaskItem }) => {
     const badge = getStatusBadge(item.status);
+    const isExtra = Boolean((item as any).isExtraTask || (item as any).isExtra);
     return (
       <TouchableOpacity
-        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+        className={`relative overflow-hidden rounded-2xl border bg-white p-4 shadow-sm ${
+          isExtra ? 'border-amber-200 bg-amber-50/40' : 'border-slate-200'
+        }`}
         onPress={() => router.push(`/tasks/${item.id}` as any)}
         activeOpacity={0.75}
       >
-        <View className="mb-2 flex-row items-center justify-between">
+        {/* Sọc phát sinh bên trái */}
+        {isExtra && <View className="absolute bottom-0 left-0 top-0 w-1 bg-amber-400" />}
+
+        <View className="mb-2 flex-row flex-wrap items-center gap-1.5">
           <View className="rounded-md px-2 py-[3px]" style={{ backgroundColor: badge.bg }}>
             <Text className="text-[11px] font-bold" style={{ color: badge.text }}>{badge.label}</Text>
           </View>
-          {item.code && <Text className="text-xs font-semibold text-slate-400">#{item.code}</Text>}
+          {isExtra && (
+            <View className="rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5">
+              <Text className="text-[10px] font-bold uppercase text-amber-700">Phát sinh</Text>
+            </View>
+          )}
+          {item.code && <Text className="ml-auto text-xs font-semibold text-slate-400">#{item.code}</Text>}
         </View>
 
         <Text className="mb-2.5 text-[15px] font-bold leading-[22px] text-slate-900" numberOfLines={2}>
