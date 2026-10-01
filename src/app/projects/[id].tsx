@@ -377,13 +377,36 @@ export default function ProjectDetailScreen() {
     const projId = String(id || '');
     if (!projId) return;
 
-    await Promise.all([
+    // 1. Luôn refetch thông tin chi tiết dự án (bao gồm Mô tả sản phẩm, Lịch sử tạm dừng, Phụ lục)
+    const refreshPromises: Promise<any>[] = [
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(projId) }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.byProject(projId) }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.acceptances.list({ projectId: projId }) }),
-      refetchTeamMembers(),
-    ]);
-  }, [id, queryClient, refetchTeamMembers]);
+    ];
+
+    // 2. Phân loại theo activeTab để chỉ refresh đúng API phân hệ đó
+    switch (activeTab) {
+      case 'TASKS':
+      case 'MY_TASKS':
+      case 'EXTRA':
+        refreshPromises.push(
+          queryClient.invalidateQueries({ queryKey: queryKeys.tasks.byProject(projId) })
+        );
+        break;
+      case 'ACCEPTANCE':
+        refreshPromises.push(
+          queryClient.invalidateQueries({ queryKey: queryKeys.acceptances.list({ projectId: projId }) })
+        );
+        break;
+      case 'OVERVIEW':
+        refreshPromises.push(
+          queryClient.invalidateQueries({ queryKey: queryKeys.tasks.byProject(projId) }),
+          refetchTeamMembers()
+        );
+        break;
+      // PRODUCT_DESC, SERVICES, PAUSE đã được làm mới qua queryKeys.projects.detail(projId)
+    }
+
+    await Promise.all(refreshPromises);
+  }, [id, activeTab, queryClient, refetchTeamMembers]);
 
   /** "Làm tiếp" chỉ cần xác nhận, không có form lý do (mirror Web handleResume). */
   const handleResumeProject = () => {
