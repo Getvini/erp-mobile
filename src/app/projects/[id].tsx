@@ -8,11 +8,13 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/context/AuthContext';
 import { isManagementRole } from '@/utils/rbac';
+import { queryKeys } from '@/services/queryKeys';
 import { ProjectDetailItem, PROJECT_STATUS_CONFIG } from '@/services/projectService';
 import { TaskDetail } from '@/services/taskService';
 import { AcceptanceItem } from '@/services/acceptanceService';
@@ -369,12 +371,19 @@ export default function ProjectDetailScreen() {
     });
   }, [assignableTaskIdSet, assignableTasks]);
 
-  const handleRefresh = () => {
-    refetchProject();
-    refetchTeamMembers();
-    loadTasks();
-    loadAcceptances();
-  };
+  const queryClient = useQueryClient();
+
+  const handleRefresh = useCallback(async () => {
+    const projId = String(id || '');
+    if (!projId) return;
+
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(projId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.byProject(projId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.acceptances.list({ projectId: projId }) }),
+      refetchTeamMembers(),
+    ]);
+  }, [id, queryClient, refetchTeamMembers]);
 
   /** "Làm tiếp" chỉ cần xác nhận, không có form lý do (mirror Web handleResume). */
   const handleResumeProject = () => {
