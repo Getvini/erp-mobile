@@ -40,7 +40,13 @@ import TaskAssignModal from '@/components/projects/TaskAssignModal';
 import CreateMonthlyWorkModal from '@/components/projects/CreateMonthlyWorkModal';
 import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { safeGoBack } from '@/utils/navigation';
-import { getProjectManagerUser, hasTeamMemberRole, getTeamMemberRoles } from '@/utils/teamMember';
+import {
+  getProjectManagerUser,
+  hasTeamMemberRole,
+  getTeamMemberRoles,
+  isProjectAccountUser,
+  resolveEffectiveTeamMembers,
+} from '@/utils/teamMember';
 import {
   useProjectDetailQuery,
   useTeamMembersQuery,
@@ -132,9 +138,10 @@ export default function ProjectDetailScreen() {
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
 
   // RBAC & Permission Calculations
-  const effectiveTeamMembers = (teamMembersData && teamMembersData.length > 0)
-    ? teamMembersData
-    : (project?.team?.members || []);
+  const effectiveTeamMembers = resolveEffectiveTeamMembers(
+    teamMembersData,
+    project?.team?.members,
+  );
 
   const isAdminOrBod = isManagementRole(user?.role);
   const assignedPm = getProjectManagerUser(project, effectiveTeamMembers);
@@ -147,10 +154,29 @@ export default function ProjectDetailScreen() {
     )?.user;
   const isCurrentTeamLead = !!user?.id && !!leadUser?.id && user.id === leadUser.id;
   const isAdmin = user?.role === 'ADMIN';
+  const isCurrentProjectAccount = isProjectAccountUser(
+    user?.id,
+    project?.team?.teamLead?.id,
+    effectiveTeamMembers,
+  );
   const canAssignPm = isAdminOrBod;
   const canConfirmProject =
     (isAdmin || isCurrentTeamLead) && project?.status === 'PENDING_CONFIRMATION';
   const isPmOrAdmin = isAdminOrBod || isAssignedPm;
+  const canAssignTasks = isAdmin || isCurrentProjectAccount;
+  const canManageTaskAssignment = useCallback(
+    (task: TaskDetail): boolean => {
+      if (isAdmin) return true;
+      if (!isCurrentProjectAccount) return false;
+      const hasPerformer = Boolean(
+        task.assigneeId || task.assignee?.id || (task as any).vendorId || (task as any).vendor,
+      );
+      if (!hasPerformer) return true;
+      const assignerId = (task as any).assignerId;
+      return !assignerId || assignerId === user?.id;
+    },
+    [isAdmin, isCurrentProjectAccount, user?.id],
+  );
 
   // Can create monthly work if Lead, PM, Admin/BOD, or contract creator
   const canCreateMonthlyWork =
@@ -689,7 +715,9 @@ export default function ProjectDetailScreen() {
               tasks={tasks}
               isLoading={isLoadingTasks}
               projectStatus={project?.status}
-              isPmOrAdmin={isPmOrAdmin}
+              canAssignTasks={canAssignTasks}
+              canCreateProjectWork={isPmOrAdmin}
+              canManageTaskAssignment={canManageTaskAssignment}
               selectedTaskIds={validSelectedTaskIds}
               onToggleSelectTask={handleToggleSelectTask}
               onToggleSelectGroup={handleToggleSelectGroup}
@@ -748,7 +776,7 @@ export default function ProjectDetailScreen() {
       )}
 
       {/* Floating Bulk Action Bar — hiện khi có ít nhất 1 task được tích chọn */}
-      {activeTab === 'TASKS' && validSelectedTaskIds.length > 0 && (
+      {activeTab === 'TASKS' && canAssignTasks && validSelectedTaskIds.length > 0 && (
         <View
           className="absolute bottom-5 left-4 right-4 flex-row justify-between items-center bg-white px-4 py-3 rounded-2xl z-50 border border-orange-100"
           style={{
@@ -865,7 +893,7 @@ export default function ProjectDetailScreen() {
               }}
               task={assigningTask}
               project={project}
-              teamMembers={project?.team?.members || []}
+              teamMembers={effectiveTeamMembers}
               onSuccess={() => {
                 loadTasks();
                 loadProjectDetail();

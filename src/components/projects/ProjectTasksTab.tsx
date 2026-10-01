@@ -34,7 +34,7 @@ interface TaskCardProps {
   isSelected: boolean;
   canAssign: boolean;
   isPendingConfirmation: boolean;
-  isPmOrAdmin: boolean;
+  canManageAssignment: boolean;
   onToggleSelect: (id: string) => void;
   onPress: (id: string) => void;
   onAssign: (item: TaskDetail) => void;
@@ -49,7 +49,7 @@ const TaskCard = React.memo(function TaskCard({
   isSelected,
   canAssign,
   isPendingConfirmation,
-  isPmOrAdmin,
+  canManageAssignment,
   onToggleSelect,
   onPress,
   onAssign,
@@ -146,7 +146,7 @@ const TaskCard = React.memo(function TaskCard({
           </View>
         </View>
 
-        {!isPendingConfirmation && isPmOrAdmin && (
+        {!isPendingConfirmation && canManageAssignment && (
           isUnassigned ? (
             <TouchableOpacity
               className="flex-row items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5"
@@ -176,7 +176,9 @@ interface ProjectTasksTabProps {
   tasks: TaskDetail[];
   isLoading: boolean;
   projectStatus?: string;
-  isPmOrAdmin?: boolean;
+  canAssignTasks?: boolean;
+  canCreateProjectWork?: boolean;
+  canManageTaskAssignment?: (task: TaskDetail) => boolean;
   selectedTaskIds?: string[];
   onToggleSelectTask?: (taskId: string) => void;
   onToggleSelectGroup?: (groupTasks: TaskDetail[]) => void;
@@ -189,7 +191,9 @@ export default function ProjectTasksTab({
   tasks,
   isLoading,
   projectStatus,
-  isPmOrAdmin = false,
+  canAssignTasks = false,
+  canCreateProjectWork = false,
+  canManageTaskAssignment = () => false,
   selectedTaskIds: propSelectedTaskIds,
   onToggleSelectTask,
   onToggleSelectGroup,
@@ -337,7 +341,7 @@ export default function ProjectTasksTab({
           </Text>
         </View>
 
-        {!isPendingConfirmation && isPmOrAdmin && (
+        {!isPendingConfirmation && canCreateProjectWork && (
           <TouchableOpacity
             className="flex-row items-center gap-1.5 rounded-xl bg-primary px-3 py-2"
             onPress={onOpenAddExtraTask}
@@ -386,7 +390,7 @@ export default function ProjectTasksTab({
                   </View>
 
                   <View className="flex-row items-center gap-2">
-                    {hasAssignable && (
+                    {canAssignTasks && hasAssignable && (
                       <TouchableOpacity
                         onPress={() => toggleSelectGroup(group.tasks)}
                         className="flex-row items-center gap-1 rounded-md border border-blue-100 bg-blue-50 px-2 py-[3px]"
@@ -414,9 +418,9 @@ export default function ProjectTasksTab({
                         key={item.id}
                         item={item}
                         isSelected={selectedTaskIdsSet.has(item.id)}
-                        canAssign={assignableTaskIdSet.has(item.id)}
+                        canAssign={canAssignTasks && assignableTaskIdSet.has(item.id)}
                         isPendingConfirmation={isPendingConfirmation}
-                        isPmOrAdmin={isPmOrAdmin}
+                        canManageAssignment={canManageTaskAssignment(item)}
                         onToggleSelect={toggleSelectTask}
                         onPress={handlePressTask}
                         onAssign={handleAssignTask}

@@ -42,6 +42,32 @@ export const getProjectManagerUser = (project?: any, members?: any[]): { id: str
   return pmMember?.user || null;
 };
 
+/**
+ * Ưu tiên danh sách thành viên mới từ `/teams/:id/members`.
+ * Project detail có thể giữ snapshot cũ/chưa đầy đủ (ví dụ chỉ có PM), nên chỉ dùng
+ * snapshot đó làm fallback trong lúc endpoint thành viên chưa trả dữ liệu.
+ */
+export const resolveEffectiveTeamMembers = <T>(
+  fetchedMembers?: T[] | null,
+  projectMembers?: T[] | null,
+): T[] => (fetchedMembers && fetchedMembers.length > 0 ? fetchedMembers : projectMembers || []);
+
+/**
+ * Account trong nghiệp vụ dự án là Lead dự án: team lead legacy hoặc thành viên
+ * đang giữ vai trò ACCOUNT. Đây là nhóm được backend cho phép phân công task.
+ */
+export const isProjectAccountUser = (
+  userId?: string | null,
+  teamLeadId?: string | null,
+  members: any[] = [],
+): boolean => {
+  if (!userId) return false;
+  if (teamLeadId === userId) return true;
+  return members.some(
+    (member) => member?.user?.id === userId && hasTeamMemberRole(member, 'ACCOUNT'),
+  );
+};
+
 export const ROLE_DISPLAY_ORDER = [
   'PROJECT_MANAGER',
   'ACCOUNT',
@@ -120,4 +146,3 @@ export const groupTeamMembers = (members: any[], teamLeadId?: string): GroupedMe
       return (a.user?.fullName || '').localeCompare(b.user?.fullName || '', 'vi');
     });
 };
-

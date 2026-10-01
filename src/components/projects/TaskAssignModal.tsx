@@ -35,6 +35,8 @@ import {
 } from '@/utils/formatters';
 import { combineDateWithDefaultTime, getMonthRange } from '@/utils/taskLifecycle';
 import TaskWorkloadCalendar from '@/components/tasks/TaskWorkloadCalendar';
+import { WorkloadBadge } from '@/components/common/WorkloadBadge';
+import { getTeamMemberRoles } from '@/utils/teamMember';
 
 const ITEM_HEIGHT = 38;
 const VISIBLE_ITEMS = 3;
@@ -424,15 +426,21 @@ interface TaskAssignModalProps {
   onClose: () => void;
   task: TaskDetail | TaskDetail[] | null;
   project?: any;
-  teamMembers: Array<{
+  teamMembers: {
     id: string;
     role: string;
+    roles?: (string | { role?: string })[];
     user?: {
       id: string;
       fullName: string;
       email?: string;
+      workload?: {
+        percent?: number;
+        displayPercent?: number;
+        taskCount?: number;
+      } | null;
     };
-  }>;
+  }[];
   onSuccess: () => void;
 }
 
@@ -980,8 +988,9 @@ export default function TaskAssignModal({
                         const uId = member.user?.id;
                         if (!uId) return null;
                         const isSelected = selectedAssigneeId === uId;
-                        const roleLabel = TEAM_MEMBER_ROLE_LABELS[member.role] || member.role;
-
+                        const roleLabel = (getTeamMemberRoles(member) as string[])
+                          .map((role) => TEAM_MEMBER_ROLE_LABELS[role] || role)
+                          .join(' · ');
 
                         return (
                           <TouchableOpacity
@@ -998,8 +1007,13 @@ export default function TaskAssignModal({
                               </Text>
                             </View>
 
-                            <View className="flex-1 justify-center">
-                              <Text className="text-[13px] font-bold text-slate-900">{member.user?.fullName}</Text>
+                            <View className="flex-1 justify-center min-w-0">
+                              <View className="flex-row items-center gap-1.5 flex-wrap">
+                                <Text className="text-[13px] font-bold text-slate-900" numberOfLines={1}>
+                                  {member.user?.fullName}
+                                </Text>
+                                <WorkloadBadge workload={member.user?.workload} />
+                              </View>
                               {roleLabel ? (
                                 <Text className="text-[11px] text-slate-500">{roleLabel}</Text>
                               ) : null}
