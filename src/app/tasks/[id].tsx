@@ -30,6 +30,11 @@ import { safeGoBack } from '@/utils/navigation';
 import { isSpreadsheetFile, resolveSpellCheckLinkSource } from '@/utils/spellCheckLink';
 import { useTeamMembersQuery } from '@/hooks/queries/useProjects';
 import {
+  hasTeamMemberRole,
+  resolveEffectiveTeamMembers,
+} from '@/utils/teamMember';
+import { canDecideTaskOutcome } from '@/utils/taskOutcomeAuthorization';
+import {
   useTaskDetailQuery,
   useTaskReviewsQuery,
   useUpdateTaskMutation,
@@ -117,15 +122,50 @@ export default function TaskDetailScreen() {
     loadTask
   );
 
+  // Thành viên dự án để chọn người thực hiện cho công việc con
+  const { data: teamMembersData } = useTeamMembersQuery(task?.project?.team?.id);
+  const effectiveTeamMembers = resolveEffectiveTeamMembers(
+    teamMembersData,
+    (task?.project?.team as any)?.members,
+  );
   const currentUserId = user?.id;
   const teamLeadId = task?.project?.team?.teamLead?.id;
   const isProjectLead = !!currentUserId && !!teamLeadId && currentUserId === teamLeadId;
+  const currentMembership = effectiveTeamMembers.find(
+    (member: any) => member?.user?.id === currentUserId,
+  );
+  const isProjectAccount = hasTeamMemberRole(currentMembership, 'ACCOUNT');
+  const isProjectPm =
+    hasTeamMemberRole(currentMembership, 'PROJECT_MANAGER') ||
+    (task?.project as any)?.projectManager?.id === currentUserId;
   const isManagement = ['ADMIN', 'BOD', 'PM', 'TEAM_LEAD'].includes(user?.role || '');
-  const canManageProjectTask = isManagement || isProjectLead;
+  const isProjectOnHold = task?.project?.status === 'ON_HOLD' || task?.status === 'ON_HOLD';
+  const canManageProjectTask =
+    !isProjectOnHold &&
+    (isManagement || isProjectLead || isProjectAccount || isProjectPm);
+  const canDecideOutcome =
+    !isProjectOnHold &&
+    canDecideTaskOutcome(
+      task
+        ? {
+            ...task,
+            project: {
+              ...task.project,
+              team: {
+                ...task.project?.team,
+                members: effectiveTeamMembers,
+              },
+            },
+          }
+        : task,
+      currentUserId,
+    );
+  const isAssigneeOrHelper =
+    currentUserId === task?.assigneeId || currentUserId === task?.helperId;
+  const isReviewerForThisTask =
+    canManageProjectTask && !isAssigneeOrHelper && canDecideOutcome;
   const canEditDescription = canManageProjectTask;
 
-  // Thành viên dự án để chọn người thực hiện cho công việc con
-  const { data: teamMembersData } = useTeamMembersQuery(task?.project?.team?.id);
   const subtaskAssigneeOptions = useMemo(
     () =>
       (teamMembersData || [])
@@ -399,7 +439,7 @@ export default function TaskDetailScreen() {
 
         {/* Top Action Buttons Grid */}
         <View className="flex-row flex-wrap gap-2">
-          {task.status === 'AWAITING_REVIEW' && canManageProjectTask && (
+          {task.status === 'AWAITING_REVIEW' && isReviewerForThisTask && (
             <>
               <TouchableOpacity
                 className="flex-row items-center gap-1.5 bg-purple-50 border border-purple-200 px-3 py-2 rounded-xl"
