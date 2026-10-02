@@ -84,6 +84,16 @@ class ProductDescriptionService {
     return { data: result, error: res.error };
   }
 
+  async extractUpload(projectId: string, formData: FormData): Promise<{ data?: { extractedText: string; hasComplexLayout?: boolean }; error?: string }> {
+    const res = await apiService.post<{ extractedText: string; hasComplexLayout?: boolean }>(
+      `/projects/${projectId}/product-descriptions/extract-upload`,
+      formData
+    );
+    const rawData = res.data as any;
+    const result = rawData?.data && typeof rawData.data === 'object' ? rawData.data : rawData;
+    return { data: result, error: res.error };
+  }
+
   async aiFormat(projectId: string, text: string, productName?: string): Promise<{ data?: { extractedText: string }; error?: string }> {
     const res = await apiService.post<{ extractedText: string }>(
       `/projects/${projectId}/product-descriptions/ai-format`,

@@ -26,6 +26,7 @@ import {
   useApproveProductDescriptionMutation,
   useRejectProductDescriptionMutation,
   useExtractProductDescriptionFileMutation,
+  useExtractProductDescriptionUploadMutation,
   useAiFormatProductDescriptionMutation,
 } from '@/hooks/queries/useProjects';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -274,6 +275,7 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
   const approveSubmissionMutation = useApproveProductDescriptionMutation();
   const rejectSubmissionMutation = useRejectProductDescriptionMutation();
   const extractFileMutation = useExtractProductDescriptionFileMutation();
+  const extractUploadMutation = useExtractProductDescriptionUploadMutation();
   const aiFormatMutation = useAiFormatProductDescriptionMutation();
 
   const [isSaving, setIsSaving] = useState(false);
@@ -382,26 +384,20 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
       if (res.canceled || !res.assets || res.assets.length === 0) return;
 
       const file = res.assets[0];
-      updateProduct(productIndex, { docUploading: true, docUploadProgress: 0 });
+      updateProduct(productIndex, { fileName: file.name, extracting: true });
 
-      const uploaded = await uploadToCloudinary(
-        file,
-        'GETVINI/ERP/product-description',
-        (progress) => updateProduct(productIndex, { docUploadProgress: progress })
-      );
-
-      updateProduct(productIndex, {
-        fileUrl: uploaded.url,
-        fileName: file.name,
-        docUploading: false,
-        docUploadProgress: 0,
-        extracting: true,
-      });
-
+      // Step 1: Extract text directly from file via multipart upload (independent of Cloudinary)
       try {
-        const result = await extractFileMutation.mutateAsync({
+        const formData = new FormData();
+        formData.append('file', {
+          uri: file.uri,
+          name: file.name || 'document.pdf',
+          type: file.mimeType || 'application/pdf',
+        } as any);
+
+        const result = await extractUploadMutation.mutateAsync({
           projectId,
-          fileUrl: uploaded.url,
+          formData,
         });
 
         updateProduct(productIndex, {
@@ -419,6 +415,26 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
       } catch (extractErr: any) {
         updateProduct(productIndex, { extracting: false });
         Alert.alert('Lỗi trích xuất', extractErr.message || 'Trích xuất nội dung file thất bại');
+        return;
+      }
+
+      // Step 2: Upload file to Cloudinary for storage
+      updateProduct(productIndex, { docUploading: true, docUploadProgress: 0 });
+      try {
+        const uploaded = await uploadToCloudinary(
+          file,
+          'GETVINI/ERP/product-description',
+          (progress) => updateProduct(productIndex, { docUploadProgress: progress })
+        );
+
+        updateProduct(productIndex, {
+          fileUrl: uploaded.url,
+          docUploading: false,
+          docUploadProgress: 0,
+        });
+      } catch (uploadErr: any) {
+        updateProduct(productIndex, { docUploading: false, docUploadProgress: 0 });
+        Alert.alert('Thông báo', 'Đã trích xuất nội dung text thành công nhưng không lưu được tệp gốc.');
       }
     } catch (err: any) {
       updateProduct(productIndex, { docUploading: false, docUploadProgress: 0 });

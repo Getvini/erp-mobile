@@ -348,6 +348,21 @@ export function useExtractProductDescriptionFileMutation() {
 }
 
 /**
+ * Hook to extract text from file upload directly via backend AI
+ */
+export function useExtractProductDescriptionUploadMutation() {
+  return useMutation({
+    mutationFn: async ({ projectId, formData }: { projectId: string; formData: FormData }) => {
+      const res = await productDescriptionService.extractUpload(projectId, formData);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data;
+    },
+  });
+}
+
+/**
  * Hook to format product description text via backend AI
  */
 export function useAiFormatProductDescriptionMutation() {
