@@ -15,6 +15,7 @@ import { useAvailableUsersQuery, useAddTeamMemberMutation } from '@/hooks/querie
 import { BrandColors } from '@/constants/colors';
 import { getUserRolesInTeam, getUserAccountRole } from '@/utils/teamMember';
 import { WorkloadBadge } from '@/components/common/WorkloadBadge';
+import { PROJECT_MEMBER_EXCLUDED_ACCOUNT_ROLES } from '@/utils/rbac';
 
 export const ASSIGNABLE_ROLES = [
   { key: 'ACCOUNT', label: 'Account', desc: 'Quản lý & duyệt công việc nhóm' },
@@ -57,14 +58,23 @@ export default function AddTeamMemberModal({
   const addMemberMutation = useAddTeamMemberMutation();
   const isSubmitting = addMemberMutation.isPending;
 
-  // Filter users matching Web ERP: users who don't already have ALL roles and are not PM
   const availableUsers = useMemo(() => {
     return users.filter((u) => {
+      const accountRole = getUserAccountRole(u);
+      if (accountRole && PROJECT_MEMBER_EXCLUDED_ACCOUNT_ROLES.includes(accountRole)) {
+        return false;
+      }
+      const hasExcludedAccountRoleInAccounts = u.accounts?.some((acc: any) =>
+        PROJECT_MEMBER_EXCLUDED_ACCOUNT_ROLES.includes(acc.role)
+      );
+      if (hasExcludedAccountRoleInAccounts) {
+        return false;
+      }
       const assigned = getUserRolesInTeam(existingMembers, u.id);
       if (assigned.includes('PROJECT_MANAGER') || assigned.includes('PM')) {
         return false;
       }
-      // If user already has all 8 assignable roles, exclude
+      // If user already has all assignable roles, exclude
       const remainingAssignable = ASSIGNABLE_ROLES.some((r) => !assigned.includes(r.key));
       return remainingAssignable;
     });
