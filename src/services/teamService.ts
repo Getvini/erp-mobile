@@ -18,6 +18,7 @@ export interface CompanyUser {
   email?: string;
   role?: string;
   workload?: any;
+  accounts?: any[];
 }
 
 export const TEAM_MEMBER_ROLE = {
@@ -48,10 +49,18 @@ export const USER_ROLE: Record<string, string> = {
   ADMIN_SALE: 'ADMIN kinh doanh',
   BD: 'BD',
   PM: 'PM',
-  STAFF_A: 'Nhân sự Level A',
-  STAFF_B: 'Nhân sự Level B',
-  STAFF_C: 'Nhân sự Level C',
-  STAFF_D: 'Nhân sự Level D',
+  CONTENT_A: 'Content A',
+  CONTENT_B: 'Content B',
+  CONTENT_C: 'Content C',
+  CONTENT_D: 'Content Intern',
+  EDITOR_A: 'Editor A',
+  EDITOR_B: 'Editor B',
+  EDITOR_C: 'Editor C',
+  EDITOR_D: 'Editor Intern',
+  DESIGNER_A: 'Designer A',
+  DESIGNER_B: 'Designer B',
+  DESIGNER_C: 'Designer C',
+  DESIGNER_D: 'Designer Intern',
 };
 
 export const teamService = {
@@ -108,18 +117,6 @@ export const teamService = {
     return { data: Array.isArray(data) ? (data as CompanyUser[]) : [], error: res.error };
   },
 
-  // ==========================================================================
-  // PHASE P3 — CƠ CẤU ĐỘI NHÓM (Teams)
-  // APPEND-ONLY: không đổi/xóa bất kỳ method nào phía trên (module Projects đang dùng).
-  // Backend thật: ERP/src/modules/project/routes/ProjectTeam.Route.ts (mount `/api/teams`).
-  // GET /teams và GET /teams/:id/members trả MẢNG THÔ (không `{ data, meta }`, không phân trang).
-  //
-  // ⚠️ Hai method dưới đây buộc phải mang tên khác spec gốc vì trùng tên với export đã có:
-  //   - `getTeamMembers(teamId, month?, year?)` (positional) → thêm `getTeamMembersByTeam({ id, month, year })`
-  //   - `removeTeamMember(teamId, memberId)`               → thêm `removeTeamMemberById(memberId)`
-  //     (endpoint legacy `DELETE /teams/members/:memberId`)
-  // ==========================================================================
-
   /** GET /teams/:id — chi tiết một đội (relations: teamLead, members.user). */
   async getTeam(id: string) {
     const res = await apiService.get(`/teams/${id}`);
@@ -151,8 +148,6 @@ export const teamService = {
 
   /**
    * POST /teams — body `{ name, teamLeadId }`.
-   * ⚠️ `teamLeadId` là BẮT BUỘC ở backend (Web gửi thiếu `{ name }` nên bị lỗi server)
-   * ⇒ UI Mobile luôn yêu cầu chọn Team Lead ngay khi tạo đội.
    */
   async createTeam(payload: { name: string; teamLeadId: string }) {
     const res = await apiService.post('/teams', {
@@ -187,8 +182,6 @@ export const teamService = {
 
   /**
    * PUT /teams/:id/lead — body `{ newLeadId }`.
-   * ⚠️ Chỉ ADMIN/BOD gọi được (PM sẽ nhận 403). Nếu người được chọn chưa là thành viên,
-   * backend tự tạo membership với vai trò `CONTENT_CREATOR`.
    */
   async changeTeamLead({ id, newLeadId }: { id: string; newLeadId: string }) {
     const res = await apiService.put(`/teams/${id}/lead`, { newLeadId });
@@ -197,7 +190,6 @@ export const teamService = {
 
   /**
    * POST /teams/:id/members — body `{ userId, roles }`.
-   * LUÔN gửi `roles` dạng MẢNG; backend fallback `CONTENT_CREATOR` nếu mảng rỗng.
    */
   async addTeamMembers({
     id,
@@ -217,7 +209,6 @@ export const teamService = {
 
   /**
    * PUT /teams/:id/members/:userId/roles — body `{ roles: string[] }`.
-   * Backend dedupe; mảng rỗng → 400 (client chặn trước bằng `validateMemberRoles`).
    */
   async updateMemberRoles({
     id,
@@ -247,34 +238,25 @@ export const teamService = {
   },
 };
 
-// ============================================================================
-// PHASE P3 — Types dùng cho module Teams (append-only)
-// ============================================================================
-
-/** Người dùng trong đội (rút gọn từ `/users`, kèm `workload` khi có). */
 export interface TeamMemberUser {
   id: string;
   fullName: string;
   email?: string;
   phoneNumber?: string;
-  /** Quan hệ `user.account` của backend (chứa `role`). */
   account?: any;
   role?: string;
   workload?: any;
 }
 
-/** Một membership trong đội. `roles` là MẢNG STRING (không phải mảng object). */
 export interface TeamMemberEntry {
   id: string;
   teamId?: string;
   userId?: string;
-  /** Legacy: `member.role` (select: false ở backend, chỉ có khi được map thủ công). */
   role?: string;
   roles?: (string | { role?: string })[];
   user?: TeamMemberUser;
 }
 
-/** Đội nhóm — shape thô của GET /teams và GET /teams/:id. */
 export interface Team {
   id: string;
   name: string;

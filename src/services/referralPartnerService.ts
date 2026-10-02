@@ -1,18 +1,7 @@
 import { apiService } from './api';
 
 /**
- * Referral Partner (Đối tác giới thiệu / CTV) — Phase P2.
- *
- * Đối chiếu backend thật:
- * ERP/src/modules/referral-partner/routes/ReferralPartner.Route.ts
- * ERP/src/modules/referral-partner/controllers/ReferralPartner.Controller.ts
- * ERP/src/modules/referral-partner/entities/ReferralPartner.entity.ts
- *
- * LƯU Ý ĐẶC THÙ BACKEND:
- * - Response danh sách là MẢNG THÔ (không `{ data, meta }`, không phân trang).
- * - Mọi lỗi (kể cả không tìm thấy) đều trả HTTP 500 → UI phải hiển thị thông báo
- *   thân thiện, KHÔNG giả định 404.
- * - Entity KHÔNG có `bankName`/`bankAccount` và KHÔNG có field % hoa hồng riêng.
+ * Referral Partner (Đối tác giới thiệu / CTV)
  */
 
 export type ReferralPartnerType = 'BUSINESS' | 'INDIVIDUAL';

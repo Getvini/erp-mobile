@@ -52,7 +52,6 @@ export const queryKeys = {
   },
 
   // Contract Addendums / Phụ lục hợp đồng
-  // (Backend không có GET /contract-addendums ⇒ dữ liệu đọc từ contracts.detail(id).addendums)
   contractAddendums: {
     all: ['contractAddendums'] as const,
     byContract: (contractId: string) =>

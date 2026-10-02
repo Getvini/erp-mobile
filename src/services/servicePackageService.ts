@@ -3,18 +3,7 @@ import type { ServiceItem } from './catalogService';
 
 /**
  * Gói dịch vụ niêm yết (service package).
- *
- * ⚠️ ĐÃ ĐỐI CHIẾU BACKEND THẬT (`ERP/src/modules/service-package`):
- * - `GET /service-packages` trả MẢNG THÔ, KHÔNG phân trang, KHÔNG param
- *   (chỉ trả các gói `isActive = true`).
- * - `PUT /service-packages/${id}` (KHÔNG phải PATCH) — PUT **xóa toàn bộ items cũ
- *   rồi tạo lại**, nên `item.id` thay đổi sau mỗi lần lưu.
- * - `DELETE` là soft delete: backend set `isActive = false`.
- * - Field entity CHÍNH XÁC: `id, name, description, isActive, price, items[]`.
- *   `price` do SERVER tự tính = Σ(item.service.costPrice × defaultQuantity).
- * - `ServicePackageItem` CHÍNH XÁC là `id, serviceId, defaultQuantity, service`
- *   (KHÔNG phải quantity / unitPrice / amount).
- */
+*/
 
 export interface ServicePackageItem {
   id: string;

@@ -2,26 +2,10 @@ import { apiService } from './api';
 
 /**
  * HẠNG MỤC CÔNG VIỆC (JOBS) + TIÊU CHÍ ĐÁNH GIÁ (JOB CRITERIA)
- *
- * ⚠️ ĐÃ ĐỐI CHIẾU BACKEND THẬT:
- * - `ERP/src/modules/job/routes/Job.Route.ts`: GET / , GET /:id , POST / , PATCH /:id , DELETE /:id
- * - `ERP/src/modules/job-criteria/routes/JobCriteria.Route.ts`: GET /job/:jobId , **PUT** /job/:jobId
- * - Cả 2 controller đều trả **MẢNG THÔ / OBJECT THÔ**, KHÔNG bọc `{ data, meta }`.
- *
- * ⚠️ DEDUPE THEO `code` (Job.Service.ts:51-66): POST /jobs tìm job có
- * `LOWER(TRIM(code)) = LOWER(TRIM(:code))`; nếu tồn tại thì trả về job CŨ và KHÔNG tạo mới
- * ⇒ UI phải coi đây là hành vi "upsert" và thông báo cho người dùng.
- *
- * ⚠️ `isBriefVideo = true` ⇒ server ép `isQuotationItem = false` (Job.Service.ts:17-19).
- *
- * ⚠️ PATCH /jobs/:id KHÔNG nhận `criteria` — tiêu chí phải gọi riêng
- * PUT /job-criteria/job/:jobId với **MẢNG TRẦN** `[{ id?, name, description }]`.
- * Đây là replace-toàn-bộ: tiêu chí không gửi kèm `id` sẽ bị soft-delete và tạo lại
- * ⇒ LUÔN gửi kèm `id` của tiêu chí đã tồn tại để tránh phình dữ liệu.
  */
 
 // ============================================================================
-// ENUM + NHÃN (mirror erp-UI/src/utils/enums.js:252-279)
+// ENUM + NHÃN
 // ============================================================================
 
 export type JobCategory =
@@ -33,7 +17,6 @@ export type JobCategory =
   | 'BIEN_KICH'
   | 'KHAC';
 
-/** ⚠️ Backend `PerformerType` CHỈ có VENDOR | INTERNAL (shared/entities/Enums.ts). */
 export type JobPerformerType = 'INTERNAL' | 'VENDOR';
 
 export const JOB_CATEGORY_LABELS: Record<string, string> = {
@@ -59,7 +42,6 @@ export const JOB_CATEGORY_VALUES: JobCategory[] = [
 export const JOB_CATEGORY_OPTIONS: Array<{ value: JobCategory; label: string }> =
   JOB_CATEGORY_VALUES.map((value) => ({ value, label: JOB_CATEGORY_LABELS[value] }));
 
-/** Bảng màu badge category — chuyển thể từ JOB_CATEGORY_COLORS (Tailwind Web). */
 export const JOB_CATEGORY_COLORS: Record<string, { color: string; bg: string; border: string }> = {
   QUAY_PHIM: { color: '#1D4ED8', bg: '#EFF6FF', border: '#BFDBFE' },
   DUNG_PHIM: { color: '#7E22CE', bg: '#FAF5FF', border: '#E9D5FF' },
@@ -80,7 +62,6 @@ export const JOB_PERFORMER_TYPE_OPTIONS: Array<{ value: JobPerformerType; label:
   { value: 'VENDOR', label: JOB_PERFORMER_TYPE_LABELS.VENDOR },
 ];
 
-/** Thông báo chuẩn khi backend trả về job cũ do trùng `code`. */
 export const JOB_DUPLICATE_CODE_MESSAGE =
   'Mã hạng mục đã tồn tại, đã dùng hạng mục có sẵn';
 
@@ -94,9 +75,7 @@ export interface JobCriteria {
   description?: string | null;
 }
 
-/** Payload tiêu chí gửi lên `PUT /job-criteria/job/:jobId` (mảng trần). */
 export interface JobCriteriaInput {
-  /** BẮT BUỘC giữ lại với tiêu chí đã tồn tại (replace-toàn-bộ ⇒ thiếu id = xóa & tạo lại). */
   id?: string;
   name: string;
   description?: string | null;
@@ -112,7 +91,6 @@ export interface JobServiceSummary {
   [key: string]: any;
 }
 
-/** Quan hệ `serviceJobs[]` — KHÔNG có field `services` trên entity Jobs. */
 export interface JobServiceLink {
   id?: string;
   serviceId?: string;
@@ -131,7 +109,6 @@ export interface JobVendorSummary {
   [key: string]: any;
 }
 
-/** Quan hệ `vendorJobs[]` — giá vendor tham chiếu hạng mục. */
 export interface JobVendorLink {
   id?: string;
   price?: number | string | null;
@@ -143,23 +120,15 @@ export interface JobVendorLink {
 
 export interface Job {
   id: string;
-  /** BẮT BUỘC theo backend. */
   name: string;
-  /** Nullable ở DB, nhưng BẮT BUỘC ở UI và là khóa dedupe. */
   code?: string | null;
-  /** ≤ 120 ký tự; chuỗi rỗng được chuẩn hóa thành null. */
   nickname?: string | null;
-  /** Giá vốn 1 đơn vị (decimal). */
   costPrice?: number | string | null;
-  /** Thưởng nội bộ cho người thực hiện — KHÔNG tham gia tính giá vốn. */
   vinicoin?: number | string | null;
-  /** Thời gian hoàn thành — đơn vị GIỜ (KHÔNG có field `estimatedTime`). */
   timeToComplete?: number | string | null;
-  /** Web không dùng. */
   unit?: string | null;
   categories?: string[] | null;
   isBriefVideo?: boolean;
-  /** default true; server ép false khi `isBriefVideo = true`. */
   isQuotationItem?: boolean;
   defaultPerformerType?: JobPerformerType | string | null;
   criteria?: JobCriteria[];
@@ -187,9 +156,7 @@ export interface CreateJobPayload {
   isBriefVideo?: boolean;
   isQuotationItem?: boolean;
   defaultPerformerType?: JobPerformerType;
-  /** Gửi kèm ngay khi tạo (backend cascade lưu cùng job). */
   criteria?: JobCriteriaInput[];
-  /** Gắn hạng mục vào các dịch vụ có sẵn. */
   serviceIds?: string[];
 }
 
@@ -216,35 +183,27 @@ const unwrapObject = <T>(payload: any): T | null => {
   return payload as T;
 };
 
-/** Chuẩn hóa `code` để so trùng (backend so `LOWER(TRIM(code))`). */
 export const normalizeJobCode = (code?: string | null): string =>
   String(code ?? '')
     .trim()
     .toLowerCase();
 
-/** Tìm hạng mục đã tồn tại theo `code` — dùng để cảnh báo dedupe trước khi POST. */
 export const findJobByCode = (jobs: Job[] | undefined, code?: string | null): Job | undefined => {
   const normalized = normalizeJobCode(code);
   if (!normalized) return undefined;
   return (jobs || []).find((job) => normalizeJobCode(job?.code) === normalized);
 };
 
-/** `''` → null (nickname/unit), đồng thời trim. */
 const toNullableText = (value?: string | null): string | null => {
   const trimmed = String(value ?? '').trim();
   return trimmed ? trimmed : null;
 };
 
-/**
- * DB decimal → number cho UI. Postgres `numeric` trả chuỗi dạng `"100.000"` (scale 3)
- * ⇒ `Number("100.000") === 100` mới đúng ngữ nghĩa (KHÔNG phải 100.000).
- */
 export const toJobNumber = (value?: number | string | null): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-/** `{ id?, name, description }` — chỉ gửi id khi có (sync giữ id để tránh tạo lại). */
 const buildCriteriaBody = (criteria: JobCriteriaInput[] = [], keepIds = true): JobCriteriaInput[] =>
   criteria
     .map((item) => {
@@ -297,8 +256,6 @@ class JobService {
 
   /**
    * POST /jobs — body Job + `criteria[]` + `serviceIds?`.
-   * ⚠️ DEDUPE theo `code`: nếu trùng, backend trả về job CŨ và KHÔNG tạo mới
-   * (không có cờ phân biệt trong response ⇒ client tự so `code`/`id` với danh sách hiện có).
    */
   async createJob(payload: CreateJobPayload) {
     const body: Record<string, any> = buildJobBody(payload);
@@ -330,7 +287,6 @@ class JobService {
 
   /**
    * PUT /job-criteria/job/:jobId — body là **MẢNG TRẦN** `[{ id?, name, description }]`.
-   * Replace-toàn-bộ: LUÔN gửi kèm `id` của tiêu chí đã tồn tại.
    */
   async syncJobCriterias(payload: { jobId: string; criteria: JobCriteriaInput[] }) {
     const body = buildCriteriaBody(payload.criteria, true);

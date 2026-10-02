@@ -378,18 +378,6 @@ class TaskService {
     return { data: res.data, error: res.error };
   }
 
-  // ============================================================
-  // BỔ SUNG PARITY MODULE CÔNG VIỆC
-  // Đối chiếu ERP/src/modules/task/routes/Task.Route.ts + erp-UI/src/api/tasks.js
-  // ⚠️ Backend KHÔNG có các route sau (gọi sẽ 404) ⇒ KHÔNG implement ở đây:
-  //    - GET  /tasks/assignee/:userId
-  //    - GET  /tasks/opportunity/:opportunityId
-  //    - PATCH /tasks/:id/status   (method updateTaskStatus() phía trên là code cũ, giữ nguyên)
-  //    - PUT  /tasks/:id/pricing   (chỉ tồn tại POST /tasks/:id/pricing)
-  //    - Các route support cross-team (respond-support, return-support, request-return-support,
-  //      assign-support-team) đã bị COMMENT OUT ở backend — method cũ phía trên giữ nguyên, không thêm mới.
-  // ============================================================
-
   /** Đổi nickname công việc — mirror Web: PATCH /tasks/:id/nickname */
   async updateTaskNickname({
     id,
@@ -402,22 +390,16 @@ class TaskService {
     return { data: res.data, error: res.error };
   }
 
-  /** Bắt đầu thực hiện công việc — PATCH /tasks/:id/start (KHÔNG body) */
   async startTask(id: string): Promise<{ data?: TaskDetail; error?: string }> {
     const res = await apiService.patch<TaskDetail>(`/tasks/${id}/start`);
     return { data: res.data, error: res.error };
   }
 
-  /** Gửi kết quả để duyệt — PATCH /tasks/:id/submit-result-review (KHÔNG body) */
   async submitResultForReview(id: string): Promise<{ data?: TaskDetail; error?: string }> {
     const res = await apiService.patch<TaskDetail>(`/tasks/${id}/submit-result-review`);
     return { data: res.data, error: res.error };
   }
 
-  /**
-   * Định giá công việc phát sinh (extra task) — POST /tasks/:id/pricing.
-   * ⚠️ Chỉ có POST, backend KHÔNG có PUT /tasks/:id/pricing.
-   */
   async assessExtraTask({
     id,
     isBillable,
@@ -440,11 +422,6 @@ class TaskService {
     return { data: res.data, error: res.error };
   }
 
-  /**
-   * Tạo công việc nội bộ (không gắn dự án) — POST /tasks/internal
-   * Payload mirror erp-UI TaskCreateModal.jsx:297-304: `supervisorId` là BẮT BUỘC
-   * (backend Task.CreationService.createInternalTask đọc `data.supervisorId`).
-   */
   async createInternalTask(payload: {
     name: string;
     supervisorId: string;
@@ -464,7 +441,6 @@ class TaskService {
     return { data: res.data, error: res.error };
   }
 
-  /** Gửi yêu cầu điều phối nhân sự — POST /tasks/:id/request-staffing */
   async requestTaskStaffing({
     id,
     note,
@@ -476,7 +452,6 @@ class TaskService {
     return { data: res.data, error: res.error };
   }
 
-  /** Phản hồi yêu cầu điều phối nhân sự — PATCH /tasks/:id/respond-staffing */
   async respondTaskStaffing({
     id,
     action,
@@ -488,7 +463,6 @@ class TaskService {
     return { data: res.data, error: res.error };
   }
 
-  /** Thêm công việc con — POST /tasks/:id/subtasks */
   async addSubtask({
     id,
     name,
@@ -511,10 +485,6 @@ class TaskService {
     return { data: res.data, error: res.error };
   }
 
-  /**
-   * Cập nhật công việc con — PATCH /tasks/:id/subtask.
-   * ⚠️ `:id` ở đây là ID của SUBTASK (không phải task cha).
-   */
   async updateSubtask({
     id,
     name,
@@ -537,21 +507,11 @@ class TaskService {
     return { data: res.data, error: res.error };
   }
 
-  /**
-   * Gửi phương án phân bổ subtask để PM duyệt — POST /tasks/:id/subtask-plan/submit.
-   * ⚠️ Tính năng đang TẮT ở backend (`SUBTASK_PM_APPROVAL_ENABLED = false`
-   * trong ERP/src/modules/task/constants/SubtaskPlan.constants.ts) nên endpoint LUÔN trả 409.
-   * Chỉ giữ để parity, UI không nên gọi khi flag còn tắt.
-   */
   async submitSubtaskPlan(id: string): Promise<{ data?: any; error?: string }> {
     const res = await apiService.post(`/tasks/${id}/subtask-plan/submit`);
     return { data: res.data, error: res.error };
   }
 
-  /**
-   * PM phản hồi phương án phân bổ subtask — PATCH /tasks/:id/subtask-plan/respond.
-   * ⚠️ Cũng bị tắt bởi `SUBTASK_PM_APPROVAL_ENABLED = false` (luôn 409).
-   */
   async respondSubtaskPlan({
     id,
     action,
@@ -565,7 +525,6 @@ class TaskService {
     return { data: res.data, error: res.error };
   }
 
-  /** Bỏ phân công nhiều công việc — PATCH /tasks/bulk-unassign */
   async bulkUnassignTasks({
     projectId,
     taskIds,
@@ -577,7 +536,6 @@ class TaskService {
     return { data: res.data, error: res.error };
   }
 
-  /** Bắt đầu nhiều công việc — PATCH /tasks/bulk-start */
   async bulkStartTasks({
     projectId,
     taskIds,
@@ -589,22 +547,16 @@ class TaskService {
     return { data: res.data, error: res.error };
   }
 
-  /** Khách hàng không mua — PATCH /tasks/:id/customer-not-purchase (KHÔNG body) */
   async customerNotPurchase(id: string): Promise<{ data?: any; error?: string }> {
     const res = await apiService.patch(`/tasks/${id}/customer-not-purchase`);
     return { data: res.data, error: res.error };
   }
 
-  /** Xóa công việc — DELETE /tasks/:id */
   async deleteTask(id: string): Promise<{ data?: any; error?: string }> {
     const res = await apiService.delete(`/tasks/${id}`);
     return { data: res.data, error: res.error };
   }
 
-  /**
-   * Lịch tải công việc theo ngày của người thực hiện.
-   * GET /tasks/assignee/:userId/daily-workload?startDate&endDate (mirror Web erp-UI/src/api/tasks.js).
-   */
   async getAssigneeDailyWorkload({
     userId,
     startDate,
@@ -624,12 +576,6 @@ class TaskService {
     return { data: item, error: res.error };
   }
 
-  /**
-   * Danh sách công việc theo dự án (route riêng của backend).
-   * GET /tasks/project/:projectId — mirror Web `getTasksByProject`.
-   * ⚠️ Tên method thêm hậu tố `Route` để KHÔNG override method cũ `getTasksByProject`
-   * (method cũ gọi GET /tasks?projectId=…). Cùng dữ liệu, khác endpoint.
-   */
   async getTasksByProjectRoute(projectId: string): Promise<{ data?: TaskDetail[]; error?: string }> {
     const res = await apiService.get<any>(`/tasks/project/${projectId}`);
     const raw = res.data;

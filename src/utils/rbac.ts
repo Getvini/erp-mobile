@@ -4,18 +4,62 @@ export enum UserRole {
   ADMIN_SALE = 'ADMIN_SALE',
   BD = 'BD',
   PM = 'PM',
-  STAFF_A = 'STAFF_A',
-  STAFF_B = 'STAFF_B',
-  STAFF_C = 'STAFF_C',
-  STAFF_D = 'STAFF_D',
+  CONTENT_A = 'CONTENT_A',
+  CONTENT_B = 'CONTENT_B',
+  CONTENT_C = 'CONTENT_C',
+  CONTENT_D = 'CONTENT_D',
+  EDITOR_A = 'EDITOR_A',
+  EDITOR_B = 'EDITOR_B',
+  EDITOR_C = 'EDITOR_C',
+  EDITOR_D = 'EDITOR_D',
+  DESIGNER_A = 'DESIGNER_A',
+  DESIGNER_B = 'DESIGNER_B',
+  DESIGNER_C = 'DESIGNER_C',
+  DESIGNER_D = 'DESIGNER_D',
 }
 
-export const STAFF_ROLES = [
-  UserRole.STAFF_A,
-  UserRole.STAFF_B,
-  UserRole.STAFF_C,
-  UserRole.STAFF_D,
+export const SPECIALIZED_STAFF_ROLES = [
+  UserRole.CONTENT_A,
+  UserRole.CONTENT_B,
+  UserRole.CONTENT_C,
+  UserRole.CONTENT_D,
+  UserRole.EDITOR_A,
+  UserRole.EDITOR_B,
+  UserRole.EDITOR_C,
+  UserRole.EDITOR_D,
+  UserRole.DESIGNER_A,
+  UserRole.DESIGNER_B,
+  UserRole.DESIGNER_C,
+  UserRole.DESIGNER_D,
 ];
+
+export const STAFF_ROLES = [...SPECIALIZED_STAFF_ROLES];
+
+export const PROJECT_MEMBER_EXCLUDED_ACCOUNT_ROLES: string[] = [
+  UserRole.ADMIN_SALE,
+  UserRole.BOD,
+  UserRole.BD,
+];
+
+export const USER_ROLE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  ADMIN: { bg: '#FFF1F2', text: '#BE123C', border: '#FFE4E6' },
+  BOD: { bg: '#FEF3C7', text: '#B45309', border: '#FDE68A' },
+  BD: { bg: '#ECFDF5', text: '#047857', border: '#A7F3D0' },
+  ADMIN_SALE: { bg: '#F5F3FF', text: '#6D28D9', border: '#DDD6FE' },
+  PM: { bg: '#F3E8FF', text: '#7E22CE', border: '#E9D5FF' },
+  CONTENT_A: { bg: '#FFF7ED', text: '#C2410C', border: '#FFEDD5' },
+  CONTENT_B: { bg: '#FFF7ED', text: '#C2410C', border: '#FFEDD5' },
+  CONTENT_C: { bg: '#FFF7ED', text: '#C2410C', border: '#FFEDD5' },
+  CONTENT_D: { bg: '#FFF7ED', text: '#C2410C', border: '#FFEDD5' },
+  EDITOR_A: { bg: '#EEF2FF', text: '#4338CA', border: '#E0E7FF' },
+  EDITOR_B: { bg: '#EEF2FF', text: '#4338CA', border: '#E0E7FF' },
+  EDITOR_C: { bg: '#EEF2FF', text: '#4338CA', border: '#E0E7FF' },
+  EDITOR_D: { bg: '#EEF2FF', text: '#4338CA', border: '#E0E7FF' },
+  DESIGNER_A: { bg: '#F0FDFA', text: '#0F766E', border: '#CCFBF1' },
+  DESIGNER_B: { bg: '#F0FDFA', text: '#0F766E', border: '#CCFBF1' },
+  DESIGNER_C: { bg: '#F0FDFA', text: '#0F766E', border: '#CCFBF1' },
+  DESIGNER_D: { bg: '#F0FDFA', text: '#0F766E', border: '#CCFBF1' },
+};
 
 export const MANAGEMENT_ROLES = [UserRole.BOD, UserRole.ADMIN];
 

@@ -33,19 +33,33 @@ import type { WorkloadInfo } from '../utils/workload';
 export const USER_ROLE_LABELS: Record<string, string> = USER_ROLE;
 
 /** Role mặc định của backend khi payload không truyền `role`. */
-export const DEFAULT_USER_ROLE = 'STAFF_D';
+export const DEFAULT_USER_ROLE = 'CONTENT_D';
 
-/** Thứ tự hiển thị option theo chuẩn Web Getvini: ADMIN, BOD, BD, ADMIN_SALE, PM, STAFF_A..D */
+export const SPECIALIZED_STAFF_ROLES = [
+  'CONTENT_A',
+  'CONTENT_B',
+  'CONTENT_C',
+  'CONTENT_D',
+  'EDITOR_A',
+  'EDITOR_B',
+  'EDITOR_C',
+  'EDITOR_D',
+  'DESIGNER_A',
+  'DESIGNER_B',
+  'DESIGNER_C',
+  'DESIGNER_D',
+];
+
+export const STAFF_ROLES = [...SPECIALIZED_STAFF_ROLES];
+
+/** Thứ tự hiển thị option theo chuẩn Web Getvini: ADMIN, BOD, BD, ADMIN_SALE, PM, 12 Specialized Roles */
 export const USER_ROLE_OPTIONS: { value: string; label: string }[] = [
   'ADMIN',
   'BOD',
   'BD',
   'ADMIN_SALE',
   'PM',
-  'STAFF_A',
-  'STAFF_B',
-  'STAFF_C',
-  'STAFF_D',
+  ...STAFF_ROLES,
 ].map((value) => ({ value, label: USER_ROLE_LABELS[value] || value }));
 
 /** Danh sách mã role theo đúng thứ tự option (tiện cho filter chips). */
