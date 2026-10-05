@@ -12,6 +12,7 @@ import {
   type SubtaskReward,
 } from '@/utils/subtaskReward';
 import { formatVND } from '@/utils/formatters';
+import { REWORK_STATUSES } from '@/utils/taskLifecycle';
 import SubtaskAllocationModal, { type SubtaskAssigneeOption } from './SubtaskAllocationModal';
 
 /**
@@ -278,7 +279,7 @@ export default function TaskSubtaskSection({
                   </Text>
                 ) : null}
 
-                {subtask.status === 'REJECTED' || subtask.status === 'REWORKING' ? (
+                {REWORK_STATUSES.includes(String(subtask.status || '')) ? (
                   <View className="flex-row items-center gap-1.5">
                     <Feather name="rotate-ccw" size={11} color="#DC2626" />
                     <Text className="text-[10px] font-bold text-red-600">

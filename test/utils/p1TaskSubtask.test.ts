@@ -169,7 +169,14 @@ describe('P1.12 Task lifecycle — trạng thái & điều kiện hành động'
   });
 
   it('chỉ nộp kết quả ở các trạng thái cho phép', () => {
-    ['DOING', 'REJECTED', 'REWORKING', 'OVERDUE'].forEach((status) => {
+    [
+      'DOING',
+      'REJECTED',
+      'REJECTED_BILLABLE', // Account đã duyệt, khách chưa duyệt → làm lại (có phí)
+      'REJECTED_SUPPORT', // Account đã duyệt, khách chưa duyệt → làm lại (hỗ trợ)
+      'REWORKING',
+      'OVERDUE',
+    ].forEach((status) => {
       expect(canSubmitResult(status)).toBe(true);
     });
     expect(canSubmitResult('NOT_STARTED')).toBe(false);

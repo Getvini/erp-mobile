@@ -10,7 +10,9 @@ import {
   Alert,
   Linking,
   useWindowDimensions,
+  KeyboardAvoidingView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { TaskDetail } from '@/services/taskService';
 import {
@@ -33,7 +35,8 @@ export default function TaskReviewModal({
   task,
   onSuccess,
 }: TaskReviewModalProps) {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [passedIds, setPassedIds] = useState<string[]>([]);
   const [note, setNote] = useState('');
   const [activeTab, setActiveTab] = useState<'TEAM_LEAD' | 'ASSIGNER'>('TEAM_LEAD');
@@ -150,8 +153,14 @@ export default function TaskReviewModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView className="flex-1" behavior="padding">
       <TouchableOpacity className="flex-1 bg-slate-900/50 justify-end" activeOpacity={1} onPress={onClose}>
-        <TouchableOpacity className="bg-surface rounded-t-3xl max-h-[90%] pb-6" activeOpacity={1} onPress={() => {}}>
+        <TouchableOpacity
+          className="bg-surface rounded-t-3xl"
+          style={{ maxHeight: Math.round((height - insets.top) * 0.92) }}
+          activeOpacity={1}
+          onPress={() => {}}
+        >
           {/* Header */}
           <View className="flex-row items-center justify-between px-5 py-4 border-b border-border">
             <View className="flex-1">
@@ -165,7 +174,12 @@ export default function TaskReviewModal({
             </TouchableOpacity>
           </View>
 
-          <ScrollView className="p-5" showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={{ flexShrink: 1 }}
+            contentContainerStyle={{ padding: 20, paddingBottom: 28 }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             {/* Task Result Box */}
             <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
               <View className="flex-row items-center gap-2.5 mb-3">
@@ -346,7 +360,10 @@ export default function TaskReviewModal({
           </ScrollView>
 
           {/* Footer Actions */}
-          <View className="flex-row gap-3 px-5 pt-3">
+          <View
+            className="flex-row gap-3 px-5 pt-3 border-t border-border bg-surface"
+            style={{ paddingBottom: Math.max(insets.bottom, 12) }}
+          >
             <TouchableOpacity
               className={`flex-1 flex-row items-center justify-center gap-1.5 py-3.5 rounded-xl border border-red-200 bg-red-50 ${
                 !note.trim() || isRejecting || isFinalizing ? 'opacity-50' : ''
@@ -383,6 +400,7 @@ export default function TaskReviewModal({
           </View>
         </TouchableOpacity>
       </TouchableOpacity>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

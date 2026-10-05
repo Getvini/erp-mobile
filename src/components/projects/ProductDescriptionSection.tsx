@@ -18,6 +18,14 @@ import {
 } from '@/services/productDescriptionService';
 import { uploadToCloudinary } from '@/services/cloudinaryService';
 import { BrandColors } from '@/constants/colors';
+import { htmlToEditableText, resolveHtml } from '@/utils/productDescriptionText';
+import ProductDescriptionLegend from './ProductDescriptionLegend';
+import {
+  ExtractedContentView,
+  FormatPreview,
+  FormatPreviewPanel,
+  WarningList,
+} from './ProductDescriptionParts';
 import {
   useProductDescriptionsQuery,
   useCreateProductDescriptionMutation,
@@ -75,7 +83,14 @@ interface FormProductItem {
   hasComplexLayout?: boolean;
   aiFormatting?: boolean;
   docsUploading?: boolean;
+  extractWarnings?: string[];
+  formatPreview?: FormatPreview | null;
+  editText?: string;
+  noteEditText?: string;
+  viewMode?: 'edit' | 'preview';
 }
+
+const MAIN_STATUSES: string[] = ['APPROVED', 'PENDING_REVIEW', 'DRAFT'];
 
 const emptyProduct = (): FormProductItem => ({
   id: null,
@@ -88,7 +103,7 @@ const emptyProduct = (): FormProductItem => ({
   collapsed: false,
 });
 
-const toEditableProduct = (item: ProductDescriptionItem): FormProductItem => ({
+const toEditableProduct = (item: ProductDescriptionItem, collapsed = true): FormProductItem => ({
   id: item.id || null,
   productName: item.productName || '',
   fileUrl: item.fileUrl || '',
@@ -98,7 +113,7 @@ const toEditableProduct = (item: ProductDescriptionItem): FormProductItem => ({
   documents: Array.isArray(item.documents)
     ? item.documents.map((d) => ({ url: d.url, name: d.name ?? null }))
     : [],
-  collapsed: false,
+  collapsed,
 });
 
 interface HistoryModalProps {
@@ -294,20 +309,18 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
   const isOnHold = project?.status === 'ON_HOLD' || Boolean(project?.isOnHold);
   const isClosed = ['COMPLETED', 'CANCELLED'].includes(project?.status || '');
 
-  // Active submission: latest approved, pending, or draft
-  const activeSubmission = useMemo(() => {
-    if (!submissions.length) return null;
-    const sorted = [...submissions].sort(
-      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-    );
-    const approved = sorted.find((s) => s.status === 'APPROVED');
-    if (approved) return approved;
-    const pending = sorted.find((s) => s.status === 'PENDING_REVIEW');
-    if (pending) return pending;
-    const draft = sorted.find((s) => s.status === 'DRAFT');
-    if (draft) return draft;
-    return sorted[0];
-  }, [submissions]);
+  const activeSubmission = useMemo(
+    () => submissions.find((submission) => submission.id === loadedSubmissionId) || null,
+    [submissions, loadedSubmissionId]
+  );
+
+  const visibleSubmissions = useMemo(
+    () =>
+      submissions
+        .filter((submission) => MAIN_STATUSES.includes(submission.status))
+        .sort((x, y) => new Date(y.createdAt || 0).getTime() - new Date(x.createdAt || 0).getTime()),
+    [submissions]
+  );
 
   const hasPendingSubmission = useMemo(() => {
     return submissions.some((s) => s.status === 'PENDING_REVIEW');
@@ -355,7 +368,7 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
   };
 
   const addProduct = () => {
-    setProducts((prev) => [...prev, emptyProduct()]);
+    setProducts((prev) => [...prev.map((item) => ({ ...item, collapsed: true })), emptyProduct()]);
   };
 
   const removeProduct = (index: number) => {
@@ -402,7 +415,11 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
 
         updateProduct(productIndex, {
           extractedText: result?.extractedText || '',
+          editText: undefined,
           hasComplexLayout: Boolean(result?.hasComplexLayout),
+          extractWarnings: Array.isArray(result?.warnings) ? result.warnings : [],
+          formatPreview: null,
+          viewMode: 'preview',
           extracting: false,
         });
 
@@ -442,10 +459,10 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
     }
   };
 
-  // Trigger AI formatting
   const handleAiFormat = async (productIndex: number) => {
     const prod = products[productIndex];
-    if (!prod.extractedText.trim()) {
+    const currentHtml = resolveHtml(prod.extractedText, prod.editText);
+    if (!htmlToEditableText(currentHtml)) {
       Alert.alert('Thông báo', 'Chưa có nội dung trích xuất để format');
       return;
     }
@@ -454,19 +471,43 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
     try {
       const result = await aiFormatMutation.mutateAsync({
         projectId,
-        text: prod.extractedText,
+        text: currentHtml,
         productName: prod.productName,
       });
 
+      if (!result?.extractedText) {
+        updateProduct(productIndex, { aiFormatting: false });
+        Alert.alert('Thông báo', 'AI không trả về nội dung, giữ nguyên bản hiện tại');
+        return;
+      }
+
       updateProduct(productIndex, {
-        extractedText: result?.extractedText || prod.extractedText,
         aiFormatting: false,
+        formatPreview: {
+          html: result.extractedText,
+          removed: Array.isArray(result.removed) ? result.removed : [],
+          warnings: Array.isArray(result.warnings) ? result.warnings : [],
+        },
       });
-      Alert.alert('Thành công', 'Đã định dạng nội dung bằng AI');
     } catch (err: any) {
       updateProduct(productIndex, { aiFormatting: false });
       Alert.alert('Lỗi AI formatting', err.message || 'AI formatting thất bại');
     }
+  };
+
+  const applyFormatPreview = (productIndex: number) => {
+    const preview = products[productIndex]?.formatPreview;
+    if (!preview) return;
+    updateProduct(productIndex, {
+      extractedText: preview.html,
+      editText: undefined,
+      formatPreview: null,
+      viewMode: 'preview',
+    });
+  };
+
+  const discardFormatPreview = (productIndex: number) => {
+    updateProduct(productIndex, { formatPreview: null });
   };
 
   // Supplementary documents
@@ -538,7 +579,7 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
       return;
     }
     const editableItems = Array.isArray(submission.items) ? submission.items : [];
-    setProducts(editableItems.length ? editableItems.map(toEditableProduct) : [emptyProduct()]);
+    setProducts(editableItems.length ? editableItems.map((item) => toEditableProduct(item, editableItems.length > 1)) : [emptyProduct()]);
     setLoadedSubmissionId(submission.id);
     setIsFormOpen(true);
   };
@@ -565,8 +606,8 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
         productName,
         fileUrl,
         fileName: product.fileName || null,
-        extractedText: product.extractedText || null,
-        note: product.note.trim() || undefined,
+        extractedText: resolveHtml(product.extractedText, product.editText) || null,
+        note: resolveHtml(product.note, product.noteEditText).trim() || undefined,
         documents: Array.isArray(product.documents) ? product.documents : [],
       };
     });
@@ -589,8 +630,8 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
           setLoadedSubmissionId(created.id);
         }
         Alert.alert('Thành công', 'Đã tạo bản nháp mới từ bản không duyệt');
-      } else if (loadedSubmissionId || (activeSubmission && activeSubmission.status === 'DRAFT')) {
-        const targetId = loadedSubmissionId || activeSubmission!.id;
+      } else if (activeSubmission) {
+        const targetId = activeSubmission.id;
         await updateSubmissionMutation.mutateAsync({
           projectId,
           submissionId: targetId,
@@ -632,8 +673,8 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
             submissionId: saved.id,
           });
         }
-      } else if (loadedSubmissionId || (activeSubmission && activeSubmission.status === 'DRAFT')) {
-        const targetId = loadedSubmissionId || activeSubmission!.id;
+      } else if (activeSubmission) {
+        const targetId = activeSubmission.id;
         await updateSubmissionMutation.mutateAsync({
           projectId,
           submissionId: targetId,
@@ -657,7 +698,7 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
       }
 
       Alert.alert('Thành công', 'Đã gửi bản mô tả sản phẩm cho PM duyệt!');
-      setIsFormOpen(false);
+      closeForm();
     } catch (err: any) {
       Alert.alert('Lỗi gửi duyệt', err.message || 'Có lỗi xảy ra khi gửi PM duyệt');
     } finally {
@@ -771,7 +812,7 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
             >
               <Feather name="plus" size={13} color="#FFFFFF" />
               <Text className="text-xs font-bold text-white ml-1">
-                {activeSubmission ? 'Bản gửi mới' : 'Tạo bản gửi'}
+                {visibleSubmissions.length > 0 ? 'Bản gửi mới' : 'Tạo bản gửi'}
               </Text>
             </TouchableOpacity>
           )}
@@ -782,40 +823,42 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
       <View className="mb-3 flex-row items-start p-2.5 rounded-xl bg-amber-50 border border-amber-200">
         <Feather name="alert-triangle" size={14} color="#D97706" style={{ marginTop: 2, marginRight: 6 }} />
         <Text className="text-[11px] text-amber-800 font-medium flex-1 leading-4">
-          Đây là các thông tin sẽ được dùng để đối chiếu khi chạy QC. Vui lòng upload đầy đủ file thông tin chuẩn (doc/pdf) cho từng sản phẩm.
+          Đây là các thông tin sẽ được dùng để đối chiếu khi chạy QC. Vui lòng upload đầy đủ file thông tin chuẩn (doc/pdf) cho từng sản phẩm để QC đối chiếu chính xác. Hệ thống chỉ trích xuất nội dung chữ trong file, bỏ qua hình ảnh.
         </Text>
       </View>
 
-      {/* Active Submission Card (View Mode) */}
-      {activeSubmission ? (
-        <View className="p-3.5 rounded-xl border border-border bg-slate-50/50 gap-3">
+      {/* Submission Cards (View Mode) */}
+      {visibleSubmissions.length > 0 ? (
+        <View className="gap-3">
+        {visibleSubmissions.map((submission) => (
+        <View key={submission.id} className="p-3.5 rounded-xl border border-border bg-slate-50/50 gap-3">
           {/* Submission Info Bar */}
           <View className="flex-row items-center justify-between flex-wrap gap-2">
             <View className="flex-row items-center gap-2">
               <Text className="text-xs font-bold text-text-primary">
-                {activeSubmission.versionNumber ? `Version ${activeSubmission.versionNumber}` : 'Bản hiện tại'}
+                {submission.versionNumber ? `Version ${submission.versionNumber}` : 'Bản gửi chờ duyệt'}
               </Text>
               <View
                 className="px-2 py-0.5 rounded-md border"
                 style={{
-                  backgroundColor: (STATUS_COLORS[activeSubmission.status] || STATUS_COLORS.DRAFT).bg,
-                  borderColor: (STATUS_COLORS[activeSubmission.status] || STATUS_COLORS.DRAFT).border,
+                  backgroundColor: (STATUS_COLORS[submission.status] || STATUS_COLORS.DRAFT).bg,
+                  borderColor: (STATUS_COLORS[submission.status] || STATUS_COLORS.DRAFT).border,
                 }}
               >
                 <Text
                   className="text-[10px] font-bold"
-                  style={{ color: (STATUS_COLORS[activeSubmission.status] || STATUS_COLORS.DRAFT).text }}
+                  style={{ color: (STATUS_COLORS[submission.status] || STATUS_COLORS.DRAFT).text }}
                 >
-                  {STATUS_LABELS[activeSubmission.status] || activeSubmission.status}
+                  {STATUS_LABELS[submission.status] || submission.status}
                 </Text>
               </View>
             </View>
 
             {canManageSubmission &&
-              (activeSubmission.status === 'DRAFT' || activeSubmission.status === 'REJECTED') &&
+              (submission.status === 'DRAFT' || submission.status === 'REJECTED') &&
               !isFormOpen && (
                 <TouchableOpacity
-                  onPress={() => openEditForm(activeSubmission)}
+                  onPress={() => openEditForm(submission)}
                   disabled={isOnHold}
                   className="flex-row items-center px-2 py-1 rounded-lg bg-blue-50 border border-blue-200"
                 >
@@ -825,18 +868,20 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
               )}
           </View>
 
-          {/* Rejection Notice if any */}
-          {activeSubmission.status === 'REJECTED' && activeSubmission.reviewNote && (
+          <Text className="text-[11px] font-medium text-text-muted">
+            Người tạo: {submission.createdBy?.fullName || 'Không xác định'}
+            {submission.reviewedBy?.fullName ? ` - Người duyệt: ${submission.reviewedBy.fullName}` : ''}
+          </Text>
+
+          {submission.reviewNote ? (
             <View className="p-2.5 rounded-lg bg-rose-50 border border-rose-200">
-              <Text className="text-xs font-semibold text-rose-800">
-                Lý do PM không duyệt: {activeSubmission.reviewNote}
-              </Text>
+              <Text className="text-xs font-semibold italic text-rose-800">{submission.reviewNote}</Text>
             </View>
-          )}
+          ) : null}
 
           {/* Products List in Active Submission */}
           <View className="gap-2">
-            {(activeSubmission.items || []).map((item, idx) => (
+            {(submission.items || []).map((item, idx) => (
               <View key={item.id || idx} className="p-3 rounded-xl bg-white border border-border gap-2">
                 <View className="flex-row items-center justify-between">
                   <Text className="text-xs font-bold text-text-primary flex-1 mr-2" numberOfLines={1}>
@@ -854,24 +899,22 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
                 </View>
 
                 {/* Extracted Text Snippet */}
-                {item.extractedText ? (
-                  <View className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
-                    <Text className="text-[10px] font-bold text-text-muted uppercase mb-1">
+                {item.extractedText && htmlToEditableText(item.extractedText) ? (
+                  <View className="gap-1">
+                    <Text className="text-[10px] font-bold text-text-muted uppercase">
                       Nội dung trích xuất
                     </Text>
-                    <Text className="text-xs text-text-secondary leading-4" numberOfLines={4}>
-                      {item.extractedText.replace(/<[^>]*>/g, '').trim()}
-                    </Text>
+                    <ExtractedContentView html={item.extractedText} />
                   </View>
                 ) : null}
 
                 {/* Notes */}
-                {item.note ? (
+                {item.note && htmlToEditableText(item.note) ? (
                   <View className="p-2 rounded-lg bg-amber-50/60 border border-amber-200">
                     <Text className="text-[10px] font-bold text-amber-800 uppercase mb-0.5">
                       Chú thích
                     </Text>
-                    <Text className="text-xs text-amber-900">{item.note}</Text>
+                    <Text className="text-xs text-amber-900">{htmlToEditableText(item.note)}</Text>
                   </View>
                 ) : null}
 
@@ -902,10 +945,10 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
           </View>
 
           {/* PM Review Actions */}
-          {activeSubmission.status === 'PENDING_REVIEW' && canReview && (
+          {submission.status === 'PENDING_REVIEW' && canReview && (
             <View className="flex-row gap-2 pt-2 border-t border-border">
               <TouchableOpacity
-                onPress={() => openRejectModal(activeSubmission.id)}
+                onPress={() => openRejectModal(submission.id)}
                 disabled={isReviewing}
                 className="flex-1 py-2 rounded-xl bg-rose-50 border border-rose-200 items-center justify-center active:bg-rose-100"
               >
@@ -913,7 +956,7 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => handleApprove(activeSubmission.id)}
+                onPress={() => handleApprove(submission.id)}
                 disabled={isReviewing}
                 className="flex-1 py-2 rounded-xl bg-emerald-600 items-center justify-center active:bg-emerald-700"
               >
@@ -925,6 +968,8 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
               </TouchableOpacity>
             </View>
           )}
+        </View>
+        ))}
         </View>
       ) : (
         <View className="p-5 rounded-xl border border-dashed border-border bg-slate-50/50 items-center justify-center">
@@ -983,6 +1028,8 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
                 </Text>
               </View>
 
+              <ProductDescriptionLegend />
+
               <View className="gap-3">
                 {products.map((prod, idx) => (
                   <View key={idx} className="p-3.5 rounded-2xl border border-border bg-slate-50/70 gap-3">
@@ -998,9 +1045,18 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
                           color="#64748B"
                           style={{ marginRight: 6 }}
                         />
-                        <Text className="text-xs font-bold text-text-primary flex-1" numberOfLines={1}>
-                          {prod.productName || `Sản phẩm #${idx + 1}`}
-                        </Text>
+                        <View className="flex-1">
+                          <Text className="text-xs font-bold text-text-primary" numberOfLines={1}>
+                            {prod.productName || `Sản phẩm #${idx + 1}`}
+                          </Text>
+                          {prod.collapsed ? (
+                            <Text className="text-[11px] font-medium text-text-muted" numberOfLines={1}>
+                              {prod.fileUrl ? 'Đã có file thông tin chuẩn' : 'Chưa upload file'}
+                              {prod.note ? ' • Có chú thích' : ''}
+                              {prod.documents.length > 0 ? ` • ${prod.documents.length} tài liệu bổ sung` : ''}
+                            </Text>
+                          ) : null}
+                        </View>
                       </TouchableOpacity>
 
                       {products.length > 1 && (
@@ -1078,7 +1134,7 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
                             </Text>
                             <TouchableOpacity
                               onPress={() => handleAiFormat(idx)}
-                              disabled={prod.aiFormatting || prod.extracting || !prod.extractedText}
+                              disabled={prod.aiFormatting || prod.extracting || Boolean(prod.formatPreview) || !(prod.editText ?? prod.extractedText)}
                               className="flex-row items-center px-2 py-1 rounded-lg bg-white border border-emerald-300"
                             >
                               {prod.aiFormatting ? (
@@ -1092,14 +1148,42 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
                             </TouchableOpacity>
                           </View>
 
-                          {prod.hasComplexLayout && (
+                          {!prod.extracting && !prod.formatPreview && (
+                            <View className="flex-row self-start rounded-lg border border-emerald-300 bg-white overflow-hidden">
+                              {(['edit', 'preview'] as const).map((mode) => {
+                                const active = (prod.viewMode || 'edit') === mode;
+                                return (
+                                  <TouchableOpacity
+                                    key={mode}
+                                    onPress={() => updateProduct(idx, { viewMode: mode })}
+                                    className={`flex-row items-center px-2.5 py-1 ${active ? 'bg-emerald-600' : 'bg-white'}`}
+                                    activeOpacity={0.7}
+                                  >
+                                    <Feather
+                                      name={mode === 'edit' ? 'edit-3' : 'eye'}
+                                      size={11}
+                                      color={active ? '#FFFFFF' : '#047857'}
+                                      style={{ marginRight: 4 }}
+                                    />
+                                    <Text className={`text-[10px] font-bold ${active ? 'text-white' : 'text-emerald-700'}`}>
+                                      {mode === 'edit' ? 'Sửa' : 'Xem'}
+                                    </Text>
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </View>
+                          )}
+
+                          {!prod.extracting && prod.hasComplexLayout && (
                             <View className="p-2 rounded-lg bg-amber-50 border border-amber-300 flex-row items-start">
                               <Feather name="alert-circle" size={12} color="#D97706" style={{ marginTop: 2, marginRight: 4 }} />
-                              <Text className="text-[10px] text-amber-800 font-medium flex-1">
-                                File có nhiều cột/bảng phức tạp, vui lòng rà soát lại nội dung bên dưới.
+                              <Text className="text-[11px] text-amber-800 font-medium flex-1 leading-4">
+                                File có nhiều cột/bảng phức tạp, nội dung trích xuất bên dưới có thể bị sai thứ tự hoặc thiếu sót. Vui lòng kiểm tra kỹ và chỉnh sửa trước khi gửi duyệt.
                               </Text>
                             </View>
                           )}
+
+                          {!prod.extracting && <WarningList items={prod.extractWarnings} />}
 
                           {prod.extracting ? (
                             <View className="p-3 bg-white rounded-xl border border-emerald-200 flex-row items-center justify-center gap-2">
@@ -1108,10 +1192,22 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
                                 Đang trích xuất nội dung từ file...
                               </Text>
                             </View>
+                          ) : prod.formatPreview ? (
+                            <FormatPreviewPanel
+                              preview={prod.formatPreview}
+                              onApply={() => applyFormatPreview(idx)}
+                              onDiscard={() => discardFormatPreview(idx)}
+                            />
+                          ) : prod.viewMode === 'preview' ? (
+                            <ExtractedContentView
+                              html={resolveHtml(prod.extractedText, prod.editText)}
+                              maxHeight={480}
+                              emptyText="Chưa có nội dung trích xuất"
+                            />
                           ) : (
                             <TextInput
-                              value={prod.extractedText}
-                              onChangeText={(t) => updateProduct(idx, { extractedText: t })}
+                              value={prod.editText ?? htmlToEditableText(prod.extractedText)}
+                              onChangeText={(t) => updateProduct(idx, { editText: t })}
                               placeholder="Nội dung trích xuất từ file sẽ hiển thị ở đây, có thể chỉnh sửa tự do"
                               placeholderTextColor="#94A3B8"
                               multiline
@@ -1128,8 +1224,8 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
                             Chú thích (không bắt buộc)
                           </Text>
                           <TextInput
-                            value={prod.note}
-                            onChangeText={(t) => updateProduct(idx, { note: t })}
+                            value={prod.noteEditText ?? htmlToEditableText(prod.note)}
+                            onChangeText={(t) => updateProduct(idx, { noteEditText: t })}
                             placeholder="Nhập ghi chú cho sản phẩm này..."
                             placeholderTextColor="#94A3B8"
                             multiline
@@ -1185,6 +1281,16 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
                             </View>
                           ))}
                         </View>
+
+                        <TouchableOpacity
+                          onPress={() => toggleProductCollapsed(idx)}
+                          accessibilityLabel="Thu gọn sản phẩm"
+                          activeOpacity={0.7}
+                          className="flex-row items-center justify-center gap-1 py-2 rounded-lg border border-slate-200 bg-white"
+                        >
+                          <Feather name="chevron-up" size={14} color="#64748B" />
+                          <Text className="text-xs font-bold text-slate-600">Thu gọn</Text>
+                        </TouchableOpacity>
                       </View>
                     )}
                   </View>

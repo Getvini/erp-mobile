@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { TaskDetail, TASK_STATUS_CONFIG } from '@/services/taskService';
 import { BrandColors } from '@/constants/colors';
+import { REWORK_STATUSES } from '@/utils/taskLifecycle';
 
 const isExtraTaskItem = (t: TaskDetail): boolean =>
   Boolean(t.isExtraTask || (t as any).isExtra);
@@ -57,7 +58,7 @@ const TaskCard = React.memo(function TaskCard({
   const statusInfo = getStatusBadge(item.status);
   const progress = item.progress ?? (item.status === 'DONE' ? 100 : 0);
   const isUnassigned = !item.assigneeId && (item.status === 'PENDING' || item.status === 'AWAITING_SUPPORT');
-  const isAssigned = ['DOING', 'REWORKING', 'OVERDUE', 'REJECTED'].includes(item.status || '');
+  const isAssigned = ['DOING', 'OVERDUE', ...REWORK_STATUSES].includes(item.status || '');
   const isExtra = isExtraTaskItem(item);
 
   return (

@@ -15,6 +15,7 @@ import { TaskDetail } from '@/services/taskService';
 import { useSubmitTaskResultMutation, useSubmitTaskResultFileMutation } from '@/hooks/queries/useTasks';
 import { isValidUrl, normalizeUrl } from '@/utils/validators';
 import { resolveSpellCheckLinkSource } from '@/utils/spellCheckLink';
+import type { ScanRegion } from '@/utils/sheetScope';
 import ResultSheetSelectorPanel, { ResultCheckSource } from './ResultSheetSelectorPanel';
 
 interface TaskResultModalProps {
@@ -45,6 +46,10 @@ export default function TaskResultModal({
   const [isCheckStage, setIsCheckStage] = useState(false);
   const [checkSource, setCheckSource] = useState<ResultCheckSource | undefined>(undefined);
   const [selectedSheets, setSelectedSheets] = useState<string[]>([]);
+  const [selectedScenarios, setSelectedScenarios] = useState<string[]>([]);
+  const [selectedScenarioLabels, setSelectedScenarioLabels] = useState<string[]>([]);
+  const [customRegions, setCustomRegions] = useState<ScanRegion[]>([]);
+  const [isLoadingSheets, setIsLoadingSheets] = useState(false);
   const [whitelist, setWhitelist] = useState<string[]>([]);
   const submitResultMutation = useSubmitTaskResultMutation();
   const submitResultFileMutation = useSubmitTaskResultFileMutation();
@@ -57,6 +62,10 @@ export default function TaskResultModal({
       setIsCheckStage(false);
       setCheckSource(undefined);
       setSelectedSheets([]);
+      setSelectedScenarios([]);
+      setSelectedScenarioLabels([]);
+      setCustomRegions([]);
+      setIsLoadingSheets(false);
       setWhitelist([]);
     }
   }, [visible, task?.id]);
@@ -113,11 +122,15 @@ export default function TaskResultModal({
     setIsCheckStage(false);
     setCheckSource(undefined);
     setSelectedSheets([]);
+    setSelectedScenarios([]);
+    setSelectedScenarioLabels([]);
+    setCustomRegions([]);
+    setIsLoadingSheets(false);
     setWhitelist([]);
   };
 
   const handleSubmit = async () => {
-    if (!task) return;
+    if (!task || isLoadingSheets) return;
 
     try {
       if (submissionType === 'file') {
@@ -127,6 +140,10 @@ export default function TaskResultModal({
           file: resultFile,
           sheetNames: selectedSheets,
           whitelist,
+          scenarioIds: selectedScenarios,
+          scenarioLabels: selectedScenarioLabels,
+          regions: customRegions,
+          draft: true,
         });
       } else {
         const rawLink = resultLink.trim();
@@ -139,21 +156,35 @@ export default function TaskResultModal({
             projectId: task.project?.id,
             sheetNames: selectedSheets,
             whitelist,
+            scenarioIds: selectedScenarios,
+            scenarioLabels: selectedScenarioLabels,
+            regions: customRegions,
             checkFileUrl: source?.fileUrl,
             checkFileName: source?.fileName,
+            draft: true,
           },
         });
       }
 
-      Alert.alert('Thành công', 'Đã gửi kết quả công việc thành công!');
+      Alert.alert('Thành công', 'Đã lưu kết quả. Bạn có thể chỉnh sửa hoặc gửi duyệt.');
+      setCheckSource(undefined);
+      setIsCheckStage(false);
+      setSelectedSheets([]);
+      setSelectedScenarios([]);
+      setSelectedScenarioLabels([]);
+      setCustomRegions([]);
+      setWhitelist([]);
+      setResultFile(null);
+      setResultLink('');
       onClose();
       onSuccess();
     } catch (err: any) {
-      Alert.alert('Lỗi', err?.message || 'Có lỗi xảy ra khi gửi kết quả.');
+      Alert.alert('Lỗi', err?.message || 'Có lỗi xảy ra khi lưu kết quả.');
     }
   };
 
   const isPending = submitResultMutation.isPending || submitResultFileMutation.isPending;
+  const submitDisabled = isPending || isLoadingSheets;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -290,7 +321,7 @@ export default function TaskResultModal({
                 <View className="p-3 bg-blue-50 border border-blue-100 rounded-2xl mb-4">
                   <Text className="text-sm font-bold text-blue-800">Chọn sheet để kiểm tra chính tả & QC</Text>
                   <Text className="text-xs text-blue-600 mt-1">
-                    Kết quả kiểm tra sẽ được xử lý sau khi nộp và hiển thị cho người duyệt.
+                    Kết quả được lưu nháp, việc quét chạy khi bạn bấm Gửi duyệt.
                   </Text>
                 </View>
 
@@ -299,8 +330,14 @@ export default function TaskResultModal({
                   projectId={task?.project?.id}
                   selectedSheets={selectedSheets}
                   onSelectedSheetsChange={setSelectedSheets}
+                  selectedScenarios={selectedScenarios}
+                  onSelectedScenariosChange={setSelectedScenarios}
+                  onSelectedScenarioLabelsChange={setSelectedScenarioLabels}
+                  customRegions={customRegions}
+                  onCustomRegionsChange={setCustomRegions}
                   whitelist={whitelist}
                   onWhitelistChange={setWhitelist}
+                  onLoadingChange={setIsLoadingSheets}
                 />
               </ScrollView>
 
@@ -314,14 +351,16 @@ export default function TaskResultModal({
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  className={`flex-1 py-3.5 rounded-xl bg-primary items-center ${isPending ? 'opacity-50' : ''}`}
+                  className={`flex-1 py-3.5 rounded-xl bg-primary items-center ${submitDisabled ? 'opacity-50' : ''}`}
                   onPress={handleSubmit}
-                  disabled={isPending}
+                  disabled={submitDisabled}
                 >
                   {isPending ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
-                    <Text className="text-sm font-bold text-white">Nộp kết quả</Text>
+                    <Text className="text-sm font-bold text-white">
+                      {isLoadingSheets ? 'Đang đọc sheet...' : 'Lưu kết quả'}
+                    </Text>
                   )}
                 </TouchableOpacity>
               </View>

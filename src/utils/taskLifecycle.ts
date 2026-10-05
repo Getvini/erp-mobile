@@ -30,8 +30,21 @@ export const TASK_STATUS_LABELS: Record<string, string> = {
 /** Trạng thái cho phép bấm "Bắt đầu" */
 export const STARTABLE: string[] = ['NOT_STARTED'];
 
+/**
+ * Các trạng thái "yêu cầu làm lại" — người làm được nộp lại kết quả.
+ * - REJECTED / REWORKING: duyệt nội bộ không đạt / đang làm lại
+ * - REJECTED_BILLABLE / REJECTED_SUPPORT: Account đã duyệt nhưng khách chưa duyệt
+ *   → yêu cầu làm lại (có phí / hỗ trợ)
+ */
+export const REWORK_STATUSES: string[] = [
+  'REJECTED',
+  'REJECTED_BILLABLE',
+  'REJECTED_SUPPORT',
+  'REWORKING',
+];
+
 /** Trạng thái cho phép gửi kết quả để duyệt */
-export const SUBMITTABLE: string[] = ['DOING', 'REJECTED', 'REWORKING', 'OVERDUE'];
+export const SUBMITTABLE: string[] = ['DOING', ...REWORK_STATUSES, 'OVERDUE'];
 
 /** Trạng thái cho phép yêu cầu làm lại (dành cho người duyệt) */
 export const REWORKABLE: string[] = ['AWAITING_REVIEW', 'INTERNAL_COMPLETED', 'COMPLETED'];

@@ -116,6 +116,8 @@ export const queryKeys = {
       [...queryKeys.spellingCheck.all, 'sheets-from-url', fileUrl || '', fileName || ''] as const,
     sheetsFromFile: (fileUri?: string, fileName?: string) =>
       [...queryKeys.spellingCheck.all, 'sheets-from-file', fileUri || '', fileName || ''] as const,
+    preview: (sourceKey: string, sheet: string, rowStart: number, rowCount: number, colStart: number, colCount: number) =>
+      [...queryKeys.spellingCheck.all, 'preview', sourceKey, sheet, rowStart, rowCount, colStart, colCount] as const,
   },
 
   // Notifications

@@ -15,6 +15,18 @@ export interface ProductDescriptionItem {
   documents?: ProductDescriptionDocument[];
 }
 
+export interface ProductDescriptionExtractResult {
+  extractedText: string;
+  hasComplexLayout?: boolean;
+  warnings?: string[];
+}
+
+export interface ProductDescriptionAiFormatResult {
+  extractedText: string;
+  removed?: string[];
+  warnings?: string[];
+}
+
 export interface ProductDescriptionSubmission {
   id: string;
   projectId: string;
@@ -74,8 +86,8 @@ class ProductDescriptionService {
     return { data: res.data, error: res.error };
   }
 
-  async extractFile(projectId: string, fileUrl: string): Promise<{ data?: { extractedText: string; hasComplexLayout?: boolean }; error?: string }> {
-    const res = await apiService.post<{ extractedText: string; hasComplexLayout?: boolean }>(
+  async extractFile(projectId: string, fileUrl: string): Promise<{ data?: ProductDescriptionExtractResult; error?: string }> {
+    const res = await apiService.post<ProductDescriptionExtractResult>(
       `/projects/${projectId}/product-descriptions/extract-file`,
       { fileUrl }
     );
@@ -84,8 +96,8 @@ class ProductDescriptionService {
     return { data: result, error: res.error };
   }
 
-  async extractUpload(projectId: string, formData: FormData): Promise<{ data?: { extractedText: string; hasComplexLayout?: boolean }; error?: string }> {
-    const res = await apiService.post<{ extractedText: string; hasComplexLayout?: boolean }>(
+  async extractUpload(projectId: string, formData: FormData): Promise<{ data?: ProductDescriptionExtractResult; error?: string }> {
+    const res = await apiService.postForm<ProductDescriptionExtractResult>(
       `/projects/${projectId}/product-descriptions/extract-upload`,
       formData
     );
@@ -94,8 +106,8 @@ class ProductDescriptionService {
     return { data: result, error: res.error };
   }
 
-  async aiFormat(projectId: string, text: string, productName?: string): Promise<{ data?: { extractedText: string }; error?: string }> {
-    const res = await apiService.post<{ extractedText: string }>(
+  async aiFormat(projectId: string, text: string, productName?: string): Promise<{ data?: ProductDescriptionAiFormatResult; error?: string }> {
+    const res = await apiService.post<ProductDescriptionAiFormatResult>(
       `/projects/${projectId}/product-descriptions/ai-format`,
       { text, productName }
     );
