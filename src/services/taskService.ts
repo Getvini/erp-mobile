@@ -1,5 +1,7 @@
 import { apiService } from './api';
 import { TaskItem } from './dashboardService';
+import type { QcMismatchResultItem, SpellCheckResultItem } from './taskResultChecksService';
+import type { ScanRegion } from '@/utils/sheetScope';
 
 export const TASK_STATUS_LABELS: Record<string, string> = {
   // NOT_STARTED: 'Chưa thực hiện',
@@ -10,6 +12,8 @@ export const TASK_STATUS_LABELS: Record<string, string> = {
   CANCELLED: 'Đã hủy',
   AWAITING_PRICING: 'Chờ định giá',
   REJECTED: 'Yêu cầu làm lại',
+  REJECTED_BILLABLE: 'Yêu cầu làm lại (có phí)',
+  REJECTED_SUPPORT: 'Yêu cầu làm lại (hỗ trợ)',
   AWAITING_ACCEPTANCE: 'Đang chờ nghiệm thu',
   AWAITING_REVIEW: 'Đang chờ duyệt',
   OVERDUE: 'Quá hạn',
@@ -35,6 +39,8 @@ export const TASK_STATUS_CONFIG: Record<
   CANCELLED: { text: 'Đã hủy', color: '#E11D48', bg: '#FFF1F2' },
   AWAITING_PRICING: { text: 'Chờ định giá', color: '#EA580C', bg: '#FFF7ED' },
   REJECTED: { text: 'Yêu cầu làm lại', color: '#E11D48', bg: '#FFF1F2' },
+  REJECTED_BILLABLE: { text: 'Làm lại (có phí)', color: '#E11D48', bg: '#FFF1F2' },
+  REJECTED_SUPPORT: { text: 'Làm lại (hỗ trợ)', color: '#E11D48', bg: '#FFF1F2' },
   AWAITING_ACCEPTANCE: { text: 'Chờ nghiệm thu', color: '#D97706', bg: '#FFFBEB' },
   AWAITING_REVIEW: { text: 'Chờ duyệt', color: '#D97706', bg: '#FFFBEB' },
   OVERDUE: { text: 'Quá hạn', color: '#DC2626', bg: '#FEF2F2' },
@@ -47,6 +53,16 @@ export const TASK_STATUS_CONFIG: Record<
   SUPPORT_AWAITING_RETURN: { text: 'Chờ xác nhận hoàn thành', color: '#2563EB', bg: '#EFF6FF' },
   ON_HOLD: { text: 'Tạm dừng', color: '#B45309', bg: '#FFFBEB' },
 };
+
+export interface SubmitTaskResultFileParams {
+  file: { uri: string; name: string; mimeType?: string };
+  sheetNames?: string[];
+  whitelist?: string[];
+  scenarioIds?: string[];
+  scenarioLabels?: string[];
+  regions?: ScanRegion[];
+  draft?: boolean;
+}
 
 export interface TaskDetail extends TaskItem {
   code?: string;
@@ -106,6 +122,10 @@ export interface TaskDetail extends TaskItem {
     name?: string;
     url?: string;
     note?: string;
+    sheetNames?: string[];
+    scenarioLabels?: string[];
+    scanScope?: { regions?: ScanRegion[] } | null;
+    whitelist?: string[];
     checklist?: Array<{ criteriaId?: string; label?: string; description?: string; item?: string; checked: boolean }>;
   };
   reviewNote?: string;
@@ -120,6 +140,8 @@ export interface TaskDetail extends TaskItem {
     leadFeedback?: string;
     feedbackAttachments?: Array<{ type?: string; name: string; url: string }>;
     submittedResult?: { type?: string; name: string; url?: string };
+    confirmedSpellErrors?: SpellCheckResultItem[];
+    confirmedQcMismatches?: QcMismatchResultItem[];
   }>;
   project?: {
     id: string;
@@ -290,6 +312,10 @@ class TaskService {
       projectId?: string;
       sheetNames?: string[];
       whitelist?: string[];
+      scenarioIds?: string[];
+      scenarioLabels?: string[];
+      regions?: ScanRegion[];
+      draft?: boolean;
       checkFileUrl?: string;
       checkFileName?: string;
     }
@@ -300,10 +326,9 @@ class TaskService {
 
   async submitTaskResultFile(
     id: string,
-    file: { uri: string; name: string; mimeType?: string },
-    sheetNames?: string[],
-    whitelist?: string[]
+    params: SubmitTaskResultFileParams
   ): Promise<{ data?: any; error?: string }> {
+    const { file, sheetNames, whitelist, scenarioIds, scenarioLabels, regions, draft } = params;
     const formData = new FormData();
     formData.append('file', {
       uri: file.uri,
@@ -312,9 +337,19 @@ class TaskService {
     } as any);
     if (sheetNames && sheetNames.length > 0) {
       formData.append('sheetNames', sheetNames.join(','));
+      formData.append('scenarioIds', (scenarioIds || []).join(','));
     }
     if (whitelist && whitelist.length > 0) {
       formData.append('whitelist', whitelist.join(','));
+    }
+    if (scenarioLabels && scenarioLabels.length > 0) {
+      formData.append('scenarioLabels', JSON.stringify(scenarioLabels));
+    }
+    if (regions && regions.length > 0) {
+      formData.append('regions', JSON.stringify(regions));
+    }
+    if (draft !== undefined) {
+      formData.append('draft', String(draft));
     }
     const res = await apiService.patchForm(`/tasks/${id}/submit-result-file`, formData);
     return { data: res.data, error: res.error };

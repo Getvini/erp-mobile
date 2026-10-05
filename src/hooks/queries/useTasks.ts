@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { taskService, TaskDetail } from '@/services/taskService';
+import { taskService, TaskDetail, SubmitTaskResultFileParams } from '@/services/taskService';
+import type { ScanRegion } from '@/utils/sheetScope';
 import { teamService } from '@/services/teamService';
 import { TaskItem } from '@/services/dashboardService';
 import { queryKeys } from '@/services/queryKeys';
@@ -226,6 +227,10 @@ export function useSubmitTaskResultMutation() {
         projectId?: string;
         sheetNames?: string[];
         whitelist?: string[];
+        scenarioIds?: string[];
+        scenarioLabels?: string[];
+        regions?: ScanRegion[];
+        draft?: boolean;
         checkFileUrl?: string;
         checkFileName?: string;
       };
@@ -239,6 +244,7 @@ export function useSubmitTaskResultMutation() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks.detail(variables.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.taskResultChecks.detail(variables.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
     },
   });
@@ -248,18 +254,8 @@ export function useSubmitTaskResultFileMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({
-      id,
-      file,
-      sheetNames,
-      whitelist,
-    }: {
-      id: string;
-      file: { uri: string; name: string; mimeType?: string };
-      sheetNames?: string[];
-      whitelist?: string[];
-    }) => {
-      const res = await taskService.submitTaskResultFile(id, file, sheetNames, whitelist);
+    mutationFn: async ({ id, ...params }: { id: string } & SubmitTaskResultFileParams) => {
+      const res = await taskService.submitTaskResultFile(id, params);
       if (res.error) {
         throw new Error(res.error);
       }
@@ -268,6 +264,7 @@ export function useSubmitTaskResultFileMutation() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks.detail(variables.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.taskResultChecks.detail(variables.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
     },
   });
@@ -688,6 +685,7 @@ export function useSubmitResultForReviewMutation() {
     },
     onSuccess: (_, variables) => {
       invalidateTaskRelated(queryClient, { id: variables.id, projectId: variables.projectId });
+      queryClient.resetQueries({ queryKey: queryKeys.taskResultChecks.detail(variables.id) });
     },
   });
 }

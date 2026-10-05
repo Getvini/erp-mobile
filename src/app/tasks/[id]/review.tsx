@@ -8,6 +8,7 @@ import {
   ScrollView,
   Alert,
   Linking,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -162,7 +163,13 @@ export default function TaskReviewScreen() {
         </View>
       </View>
 
-      <ScrollView className="flex-1" contentContainerClassName="p-4" showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView className="flex-1" behavior="padding">
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         {/* Result Card */}
         <View className="bg-white border border-[#E2E8F0] rounded-2xl p-4 mb-4">
           <View className="flex-row items-center gap-2 mb-3">
@@ -349,6 +356,7 @@ export default function TaskReviewScreen() {
           )}
         </TouchableOpacity>
       </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

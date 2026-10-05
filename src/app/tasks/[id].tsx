@@ -22,18 +22,18 @@ import TaskReviewModal from '@/components/tasks/TaskReviewModal';
 import TaskSubtaskSection from '@/components/tasks/TaskSubtaskSection';
 import TaskLifecycleActions from '@/components/tasks/TaskLifecycleActions';
 import TaskResultChecksPanel from '@/components/tasks/TaskResultChecksPanel';
-import ResultSheetSelectorPanel, {
-  type ResultCheckSource,
-} from '@/components/tasks/ResultSheetSelectorPanel';
+import SubmittedScopeSummary from '@/components/tasks/SubmittedScopeSummary';
+import ConfirmedCheckErrors from '@/components/tasks/ConfirmedCheckErrors';
 import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { safeGoBack } from '@/utils/navigation';
-import { isSpreadsheetFile, resolveSpellCheckLinkSource } from '@/utils/spellCheckLink';
 import { useTeamMembersQuery } from '@/hooks/queries/useProjects';
+import { useTaskResultCheckQuery } from '@/hooks/queries/useTaskResultChecks';
 import {
   hasTeamMemberRole,
   resolveEffectiveTeamMembers,
 } from '@/utils/teamMember';
 import { canDecideTaskOutcome } from '@/utils/taskOutcomeAuthorization';
+import { canSubmitResult } from '@/utils/taskLifecycle';
 import {
   useTaskDetailQuery,
   useTaskReviewsQuery,
@@ -87,6 +87,16 @@ export default function TaskDetailScreen() {
   const { data: taskRes, isLoading: isTaskLoading, refetch: refetchTask } = useTaskDetailQuery(String(id || ''));
   const task: TaskDetail | null = taskRes || null;
   const isLoading = isTaskLoading;
+
+  const { data: resultCheck } = useTaskResultCheckQuery(String(id || ''));
+  const confirmedSpellErrors = useMemo(
+    () => (resultCheck?.finalizedAt ? (resultCheck.reviewedSpellErrors || []).filter((e) => e.confirmed !== false) : []),
+    [resultCheck]
+  );
+  const confirmedQcMismatches = useMemo(
+    () => (resultCheck?.finalizedAt ? (resultCheck.reviewedQcMismatches || []).filter((m) => m.confirmed !== false) : []),
+    [resultCheck]
+  );
 
   const { data: reviewsData, refetch: refetchReviews } = useTaskReviewsQuery(String(id || ''));
   const reviews = reviewsData || [];
@@ -198,16 +208,6 @@ export default function TaskDetailScreen() {
 
   // Tab đang xem: Tổng quan | Công việc con | QC & Kết quả
   const [activeTab, setActiveTab] = useState<'overview' | 'subtasks' | 'qc'>('overview');
-
-  // Nguồn file kết quả đã nộp để chọn lại sheet kiểm tra trong tab QC
-  const [qcSelectedSheets, setQcSelectedSheets] = useState<string[]>([]);
-  const [qcWhitelist, setQcWhitelist] = useState<string[]>([]);
-  const resultSheetSource = useMemo<ResultCheckSource | undefined>(() => {
-    const url = task?.result?.url;
-    if (!url) return undefined;
-    const { url: fileUrl, fileName } = resolveSpellCheckLinkSource(url);
-    return isSpreadsheetFile(fileName) ? { kind: 'url', fileUrl, fileName } : undefined;
-  }, [task?.result?.url]);
 
   const handleStartEditDescription = () => {
     setEditedDescription(task?.description || '');
@@ -698,7 +698,7 @@ export default function TaskDetailScreen() {
               <Text className="text-[15px] font-bold text-slate-900">Kết quả</Text>
             </View>
 
-            {['DOING', 'REJECTED', 'REWORKING', 'OVERDUE'].includes(task.status || '') &&
+            {canSubmitResult(task.status || '') &&
               task.assigneeId !== null && (
                 <TouchableOpacity onPress={() => setIsResultModalOpen(true)}>
                   <Text className="text-xs font-bold text-primary">
@@ -772,6 +772,21 @@ export default function TaskDetailScreen() {
           )}
         </View>
 
+        {task.result ? <SubmittedScopeSummary result={task.result} /> : null}
+
+        {confirmedSpellErrors.length > 0 || confirmedQcMismatches.length > 0 ? (
+          <View className="bg-white rounded-2xl p-4 border border-slate-200">
+            <ConfirmedCheckErrors
+              variant="section"
+              title="Lỗi đã chốt ở kết quả đã nộp"
+              collapsible
+              finalizedAt={resultCheck?.finalizedAt}
+              spellErrors={confirmedSpellErrors}
+              qcMismatches={confirmedQcMismatches}
+            />
+          </View>
+        ) : null}
+
         {/* Iteration History Card */}
         {task.iterations && task.iterations.length > 0 && (
           <View className="bg-white rounded-2xl p-4 border border-slate-200 gap-3">
@@ -808,6 +823,11 @@ export default function TaskDetailScreen() {
                         <Text className="text-xs text-slate-900 italic">{`"${iteration.leadFeedback}"`}</Text>
                       </View>
                     )}
+
+                    <ConfirmedCheckErrors
+                      spellErrors={iteration.confirmedSpellErrors}
+                      qcMismatches={iteration.confirmedQcMismatches}
+                    />
 
                     {iteration.feedbackAttachments && iteration.feedbackAttachments.length > 0 && (
                       <View className="mt-2">
@@ -991,37 +1011,7 @@ export default function TaskDetailScreen() {
           </>
         )}
 
-        {/* ===== Tab: QC & Kết quả =====
-            Tái sử dụng nguyên các panel có sẵn: TaskResultChecksPanel (chính tả + QC, bên trong
-            đã dùng SpellCheckWhitelist) và ResultSheetSelectorPanel (chọn sheet + whitelist + QcProductInfoPanel). */}
-        {activeTab === 'qc' && (
-          <>
-            <TaskResultChecksPanel taskId={task.id} projectId={task.project?.id} />
-
-            {resultSheetSource ? (
-              <ResultSheetSelectorPanel
-                source={resultSheetSource}
-                projectId={task.project?.id}
-                selectedSheets={qcSelectedSheets}
-                onSelectedSheetsChange={setQcSelectedSheets}
-                whitelist={qcWhitelist}
-                onWhitelistChange={setQcWhitelist}
-              />
-            ) : (
-              <View className="bg-white rounded-2xl p-4 border border-slate-200 gap-2">
-                <View className="flex-row items-center gap-2">
-                  <Feather name="file-text" size={15} color="#2563EB" />
-                  <Text className="text-sm font-bold text-slate-900">Chọn sheet kiểm tra</Text>
-                </View>
-                <Text className="text-xs text-slate-500">
-                  {task.result?.url
-                    ? 'Kết quả đã nộp không phải file bảng tính nên không cần chọn sheet kiểm tra.'
-                    : 'Chưa có kết quả nào được nộp để kiểm tra chính tả & QC.'}
-                </Text>
-              </View>
-            )}
-          </>
-        )}
+        {activeTab === 'qc' && <TaskResultChecksPanel taskId={task.id} projectId={task.project?.id} />}
       </ScrollView>
 
       {/* Modals */}
