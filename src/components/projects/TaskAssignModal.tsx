@@ -37,6 +37,9 @@ import { combineDateWithDefaultTime, getMonthRange } from '@/utils/taskLifecycle
 import TaskWorkloadCalendar from '@/components/tasks/TaskWorkloadCalendar';
 import { WorkloadBadge } from '@/components/common/WorkloadBadge';
 import { getTeamMemberRoles } from '@/utils/teamMember';
+import { getWorkloadPercent } from '@/utils/workload';
+import * as Haptics from 'expo-haptics';
+import AssigneeSelectorModal from './AssigneeSelectorModal';
 
 const ITEM_HEIGHT = 38;
 const VISIBLE_ITEMS = 3;
@@ -461,6 +464,7 @@ export default function TaskAssignModal({
   const [selectedAssigneeId, setSelectedAssigneeId] = useState<string>('');
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
   const [selectedVendorId, setSelectedVendorId] = useState<string>('');
+  const [isAssigneePickerVisible, setIsAssigneePickerVisible] = useState(false);
 
   const [dueDate, setDueDate] = useState<string>('');
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -605,6 +609,22 @@ export default function TaskAssignModal({
     const member = teamMembers.find((item) => item.user?.id === selectedAssigneeId);
     return member?.user?.fullName || 'Nhân sự được chọn';
   }, [teamMembers, selectedAssigneeId]);
+
+  const selectedMember = useMemo(() => {
+    return teamMembers.find((m) => m.user?.id === selectedAssigneeId) || null;
+  }, [teamMembers, selectedAssigneeId]);
+
+  const quickSuggestions = useMemo(() => {
+    if (!teamMembers || teamMembers.length === 0) return [];
+    const valid = teamMembers.filter((m) => m.user?.id);
+    return [...valid]
+      .sort((a, b) => {
+        const wA = getWorkloadPercent(a.user?.workload);
+        const wB = getWorkloadPercent(b.user?.workload);
+        return wA - wB;
+      })
+      .slice(0, 3);
+  }, [teamMembers]);
 
   /** Chọn 1 ngày trên lịch tải ⇒ đặt deadline = ngày đó lúc 17:30 (DEFAULT_DEADLINE_TIME) */
   const handleSelectWorkloadDate = useCallback((dateKey: string) => {
@@ -983,49 +1003,127 @@ export default function TaskAssignModal({
                       Đội dự án chưa có thành viên nào. Vui lòng thêm nhân sự vào đội ở Tab Tổng quan.
                     </Text>
                   ) : (
-                    <View className="gap-1.5">
-                      {teamMembers.map((member) => {
-                        const uId = member.user?.id;
-                        if (!uId) return null;
-                        const isSelected = selectedAssigneeId === uId;
-                        const roleLabel = (getTeamMemberRoles(member) as string[])
-                          .map((role) => TEAM_MEMBER_ROLE_LABELS[role] || role)
-                          .join(' · ');
+                    <>
+                      {/* Trigger Card */}
+                      {selectedMember ? (
+                        <TouchableOpacity
+                          className="flex-row items-center gap-3 p-3 border border-primary bg-orange-50/40 rounded-xl"
+                          onPress={() => setIsAssigneePickerVisible(true)}
+                          activeOpacity={0.75}
+                        >
+                          <View className="w-10 h-10 rounded-full bg-orange-100 justify-center items-center">
+                            <Text className="text-base font-bold text-primary">
+                              {selectedMember.user?.fullName
+                                ? selectedMember.user.fullName.trim().charAt(0).toUpperCase()
+                                : 'U'}
+                            </Text>
+                          </View>
 
-                        return (
-                          <TouchableOpacity
-                            key={member.id}
-                            className={`flex-row items-center gap-2.5 p-2.5 border rounded-xl bg-white ${
-                              isSelected ? 'border-primary bg-teal-50/50' : 'border-slate-200'
-                            }`}
-                            onPress={() => setSelectedAssigneeId(uId)}
-                            activeOpacity={0.7}
-                          >
-                            <View className="w-8 h-8 rounded-full bg-blue-50 justify-center items-center">
-                              <Text className="text-[13px] font-bold text-primary">
-                                {member.user?.fullName ? member.user.fullName.charAt(0).toUpperCase() : 'M'}
+                          <View className="flex-1 justify-center min-w-0">
+                            <View className="flex-row items-center gap-1.5 flex-wrap">
+                              <Text className="text-[13px] font-bold text-slate-900" numberOfLines={1}>
+                                {selectedMember.user?.fullName}
+                              </Text>
+                              <WorkloadBadge workload={selectedMember.user?.workload} />
+                            </View>
+                            <Text className="text-[11px] font-medium text-slate-500 mt-0.5" numberOfLines={1}>
+                              {((getTeamMemberRoles(selectedMember) as string[]) || [])
+                                .map((r) => TEAM_MEMBER_ROLE_LABELS[r] || r)
+                                .join(' · ') || 'Thành viên'}
+                            </Text>
+                          </View>
+
+                          <View className="flex-row items-center gap-2">
+                            <View className="px-2.5 py-1 rounded-lg bg-white border border-primary/30">
+                              <Text className="text-xs font-bold text-primary">Đổi</Text>
+                            </View>
+                            <TouchableOpacity
+                              onPress={(e) => {
+                                e.stopPropagation();
+                                setSelectedAssigneeId('');
+                              }}
+                              className="p-1 rounded-full bg-slate-200/60"
+                              activeOpacity={0.7}
+                            >
+                              <Feather name="x" size={14} color="#64748B" />
+                            </TouchableOpacity>
+                          </View>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          className="flex-row items-center justify-between p-3.5 border border-dashed border-slate-300 bg-slate-50/80 rounded-xl"
+                          onPress={() => setIsAssigneePickerVisible(true)}
+                          activeOpacity={0.75}
+                        >
+                          <View className="flex-row items-center gap-2.5">
+                            <View className="w-8 h-8 rounded-full bg-orange-100/70 justify-center items-center">
+                              <Feather name="user-plus" size={16} color={BrandColors.primary} />
+                            </View>
+                            <View>
+                              <Text className="text-[13px] font-semibold text-slate-700">
+                                Chạm để chọn người thực hiện
+                              </Text>
+                              <Text className="text-[11px] text-slate-400">
+                                {teamMembers.length} nhân sự sẵn sàng trong dự án
                               </Text>
                             </View>
+                          </View>
+                          <Feather name="chevron-right" size={18} color="#94A3B8" />
+                        </TouchableOpacity>
+                      )}
 
-                            <View className="flex-1 justify-center min-w-0">
-                              <View className="flex-row items-center gap-1.5 flex-wrap">
-                                <Text className="text-[13px] font-bold text-slate-900" numberOfLines={1}>
-                                  {member.user?.fullName}
+                      {/* Quick Suggestion Chips (Gợi ý nhanh 1-tap) */}
+                      {quickSuggestions.length > 0 && (
+                        <View className="mt-2 flex-row items-center gap-1.5 flex-wrap">
+                          <View className="flex-row items-center gap-1 mr-0.5">
+                            <Feather name="zap" size={12} color={BrandColors.primary} />
+                            <Text className="text-[11px] font-semibold text-slate-500">Gợi ý nhanh:</Text>
+                          </View>
+                          {quickSuggestions.map((m) => {
+                            const uId = m.user?.id;
+                            if (!uId) return null;
+                            const isCurrent = selectedAssigneeId === uId;
+                            const workload = getWorkloadPercent(m.user?.workload);
+                            const nameParts = (m.user?.fullName || '').trim().split(' ');
+                            const shortName =
+                              nameParts.length > 1
+                                ? `${nameParts[0]} ${nameParts[nameParts.length - 1]}`
+                                : m.user?.fullName;
+
+                            return (
+                              <TouchableOpacity
+                                key={uId}
+                                onPress={() => {
+                                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                  setSelectedAssigneeId(uId);
+                                }}
+                                activeOpacity={0.7}
+                                className={`flex-row items-center gap-1 px-2.5 py-1 rounded-lg border ${
+                                  isCurrent
+                                    ? 'bg-primary border-primary'
+                                    : 'bg-white border-slate-200'
+                                }`}
+                              >
+                                <Text
+                                  className={`text-[11px] font-semibold ${
+                                    isCurrent ? 'text-white' : 'text-slate-700'
+                                  }`}
+                                >
+                                  {shortName}
                                 </Text>
-                                <WorkloadBadge workload={member.user?.workload} />
-                              </View>
-                              {roleLabel ? (
-                                <Text className="text-[11px] text-slate-500">{roleLabel}</Text>
-                              ) : null}
-                            </View>
-
-                            {isSelected && (
-                              <Feather name="check-circle" size={18} color={BrandColors.primary} />
-                            )}
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
+                                <Text
+                                  className={`text-[10px] font-bold ${
+                                    isCurrent ? 'text-orange-100' : 'text-slate-400'
+                                  }`}
+                                >
+                                  ({workload}%)
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </>
                   )}
                 </View>
               ) : (
@@ -1288,6 +1386,15 @@ export default function TaskAssignModal({
         currentDateStr={dueDate}
         onSelectDate={(d) => setDueDate(d)}
         onClose={() => setShowDatePicker(false)}
+      />
+
+      {/* Sub-sheet: Dedicated Assignee Selector */}
+      <AssigneeSelectorModal
+        visible={isAssigneePickerVisible}
+        onClose={() => setIsAssigneePickerVisible(false)}
+        teamMembers={teamMembers}
+        selectedAssigneeId={selectedAssigneeId}
+        onSelect={(assigneeId) => setSelectedAssigneeId(assigneeId)}
       />
     </>
   );
