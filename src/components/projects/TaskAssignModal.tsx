@@ -40,6 +40,8 @@ import { getTeamMemberRoles } from '@/utils/teamMember';
 import { getWorkloadPercent } from '@/utils/workload';
 import * as Haptics from 'expo-haptics';
 import AssigneeSelectorModal from './AssigneeSelectorModal';
+import VendorSelectorModal from './VendorSelectorModal';
+import { VendorType, VENDOR_TYPE_LABELS } from '@/services/vendorService';
 
 const ITEM_HEIGHT = 38;
 const VISIBLE_ITEMS = 3;
@@ -465,6 +467,7 @@ export default function TaskAssignModal({
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
   const [selectedVendorId, setSelectedVendorId] = useState<string>('');
   const [isAssigneePickerVisible, setIsAssigneePickerVisible] = useState(false);
+  const [isVendorPickerVisible, setIsVendorPickerVisible] = useState(false);
 
   const [dueDate, setDueDate] = useState<string>('');
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -625,6 +628,15 @@ export default function TaskAssignModal({
       })
       .slice(0, 3);
   }, [teamMembers]);
+
+  const selectedVendor = useMemo(() => {
+    return vendors.find((v) => v.id === selectedVendorId) || null;
+  }, [vendors, selectedVendorId]);
+
+  const quickVendorSuggestions = useMemo(() => {
+    if (!vendors || vendors.length === 0) return [];
+    return vendors.slice(0, 3);
+  }, [vendors]);
 
   /** Chọn 1 ngày trên lịch tải ⇒ đặt deadline = ngày đó lúc 17:30 (DEFAULT_DEADLINE_TIME) */
   const handleSelectWorkloadDate = useCallback((dateKey: string) => {
@@ -1148,33 +1160,121 @@ export default function TaskAssignModal({
                       </Text>
                     </View>
                   ) : (
-                    <View className="gap-1.5">
-                      {vendors.map((v) => {
-                        const isSelected = selectedVendorId === v.id;
-                        return (
-                          <TouchableOpacity
-                            key={v.id}
-                            className={`flex-row items-center gap-2.5 p-2.5 border rounded-xl bg-white ${
-                              isSelected ? 'border-primary bg-teal-50/50' : 'border-slate-200'
-                            }`}
-                            onPress={() => setSelectedVendorId(v.id)}
-                            activeOpacity={0.7}
-                          >
-                            <View className="w-8 h-8 rounded-full bg-blue-50 justify-center items-center">
-                              <Feather name="briefcase" size={15} color={BrandColors.primary} />
+                    <>
+                      {/* Trigger Card for Vendor */}
+                      {selectedVendor ? (
+                        <TouchableOpacity
+                          className="flex-row items-center gap-3 p-3 border border-primary bg-orange-50/40 rounded-xl"
+                          onPress={() => setIsVendorPickerVisible(true)}
+                          activeOpacity={0.75}
+                        >
+                          <View className="w-10 h-10 rounded-full bg-blue-100 justify-center items-center">
+                            <Feather name="briefcase" size={18} color={BrandColors.primary} />
+                          </View>
+
+                          <View className="flex-1 justify-center min-w-0">
+                            <View className="flex-row items-center gap-1.5 flex-wrap">
+                              <Text className="text-[13px] font-bold text-slate-900" numberOfLines={1}>
+                                {selectedVendor.name}
+                              </Text>
+                              {selectedVendor.type && VENDOR_TYPE_LABELS[selectedVendor.type as VendorType] ? (
+                                <View className="px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200">
+                                  <Text className="text-[10px] font-bold text-blue-700">
+                                    {VENDOR_TYPE_LABELS[selectedVendor.type as VendorType]}
+                                  </Text>
+                                </View>
+                              ) : null}
                             </View>
-                            <View className="flex-1">
-                              <Text className="text-[13px] font-bold text-slate-900">{v.name}</Text>
-                              {/* Vendor entity không có `contactPerson` — dùng SĐT, fallback nhãn chung. */}
-                              <Text className="text-[11px] text-slate-500">{v.phone || 'Đối tác Vendor'}</Text>
+                            <Text className="text-[11px] font-medium text-slate-500 mt-0.5" numberOfLines={1}>
+                              {selectedVendor.phone
+                                ? `SĐT: ${selectedVendor.phone}`
+                                : selectedVendor.taxId
+                                ? `MST: ${selectedVendor.taxId}`
+                                : 'Đối tác Vendor'}
+                            </Text>
+                          </View>
+
+                          <View className="flex-row items-center gap-2">
+                            <View className="px-2.5 py-1 rounded-lg bg-white border border-primary/30">
+                              <Text className="text-xs font-bold text-primary">Đổi</Text>
                             </View>
-                            {isSelected && (
-                              <Feather name="check-circle" size={18} color={BrandColors.primary} />
-                            )}
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
+                            <TouchableOpacity
+                              onPress={(e) => {
+                                e.stopPropagation();
+                                setSelectedVendorId('');
+                              }}
+                              className="p-1 rounded-full bg-slate-200/60"
+                              activeOpacity={0.7}
+                            >
+                              <Feather name="x" size={14} color="#64748B" />
+                            </TouchableOpacity>
+                          </View>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          className="flex-row items-center justify-between p-3.5 border border-dashed border-slate-300 bg-slate-50/80 rounded-xl"
+                          onPress={() => setIsVendorPickerVisible(true)}
+                          activeOpacity={0.75}
+                        >
+                          <View className="flex-row items-center gap-2.5">
+                            <View className="w-8 h-8 rounded-full bg-orange-100/70 justify-center items-center">
+                              <Feather name="briefcase" size={16} color={BrandColors.primary} />
+                            </View>
+                            <View>
+                              <Text className="text-[13px] font-semibold text-slate-700">
+                                Chạm để chọn đối tác Vendor
+                              </Text>
+                              <Text className="text-[11px] text-slate-400">
+                                {vendors.length} đối tác sẵn sàng cho dịch vụ này
+                              </Text>
+                            </View>
+                          </View>
+                          <Feather name="chevron-right" size={18} color="#94A3B8" />
+                        </TouchableOpacity>
+                      )}
+
+                      {/* Quick Suggestion Chips for Vendors */}
+                      {quickVendorSuggestions.length > 0 && (
+                        <View className="mt-2 flex-row items-center gap-1.5 flex-wrap">
+                          <View className="flex-row items-center gap-1 mr-0.5">
+                            <Feather name="zap" size={12} color={BrandColors.primary} />
+                            <Text className="text-[11px] font-semibold text-slate-500">Gợi ý nhanh:</Text>
+                          </View>
+                          {quickVendorSuggestions.map((v) => {
+                            const isCurrent = selectedVendorId === v.id;
+                            const typeStr =
+                              v.type && VENDOR_TYPE_LABELS[v.type as VendorType]
+                                ? ` (${VENDOR_TYPE_LABELS[v.type as VendorType]})`
+                                : '';
+                            return (
+                              <TouchableOpacity
+                                key={v.id}
+                                onPress={() => {
+                                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                  setSelectedVendorId(v.id);
+                                }}
+                                activeOpacity={0.7}
+                                className={`flex-row items-center gap-1 px-2.5 py-1 rounded-lg border ${
+                                  isCurrent
+                                    ? 'bg-primary border-primary'
+                                    : 'bg-white border-slate-200'
+                                }`}
+                              >
+                                <Text
+                                  className={`text-[11px] font-semibold ${
+                                    isCurrent ? 'text-white' : 'text-slate-700'
+                                  }`}
+                                  numberOfLines={1}
+                                >
+                                  {v.name}
+                                  {typeStr}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </>
                   )}
                 </View>
               )}
@@ -1395,6 +1495,16 @@ export default function TaskAssignModal({
         teamMembers={teamMembers}
         selectedAssigneeId={selectedAssigneeId}
         onSelect={(assigneeId) => setSelectedAssigneeId(assigneeId)}
+      />
+
+      {/* Sub-sheet: Dedicated Vendor Selector */}
+      <VendorSelectorModal
+        visible={isVendorPickerVisible}
+        onClose={() => setIsVendorPickerVisible(false)}
+        vendors={vendors}
+        selectedVendorId={selectedVendorId}
+        onSelect={(vendorId) => setSelectedVendorId(vendorId)}
+        jobTitle={isBulk ? `(${tasks.length}) công việc` : representativeTask?.name}
       />
     </>
   );
