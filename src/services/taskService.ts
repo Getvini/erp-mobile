@@ -70,6 +70,11 @@ export interface TaskDetail extends TaskItem {
   supportLeadId?: string;
   helperId?: string;
   assignerId?: string;
+  assigner?: {
+    id: string;
+    fullName?: string;
+    name?: string;
+  };
   description?: string;
   expectedResult?: string;
   isExtraTask?: boolean;
@@ -172,7 +177,7 @@ class TaskService {
   }
 
   async getTasksByProject(projectId: string): Promise<{ data?: TaskDetail[]; error?: string }> {
-    const res = await apiService.get<any>('/tasks', { projectId, limit: 100 });
+    const res = await apiService.get<any>('/tasks', { projectId});
     const raw = res.data;
     const items = Array.isArray(raw)
       ? raw

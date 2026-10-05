@@ -104,14 +104,24 @@ export default function ProjectDetailScreen() {
   const removeTeamMemberMutation = useRemoveTeamMemberMutation();
   const resumeProjectMutation = useResumeProjectMutation();
 
-  const { data: tasksData, isLoading: isLoadingTasks, refetch: refetchTasks } = useTasksByProjectQuery(String(id || ''));
-  const tasks: TaskDetail[] = useMemo(() => tasksData || [], [tasksData]);
+  const { data: tasksData, isLoading: isLoadingTasks, isFetching: isTasksFetching, refetch: refetchTasks } = useTasksByProjectQuery(String(id || ''));
+  const tasks: TaskDetail[] = useMemo(() => {
+    if (Array.isArray(project?.tasks) && project.tasks.length > 0) {
+      if (Array.isArray(tasksData) && tasksData.length > 0) {
+        const tasksDataMap = new Map(tasksData.map((t) => [t.id, t]));
+        return project.tasks.map((pt: any) => tasksDataMap.get(pt.id) || pt);
+      }
+      return project.tasks as TaskDetail[];
+    }
+    return tasksData || [];
+  }, [project?.tasks, tasksData]);
+  const isTasksLoadingEffective = isLoadingTasks && (!project?.tasks || project.tasks.length === 0);
 
   const { data: acceptancesData, isLoading: isLoadingAcceptances, refetch: refetchAcceptances } = useAcceptancesQuery({ projectId: String(id || '') });
   const acceptances: AcceptanceItem[] = useMemo(() => acceptancesData || [], [acceptancesData]);
 
   const isLoading = isProjectLoading;
-  const isRefreshing = isProjectFetching;
+  const isRefreshing = isProjectFetching || isTasksFetching;
 
   // Modal & Confirm States
   const [showAssignPm, setShowAssignPm] = useState(false);
@@ -388,6 +398,8 @@ export default function ProjectDetailScreen() {
       case 'MY_TASKS':
       case 'EXTRA':
         refreshPromises.push(
+          refetchTasks(),
+          queryClient.invalidateQueries({ queryKey: queryKeys.tasks.list({ projectId: projId }) }),
           queryClient.invalidateQueries({ queryKey: queryKeys.tasks.byProject(projId) })
         );
         break;
@@ -398,15 +410,17 @@ export default function ProjectDetailScreen() {
         break;
       case 'OVERVIEW':
         refreshPromises.push(
-          queryClient.invalidateQueries({ queryKey: queryKeys.tasks.byProject(projId) }),
-          refetchTeamMembers()
+          refetchTasks(),
+          refetchTeamMembers(),
+          queryClient.invalidateQueries({ queryKey: queryKeys.tasks.list({ projectId: projId }) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.tasks.byProject(projId) })
         );
         break;
       // PRODUCT_DESC, SERVICES, PAUSE đã được làm mới qua queryKeys.projects.detail(projId)
     }
 
     await Promise.all(refreshPromises);
-  }, [id, activeTab, queryClient, refetchTeamMembers]);
+  }, [id, activeTab, queryClient, refetchTasks, refetchTeamMembers]);
 
   /** "Làm tiếp" chỉ cần xác nhận, không có form lý do (mirror Web handleResume). */
   const handleResumeProject = () => {
@@ -745,7 +759,7 @@ export default function ProjectDetailScreen() {
           {activeTab === 'TASKS' && (
           <ProjectTasksTab
               tasks={tasks}
-              isLoading={isLoadingTasks}
+              isLoading={isTasksLoadingEffective}
               projectStatus={project?.status}
               canAssignTasks={canAssignTasks}
               canCreateProjectWork={isPmOrAdmin}
@@ -772,7 +786,7 @@ export default function ProjectDetailScreen() {
             <ProjectMyTasksTab
               projectId={String(id || '')}
               tasks={tasks}
-              isLoading={isLoadingTasks}
+              isLoading={isTasksLoadingEffective}
               currentUserId={user?.id}
               projectStatus={project?.status}
               onChanged={handleRefresh}
@@ -786,7 +800,7 @@ export default function ProjectDetailScreen() {
           {activeTab === 'EXTRA' && (
             <ProjectExtraTasksTab
               tasks={tasks}
-              isLoading={isLoadingTasks}
+              isLoading={isTasksLoadingEffective}
               projectId={String(id || '')}
             />
           )}

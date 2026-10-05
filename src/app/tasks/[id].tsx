@@ -46,14 +46,23 @@ import {
   useSendTaskReminderMutation,
 } from '@/hooks/queries/useTasks';
 
-const formatDateTimeStr = (dateStr?: string) => {
-  if (!dateStr) return 'Chưa thiết lập';
+const PERFORMER_TYPE_LABELS: Record<string, string> = {
+  INTERNAL: 'NỘI BỘ',
+  PARTNER: 'ĐỐI TÁC',
+  VENDOR: 'VENDOR',
+};
+
+const formatDateTimeStr = (dateStr?: string, fallback = 'Chưa thiết lập') => {
+  if (!dateStr) return fallback;
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
-    const dateFormatted = d.toLocaleDateString('vi-VN');
-    const timeFormatted = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-    return `${dateFormatted} - ${timeFormatted}`;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes} ${day}/${month}/${year}`;
   } catch {
     return dateStr;
   }
@@ -833,15 +842,15 @@ export default function TaskDetailScreen() {
         <View className="bg-white rounded-2xl p-4 border border-slate-200 gap-3">
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center gap-2.5">
-              <View className="w-8 h-8 rounded-lg bg-blue-50 items-center justify-center">
-                <Feather name="user" size={16} color="#2563EB" />
+              <View className="w-8 h-8 rounded-lg bg-orange-50 items-center justify-center">
+                <Feather name="user" size={16} color="#F97316" />
               </View>
               <Text className="text-[15px] font-bold text-slate-900">Nhân sự thực hiện</Text>
             </View>
           </View>
 
           <View className="flex-row items-center gap-3">
-            <View className="w-10 h-10 rounded-full bg-primary items-center justify-center">
+            <View className="w-11 h-11 rounded-2xl bg-indigo-600 items-center justify-center shadow-sm">
               <Text className="text-base font-bold text-white">
                 {task.assignee?.fullName?.charAt(0) || 'U'}
               </Text>
@@ -850,8 +859,38 @@ export default function TaskDetailScreen() {
               <Text className="text-sm font-bold text-slate-900">
                 {task.assignee?.fullName || task.assignee?.name || 'Chưa có người thực hiện'}
               </Text>
-              <Text className="text-[11px] font-bold text-slate-400 mt-0.5">
-                {task.performerType || 'INTERNAL'}
+              <Text className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+                {PERFORMER_TYPE_LABELS[task.performerType || ''] || task.performerType || 'NỘI BỘ'}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Assigner Card */}
+        <View className="bg-white rounded-2xl p-4 border border-slate-200 gap-3">
+          <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center gap-2.5">
+              <View className="w-8 h-8 rounded-lg bg-indigo-50 items-center justify-center">
+                <Feather name="user-plus" size={16} color="#6366F1" />
+              </View>
+              <Text className="text-[15px] font-bold text-slate-900">Nhân sự phân công</Text>
+            </View>
+          </View>
+
+          <View className="flex-row items-center gap-3">
+            <View className="w-11 h-11 rounded-2xl bg-violet-600 items-center justify-center shadow-sm">
+              <Text className="text-base font-bold text-white">
+                {task.assigner?.fullName?.charAt(0) || (
+                  <Feather name="user-plus" size={18} color="#FFFFFF" />
+                )}
+              </Text>
+            </View>
+            <View className="flex-1">
+              <Text className="text-sm font-bold text-slate-900">
+                {task.assigner?.fullName || task.assigner?.name || 'Chưa có thông tin'}
+              </Text>
+              <Text className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+                Người giao việc
               </Text>
             </View>
           </View>
@@ -861,16 +900,31 @@ export default function TaskDetailScreen() {
         <View className="bg-white rounded-2xl p-4 border border-slate-200 gap-3">
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center gap-2.5">
-              <View className="w-8 h-8 rounded-lg bg-amber-100 items-center justify-center">
+              <View className="w-8 h-8 rounded-lg bg-amber-50 items-center justify-center">
                 <Feather name="calendar" size={16} color="#D97706" />
               </View>
               <Text className="text-[15px] font-bold text-slate-900">Kế hoạch</Text>
             </View>
           </View>
 
-          <View className="gap-1">
-            <Text className="text-[10px] font-extrabold text-slate-400 tracking-wider">DEADLINE (HẠN HOÀN THÀNH)</Text>
-            <Text className="text-sm font-bold text-slate-900">{formatDateTimeStr(task.plannedEndDate || task.dueDate)}</Text>
+          <View className="flex-row items-start justify-between gap-3 pt-1">
+            <View className="flex-1 gap-1">
+              <Text className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                DEADLINE
+              </Text>
+              <Text className="text-sm font-bold text-slate-800">
+                {formatDateTimeStr(task.plannedEndDate || task.dueDate)}
+              </Text>
+            </View>
+
+            <View className="flex-1 gap-1">
+              <Text className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                NGÀY BẮT ĐẦU CÔNG VIỆC
+              </Text>
+              <Text className="text-sm font-bold text-slate-800">
+                {formatDateTimeStr(task.plannedStartDate, 'Chưa có thông tin')}
+              </Text>
+            </View>
           </View>
         </View>
 
