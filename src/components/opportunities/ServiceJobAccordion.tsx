@@ -40,7 +40,7 @@ export const ServiceJobAccordion: React.FC<ServiceJobAccordionProps> = ({
   mode = 'quotation_view',
   onJobIncludedChange,
   onJobBriefChange,
-  defaultExpanded = true,
+  defaultExpanded = false,
 }) => {
   const [isOpen, setIsOpen] = useState(defaultExpanded);
 
