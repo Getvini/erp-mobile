@@ -184,16 +184,21 @@ export interface PaymentRequestsTotalDebt {
 
 export interface CreatePaymentRequestPayload {
   type: string;
-  title: string;
+  title?: string;
+  content?: string;
   amount: number;
   reason?: string;
+  dueDate?: string;
   projectId?: string;
+  taskId?: string;
   contractId?: string;
   vendorId?: string;
   beneficiaryName?: string;
   beneficiaryAccount?: string;
   beneficiaryBank?: string;
   invoiceFiles?: any[];
+  invoiceImages?: any[];
+  invoicePdfs?: any[];
 }
 
 export interface UpdatePaymentRequestPayload {
