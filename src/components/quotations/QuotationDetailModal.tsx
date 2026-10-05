@@ -19,8 +19,10 @@ import {
   useApproveQuotationMutation,
   useRejectQuotationMutation,
 } from '@/hooks/queries/useQuotations';
+import { useAvailableServicesQuery } from '@/hooks/queries/useOpportunities';
 import { formatVND, formatDateToDDMMYYYY } from '@/utils/formatters';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { ServiceJobAccordion } from '@/components/opportunities/ServiceJobAccordion';
 
 export interface QuotationDetailModalProps {
   visible: boolean;
@@ -50,6 +52,15 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
   const { data: quotation, isLoading } = useQuotationDetailQuery(
     visible && quotationId ? quotationId : ''
   );
+  const { data: availableServices = [] } = useAvailableServicesQuery();
+
+  const servicesById = useMemo(() => {
+    const map = new Map<string, any>();
+    availableServices.forEach((s: any) => {
+      if (s.id) map.set(String(s.id), s);
+    });
+    return map;
+  }, [availableServices]);
 
   const approveMutation = useApproveQuotationMutation();
   const rejectMutation = useRejectQuotationMutation();
@@ -340,6 +351,18 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
                               </Text>
                             </View>
                           )}
+
+                          {/* Hạng mục con lồng trong dịch vụ */}
+                          <ServiceJobAccordion
+                            jobs={
+                              (it.jobs && it.jobs.length > 0 ? it.jobs : null) ||
+                              (it.serviceJobs && it.serviceJobs.length > 0 ? it.serviceJobs : null) ||
+                              (it.service?.serviceJobs && it.service?.serviceJobs.length > 0 ? it.service.serviceJobs : null) ||
+                              servicesById.get(String(it.serviceId || it.service?.id))?.serviceJobs ||
+                              []
+                            }
+                            mode="quotation_view"
+                          />
                         </View>
                       );
                     })}
@@ -360,7 +383,6 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
                       const desc = it.service?.description || it.description;
                       const itemKey = `standalone-${it.id || itIdx}`;
                       const isExpanded = !!expandedItems[itemKey];
-
                       return (
                         <View key={it.id || itIdx} style={styles.tableRowContainer}>
                           <TouchableOpacity
@@ -373,7 +395,7 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
                             }}
                           >
                             <View style={{ flex: 1 }}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                              <View style={{ flexDirection: 'row', backgroundColor: 'transparent', alignItems: 'center', gap: 5 }}>
                                 {desc && (
                                   <Feather
                                     name={isExpanded ? 'chevron-down' : 'chevron-right'}
@@ -400,6 +422,18 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
                               </Text>
                             </View>
                           )}
+
+                          {/* Hạng mục con lồng trong dịch vụ lẻ */}
+                          <ServiceJobAccordion
+                            jobs={
+                              (it.jobs && it.jobs.length > 0 ? it.jobs : null) ||
+                              (it.serviceJobs && it.serviceJobs.length > 0 ? it.serviceJobs : null) ||
+                              (it.service?.serviceJobs && it.service?.serviceJobs.length > 0 ? it.service.serviceJobs : null) ||
+                              servicesById.get(String(it.serviceId || it.service?.id))?.serviceJobs ||
+                              []
+                            }
+                            mode="quotation_view"
+                          />
                         </View>
                       );
                     })}

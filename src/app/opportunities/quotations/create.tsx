@@ -36,6 +36,7 @@ import {
   formatNumberInput,
   parseNumberInput,
 } from '@/utils/formatters';
+import { ServiceJobAccordion } from '@/components/opportunities/ServiceJobAccordion';
 
 interface QuotationFormItem {
   serviceId: string;
@@ -52,6 +53,7 @@ interface QuotationFormItem {
   norm?: number;
   servicePackageId?: string;
   unit?: string;
+  jobs?: any[];
 }
 
 export default function QuotationCreateEditScreen() {
@@ -794,7 +796,7 @@ export default function QuotationCreateEditScreen() {
                         pkg.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
                       }`}
                     >
-                      Margin: {pkg.profitMargin.toFixed(0)}%
+                      Tỉ suất lợi nhuận: {pkg.profitMargin.toFixed(0)}%
                     </Text>
                   </View>
                   <View className="flex-row items-center justify-between">
@@ -837,7 +839,7 @@ export default function QuotationCreateEditScreen() {
                               sub.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
                             }`}
                           >
-                            Margin: {sub.profitMargin.toFixed(0)}%
+                            Tỉ suất lợi nhuận: {sub.profitMargin.toFixed(0)}%
                           </Text>
                         </View>
                         <Text className="mt-0.5 text-[11px] text-slate-500">
@@ -951,7 +953,7 @@ export default function QuotationCreateEditScreen() {
                       item.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
                     }`}
                   >
-                    Margin: {item.profitMargin.toFixed(0)}%
+                    Tỉ suất lợi nhuận: {item.profitMargin.toFixed(0)}%
                   </Text>
                 </View>
 
@@ -963,6 +965,12 @@ export default function QuotationCreateEditScreen() {
                   </Text>
                 </View>
               </View>
+
+              {/* Hạng mục con lồng trong dịch vụ lẻ */}
+              <ServiceJobAccordion
+                jobs={item.jobs}
+                mode="quotation_edit"
+              />
             </View>
           ))}
 
@@ -1019,7 +1027,7 @@ export default function QuotationCreateEditScreen() {
 
             <View className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-[3px]">
               <Text className="text-xs font-extrabold text-emerald-800">
-                Margin: {totals.margin.toFixed(0)}%
+                Tỉ suất lợi nhuận: {totals.margin.toFixed(0)}%
               </Text>
             </View>
           </View>

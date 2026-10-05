@@ -10,4 +10,5 @@ export * from './OpportunityQuotationsTab';
 export * from './OpportunityBottomActionBar';
 export * from './ServicePackageBottomSheet';
 export * from './ServiceSelectionBottomSheet';
+export * from './ServiceJobAccordion';
 

@@ -27,6 +27,7 @@ import {
   formatNumberInput,
   parseNumberInput,
 } from '@/utils/formatters';
+import { ServiceJobAccordion } from '@/components/opportunities/ServiceJobAccordion';
 
 export interface EditableQuotationItem {
   _tempId: string;
@@ -39,6 +40,7 @@ export interface EditableQuotationItem {
   servicePackageId?: string;
   packageName?: string;
   isPackageService?: boolean;
+  jobs?: any[];
 }
 
 export interface QuotationModalProps {
@@ -94,6 +96,7 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
           servicePackageId: d.servicePackageId,
           packageName: d.packageName,
           isPackageService: Boolean(d.isPackageService),
+          jobs: d.jobs || d.serviceJobs || d.service?.serviceJobs || [],
         })
       );
       setItems(loaded);
@@ -143,6 +146,7 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
         costPrice: cost,
         sellingPrice: defaultSelling,
         quantity: 1,
+        jobs: service.serviceJobs || service.jobs || [],
       },
     ]);
     setShowItemPicker(false);
@@ -167,6 +171,7 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
         servicePackageId: pkg.id,
         packageName: pkg.name,
         isPackageService: true,
+        jobs: s.serviceJobs || srv.serviceJobs || s.jobs || srv.jobs || [],
       };
     });
 
@@ -391,6 +396,12 @@ export const QuotationModal: React.FC<QuotationModalProps> = ({
                         </Text>
                       </View>
                     </View>
+
+                    {/* Hạng mục con lồng dưới dịch vụ */}
+                    <ServiceJobAccordion
+                      jobs={item.jobs}
+                      mode="quotation_edit"
+                    />
                   </View>
                 ))}
               </View>

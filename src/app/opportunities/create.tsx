@@ -22,7 +22,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Feather } from '@expo/vector-icons';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { DatePickerModal } from '@/components/common/DatePickerModal';
-import { ServicePackageBottomSheet, ServiceSelectionBottomSheet } from '@/components/opportunities';
+import { ServicePackageBottomSheet, ServiceSelectionBottomSheet, ServiceJobAccordion } from '@/components/opportunities';
 import { BrandColors } from '@/constants/colors';
 import { CreateOpportunityPayload } from '@/services/opportunityService';
 import {
@@ -1639,7 +1639,18 @@ export default function CreateOpportunityScreen() {
                         <View className="gap-[8px]">
                           {pkgServices.map((serviceItem, sIdx) => {
                             const foundSub = availableServices.find((s) => String(s.id) === String(serviceItem.serviceId));
-                            const briefJobs = (serviceItem.jobs || []).filter((j) => j.isBriefVideo);
+                            const allJobs = serviceItem.jobs && serviceItem.jobs.length > 0
+                              ? serviceItem.jobs
+                              : (foundSub?.serviceJobs || []).map((sj: any) => ({
+                                  jobId: sj.job?.id || sj.jobId || sj.id,
+                                  name: sj.job?.name || sj.name || 'Hạng mục',
+                                  costPrice: sj.job?.costPrice || sj.costPrice || 0,
+                                  unit: sj.job?.unit || sj.unit || '',
+                                  isBriefVideo: Boolean(sj.job?.isBriefVideo || sj.isBriefVideo),
+                                  isQuotationItem: sj.job?.isQuotationItem !== false && sj.isQuotationItem !== false,
+                                  included: !Boolean(sj.job?.isBriefVideo || sj.isBriefVideo),
+                                  briefVideo: '',
+                                }));
 
                             return (
                               <View
@@ -1677,46 +1688,13 @@ export default function CreateOpportunityScreen() {
                                   </TouchableOpacity>
                                 </View>
 
-                                {/* Brief jobs for package sub-service */}
-                                {briefJobs.map((job) => (
-                                  <View key={job.jobId} className="pt-[6px] border-t border-t-slate-100 gap-[6px]">
-                                    <TouchableOpacity
-                                      onPress={() =>
-                                        setPackageServiceJobIncluded(idx, sIdx, job.jobId, !job.included)
-                                      }
-                                      activeOpacity={0.7}
-                                      className="flex-row items-center gap-[8px]">
-                                      <Feather
-                                        name={job.included ? 'check-square' : 'square'}
-                                        size={16}
-                                        color={job.included ? '#2563EB' : '#94A3B8'}
-                                      />
-                                      <Text className="text-[12px] font-semibold text-blue-900">
-                                        Thêm công việc: {job.name}
-                                      </Text>
-                                    </TouchableOpacity>
-
-                                    {job.included && (
-                                      <View className="mt-[2px]">
-                                        <Text className="text-[11px] font-bold text-slate-700 mb-[4px]">
-                                          Brief cho {job.name} <Text className="text-[#EF4444]">*</Text>
-                                        </Text>
-                                        <TextInput
-                                          multiline
-                                          numberOfLines={3}
-                                          textAlignVertical="top"
-                                          value={job.briefVideo || ''}
-                                          onChangeText={(txt) =>
-                                            setPackageServiceJobBrief(idx, sIdx, job.jobId, txt)
-                                          }
-                                          placeholder="Nhập brief khách hàng để thực hiện video AI demo..."
-                                          placeholderTextColor="#94A3B8"
-                                          className="w-full min-h-[70px] bg-slate-50 border border-slate-200 rounded-[8px] p-[8px] text-[12px] text-slate-900"
-                                        />
-                                      </View>
-                                    )}
-                                  </View>
-                                ))}
+                                {/* Hạng mục con lồng trong dịch vụ gói */}
+                                <ServiceJobAccordion
+                                  jobs={allJobs}
+                                  mode="opportunity_create"
+                                  onJobIncludedChange={(jobId, included) => setPackageServiceJobIncluded(idx, sIdx, jobId, included)}
+                                  onJobBriefChange={(jobId, briefText) => setPackageServiceJobBrief(idx, sIdx, jobId, briefText)}
+                                />
                               </View>
                             );
                           })}
@@ -1743,7 +1721,18 @@ export default function CreateOpportunityScreen() {
 
               {services.map((row, idx) => {
                 const selectedServ = availableServices.find((s) => String(s.id) === String(row.serviceId));
-                const briefJobs = (row.jobs || []).filter((j) => j.isBriefVideo);
+                const allJobs = row.jobs && row.jobs.length > 0
+                  ? row.jobs
+                  : (selectedServ?.serviceJobs || []).map((sj: any) => ({
+                      jobId: sj.job?.id || sj.jobId || sj.id,
+                      name: sj.job?.name || sj.name || 'Hạng mục',
+                      costPrice: sj.job?.costPrice || sj.costPrice || 0,
+                      unit: sj.job?.unit || sj.unit || '',
+                      isBriefVideo: Boolean(sj.job?.isBriefVideo || sj.isBriefVideo),
+                      isQuotationItem: sj.job?.isQuotationItem !== false && sj.isQuotationItem !== false,
+                      included: !Boolean(sj.job?.isBriefVideo || sj.isBriefVideo),
+                      briefVideo: '',
+                    }));
 
                 return (
                   <View key={idx} className="bg-slate-50 rounded-[12px] p-[10px] border border-slate-200 mb-[8px] gap-[8px]">
@@ -1777,42 +1766,13 @@ export default function CreateOpportunityScreen() {
                       </TouchableOpacity>
                     </View>
 
-                    {/* Brief jobs for standalone service */}
-                    {briefJobs.map((job) => (
-                      <View key={job.jobId} className="pt-[6px] border-t border-t-slate-200 gap-[6px]">
-                        <TouchableOpacity
-                          onPress={() => setServiceJobIncluded(idx, job.jobId, !job.included)}
-                          activeOpacity={0.7}
-                          className="flex-row items-center gap-[8px]">
-                          <Feather
-                            name={job.included ? 'check-square' : 'square'}
-                            size={16}
-                            color={job.included ? '#2563EB' : '#94A3B8'}
-                          />
-                          <Text className="text-[12px] font-semibold text-slate-800">
-                            Thêm công việc: {job.name}
-                          </Text>
-                        </TouchableOpacity>
-
-                        {job.included && (
-                          <View className="mt-[2px]">
-                            <Text className="text-[11px] font-bold text-slate-700 mb-[4px]">
-                              Brief cho {job.name} <Text className="text-[#EF4444]">*</Text>
-                            </Text>
-                            <TextInput
-                              multiline
-                              numberOfLines={3}
-                              textAlignVertical="top"
-                              value={job.briefVideo || ''}
-                              onChangeText={(txt) => setServiceJobBrief(idx, job.jobId, txt)}
-                              placeholder="Nhập brief khách hàng để thực hiện video AI demo..."
-                              placeholderTextColor="#94A3B8"
-                              className="w-full min-h-[70px] bg-white border border-slate-300 rounded-[8px] p-[8px] text-[12px] text-slate-900"
-                            />
-                          </View>
-                        )}
-                      </View>
-                    ))}
+                    {/* Hạng mục con lồng trong dịch vụ lẻ */}
+                    <ServiceJobAccordion
+                      jobs={allJobs}
+                      mode="opportunity_create"
+                      onJobIncludedChange={(jobId, included) => setServiceJobIncluded(idx, jobId, included)}
+                      onJobBriefChange={(jobId, briefText) => setServiceJobBrief(idx, jobId, briefText)}
+                    />
                   </View>
                 );
               })}
