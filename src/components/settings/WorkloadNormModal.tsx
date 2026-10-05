@@ -22,17 +22,19 @@ import {
   useUpdateWorkloadNormsMutation,
 } from '@/hooks/queries/useSettings';
 import { formatNumber } from '@/utils/formatters';
+import { STAFF_ROLES, USER_ROLE_COLORS } from '@/utils/rbac';
+import { USER_ROLE } from '@/services/teamService';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const STAFF_ROLES = ['STAFF_A', 'STAFF_B', 'STAFF_C', 'STAFF_D'] as const;
+const CATEGORY_TABS = [
+  { id: 'ALL', label: 'Tất cả' },
+  { id: 'CONTENT', label: 'Content' },
+  { id: 'EDITOR', label: 'Editor' },
+  { id: 'DESIGNER', label: 'Designer' },
+] as const;
 
-const ROLE_LABELS: Record<string, string> = {
-  STAFF_A: 'Nhân sự Level A',
-  STAFF_B: 'Nhân sự Level B',
-  STAFF_C: 'Nhân sự Level C',
-  STAFF_D: 'Nhân sự Level D',
-};
+type CategoryId = typeof CATEGORY_TABS[number]['id'];
 
 interface WorkloadNormModalProps {
   visible: boolean;
@@ -44,6 +46,7 @@ export const WorkloadNormModal: React.FC<WorkloadNormModalProps> = ({ visible, o
   const updateMutation = useUpdateWorkloadNormsMutation();
 
   const [norms, setNorms] = useState<Record<string, string>>({});
+  const [activeCategory, setActiveCategory] = useState<CategoryId>('ALL');
   const panY = useState(() => new Animated.Value(0))[0];
 
   const serverNorms = useMemo(() => normData?.norms || [], [normData?.norms]);
@@ -56,13 +59,12 @@ export const WorkloadNormModal: React.FC<WorkloadNormModalProps> = ({ visible, o
   }, [visible]);
 
   useEffect(() => {
-    if (serverNorms.length > 0) {
-      setNorms(
-        Object.fromEntries(serverNorms.map((item) => [item.role, String(item.monthlyNorm || '')]))
-      );
-    } else {
-      setNorms(Object.fromEntries(STAFF_ROLES.map((role) => [role, ''])));
-    }
+    const initialNorms: Record<string, string> = {};
+    STAFF_ROLES.forEach((role) => {
+      const found = serverNorms.find((item) => item.role === role);
+      initialNorms[role] = found ? String(found.monthlyNorm || '') : '';
+    });
+    setNorms(initialNorms);
   }, [serverNorms]);
 
   const panResponder = useState(() =>
@@ -102,11 +104,24 @@ export const WorkloadNormModal: React.FC<WorkloadNormModalProps> = ({ visible, o
     return allFilled && isDirty;
   }, [norms, isDirty]);
 
+  const displayedRoles = useMemo(() => {
+    if (activeCategory === 'ALL') return STAFF_ROLES;
+    return STAFF_ROLES.filter((role) => role.startsWith(activeCategory));
+  }, [activeCategory]);
+
+  const getCategoryCount = (catId: CategoryId) => {
+    if (catId === 'ALL') return STAFF_ROLES.length;
+    return STAFF_ROLES.filter((role) => role.startsWith(catId)).length;
+  };
+
   const handleReset = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setNorms(
-      Object.fromEntries(serverNorms.map((item) => [item.role, String(item.monthlyNorm || '')]))
-    );
+    const resetValues: Record<string, string> = {};
+    STAFF_ROLES.forEach((role) => {
+      const found = serverNorms.find((item) => item.role === role);
+      resetValues[role] = found ? String(found.monthlyNorm || '') : '';
+    });
+    setNorms(resetValues);
   };
 
   const handleSave = async () => {
@@ -168,6 +183,55 @@ export const WorkloadNormModal: React.FC<WorkloadNormModalProps> = ({ visible, o
             </Text>
           </View>
 
+          {/* Category Tabs */}
+          <View style={styles.categoryTabsContainer}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryTabsScroll}
+            >
+              {CATEGORY_TABS.map((tab) => {
+                const isActive = activeCategory === tab.id;
+                const count = getCategoryCount(tab.id);
+                return (
+                  <TouchableOpacity
+                    key={tab.id}
+                    style={[styles.categoryTab, isActive && styles.categoryTabActive]}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setActiveCategory(tab.id);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.categoryTabText,
+                        isActive && styles.categoryTabTextActive,
+                      ]}
+                    >
+                      {tab.label}
+                    </Text>
+                    <View
+                      style={[
+                        styles.categoryBadge,
+                        isActive && styles.categoryBadgeActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryBadgeText,
+                          isActive && styles.categoryBadgeTextActive,
+                        ]}
+                      >
+                        {count}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
           {isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#F38820" />
@@ -180,19 +244,40 @@ export const WorkloadNormModal: React.FC<WorkloadNormModalProps> = ({ visible, o
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              {STAFF_ROLES.map((role) => {
+              {displayedRoles.map((role) => {
                 const row = serverNorms.find((item) => item.role === role);
                 const monthlyVal = Number(norms[role] || 0);
                 const dailyVal = monthlyVal > 0 ? monthlyVal / 30 : 0;
                 const isCustomized = row?.isCustomized ?? false;
+                const colorConfig = USER_ROLE_COLORS[role] || {
+                  bg: '#F8FAFC',
+                  text: '#64748B',
+                  border: '#E2E8F0',
+                };
 
                 return (
                   <View key={role} style={styles.roleCard}>
                     <View style={styles.cardHeader}>
                       <View style={styles.roleTitleGroup}>
-                        <Text style={styles.roleName}>{ROLE_LABELS[role] || role}</Text>
-                        <View style={styles.roleCodeBadge}>
-                          <Text style={styles.roleCodeText}>{role}</Text>
+                        <Text style={styles.roleName}>{USER_ROLE[role] || role}</Text>
+                        <View
+                          style={[
+                            styles.roleCodeBadge,
+                            {
+                              backgroundColor: colorConfig.bg,
+                              borderColor: colorConfig.border,
+                              borderWidth: 1,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.roleCodeText,
+                              { color: colorConfig.text },
+                            ]}
+                          >
+                            {role}
+                          </Text>
                         </View>
                       </View>
 
@@ -363,6 +448,55 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#1E40AF',
     lineHeight: 18,
+  },
+  categoryTabsContainer: {
+    marginHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  categoryTabsScroll: {
+    gap: 8,
+    paddingVertical: 2,
+  },
+  categoryTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    gap: 6,
+  },
+  categoryTabActive: {
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+  },
+  categoryTabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  categoryTabTextActive: {
+    color: '#C2410C',
+    fontWeight: '700',
+  },
+  categoryBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 10,
+    backgroundColor: '#E2E8F0',
+  },
+  categoryBadgeActive: {
+    backgroundColor: '#FED7AA',
+  },
+  categoryBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  categoryBadgeTextActive: {
+    color: '#9A3412',
   },
   loadingContainer: {
     paddingVertical: 40,
