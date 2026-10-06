@@ -5,11 +5,13 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
+  TextInput,
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useProjectsQuery } from '@/hooks/queries/useProjects';
 import {
   APPROVAL_STATUS_LABELS,
   PAYMENT_STATUS_LABELS,
@@ -19,6 +21,14 @@ export interface FilterValues {
   type: string;
   approvalStatus: string;
   paymentStatus: string;
+  dateField: string;
+  fromDate: string;
+  toDate: string;
+  minAmount: string;
+  maxAmount: string;
+  projectId: string;
+  sortBy: string;
+  sortOrder: 'ASC' | 'DESC';
 }
 
 export interface PaymentRequestFilterModalProps {
@@ -33,6 +43,22 @@ const TYPE_OPTIONS = [
   { value: 'PROJECT', label: 'Theo dự án' },
   { value: 'OTHER_WORK', label: 'Công việc khác' },
 ];
+
+const DATE_FIELD_OPTIONS = [
+  { value: 'dueDate', label: 'Hạn thanh toán' },
+  { value: 'createdAt', label: 'Ngày tạo' },
+];
+
+const SORT_OPTIONS = [
+  { value: 'createdAt:DESC', label: 'Mới tạo nhất' },
+  { value: 'createdAt:ASC', label: 'Cũ nhất' },
+  { value: 'amount:DESC', label: 'Số tiền giảm dần' },
+  { value: 'amount:ASC', label: 'Số tiền tăng dần' },
+  { value: 'dueDate:ASC', label: 'Hạn gần nhất' },
+  { value: 'dueDate:DESC', label: 'Hạn xa nhất' },
+];
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const APPROVAL_OPTIONS = [
   { value: 'ALL', label: 'Tất cả trạng thái duyệt' },
@@ -66,12 +92,27 @@ export const PaymentRequestFilterModal: React.FC<PaymentRequestFilterModalProps>
   const [selectedType, setSelectedType] = useState(initialFilters.type || 'ALL');
   const [selectedApproval, setSelectedApproval] = useState(initialFilters.approvalStatus || 'ALL');
   const [selectedPayment, setSelectedPayment] = useState(initialFilters.paymentStatus || 'ALL');
+  const [dateField, setDateField] = useState(initialFilters.dateField || 'dueDate');
+  const [fromDate, setFromDate] = useState(initialFilters.fromDate || '');
+  const [toDate, setToDate] = useState(initialFilters.toDate || '');
+  const [minAmount, setMinAmount] = useState(initialFilters.minAmount || '');
+  const [maxAmount, setMaxAmount] = useState(initialFilters.maxAmount || '');
+  const [projectId, setProjectId] = useState(initialFilters.projectId || '');
+  const [sortKey, setSortKey] = useState(`${initialFilters.sortBy || 'createdAt'}:${initialFilters.sortOrder || 'DESC'}`);
+  const { data: projects = [] } = useProjectsQuery();
 
   useEffect(() => {
     if (visible) {
       setSelectedType(initialFilters.type || 'ALL');
       setSelectedApproval(initialFilters.approvalStatus || 'ALL');
       setSelectedPayment(initialFilters.paymentStatus || 'ALL');
+      setDateField(initialFilters.dateField || 'dueDate');
+      setFromDate(initialFilters.fromDate || '');
+      setToDate(initialFilters.toDate || '');
+      setMinAmount(initialFilters.minAmount || '');
+      setMaxAmount(initialFilters.maxAmount || '');
+      setProjectId(initialFilters.projectId || '');
+      setSortKey(`${initialFilters.sortBy || 'createdAt'}:${initialFilters.sortOrder || 'DESC'}`);
     }
   }, [visible, initialFilters]);
 
@@ -80,6 +121,13 @@ export const PaymentRequestFilterModal: React.FC<PaymentRequestFilterModalProps>
     setSelectedType('ALL');
     setSelectedApproval('ALL');
     setSelectedPayment('ALL');
+    setDateField('dueDate');
+    setFromDate('');
+    setToDate('');
+    setMinAmount('');
+    setMaxAmount('');
+    setProjectId('');
+    setSortKey('createdAt:DESC');
   };
 
   const handleApply = () => {
@@ -88,6 +136,14 @@ export const PaymentRequestFilterModal: React.FC<PaymentRequestFilterModalProps>
       type: selectedType,
       approvalStatus: selectedApproval,
       paymentStatus: selectedPayment,
+      dateField,
+      fromDate: DATE_RE.test(fromDate.trim()) ? fromDate.trim() : '',
+      toDate: DATE_RE.test(toDate.trim()) ? toDate.trim() : '',
+      minAmount: minAmount.replace(/\D/g, ''),
+      maxAmount: maxAmount.replace(/\D/g, ''),
+      projectId,
+      sortBy: sortKey.split(':')[0],
+      sortOrder: sortKey.split(':')[1] as 'ASC' | 'DESC',
     });
     onClose();
   };
@@ -261,6 +317,137 @@ export const PaymentRequestFilterModal: React.FC<PaymentRequestFilterModalProps>
                           color: active ? '#F38820' : '#475569',
                         }}
                       >
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={{ marginBottom: 16 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 8 }}>
+                Lọc Theo Ngày
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                {DATE_FIELD_OPTIONS.map((opt) => {
+                  const active = dateField === opt.value;
+                  return (
+                    <TouchableOpacity
+                      key={opt.value}
+                      onPress={() => setDateField(opt.value)}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: active ? '#F38820' : '#E2E8F0',
+                        backgroundColor: active ? '#FFF7ED' : '#FFFFFF',
+                      }}
+                    >
+                      <Text style={{ fontSize: 13, fontWeight: active ? '700' : '500', color: active ? '#F38820' : '#475569' }}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TextInput
+                  value={fromDate}
+                  onChangeText={setFromDate}
+                  placeholder="Từ (YYYY-MM-DD)"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numbers-and-punctuation"
+                  maxLength={10}
+                  style={{ flex: 1, ...{ height: 44, borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 12, fontSize: 14, color: '#0F172A', backgroundColor: '#FFFFFF' } }}
+                />
+                <TextInput
+                  value={toDate}
+                  onChangeText={setToDate}
+                  placeholder="Đến (YYYY-MM-DD)"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numbers-and-punctuation"
+                  maxLength={10}
+                  style={{ flex: 1, ...{ height: 44, borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 12, fontSize: 14, color: '#0F172A', backgroundColor: '#FFFFFF' } }}
+                />
+              </View>
+            </View>
+
+            <View style={{ marginBottom: 16 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 8 }}>
+                Khoảng Số Tiền (VNĐ)
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TextInput
+                  value={minAmount}
+                  onChangeText={setMinAmount}
+                  placeholder="Từ"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="number-pad"
+                  style={{ flex: 1, ...{ height: 44, borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 12, fontSize: 14, color: '#0F172A', backgroundColor: '#FFFFFF' } }}
+                />
+                <TextInput
+                  value={maxAmount}
+                  onChangeText={setMaxAmount}
+                  placeholder="Đến"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="number-pad"
+                  style={{ flex: 1, ...{ height: 44, borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 12, fontSize: 14, color: '#0F172A', backgroundColor: '#FFFFFF' } }}
+                />
+              </View>
+            </View>
+
+            <View style={{ marginBottom: 16 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 8 }}>
+                Dự Án
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {[{ value: '', label: 'Tất cả dự án' }, ...projects.map((p: any) => ({ value: String(p.id), label: p.name }))].map((opt) => {
+                  const isActive = projectId === opt.value;
+                  return (
+                    <TouchableOpacity
+                      key={opt.value}
+                      onPress={() => setProjectId(opt.value)}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: isActive ? '#F38820' : '#E2E8F0',
+                        backgroundColor: isActive ? '#FFF7ED' : '#FFFFFF',
+                      }}
+                    >
+                      <Text style={{ fontSize: 13, fontWeight: isActive ? '700' : '500', color: isActive ? '#F38820' : '#475569' }}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={{ marginBottom: 16 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 8 }}>
+                Sắp Xếp
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {SORT_OPTIONS.map((opt) => {
+                  const isActive = sortKey === opt.value;
+                  return (
+                    <TouchableOpacity
+                      key={opt.value}
+                      onPress={() => setSortKey(opt.value)}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: isActive ? '#F38820' : '#E2E8F0',
+                        backgroundColor: isActive ? '#FFF7ED' : '#FFFFFF',
+                      }}
+                    >
+                      <Text style={{ fontSize: 13, fontWeight: isActive ? '700' : '500', color: isActive ? '#F38820' : '#475569' }}>
                         {opt.label}
                       </Text>
                     </TouchableOpacity>
