@@ -176,10 +176,9 @@ export interface PaymentRequest {
 }
 
 export interface PaymentRequestsTotalDebt {
-  totalPendingAmount: number;
-  totalApprovedAmount: number;
-  totalPaidAmount: number;
-  totalRequestsCount: number;
+  totalDebt: number;
+  projectDebt: number;
+  otherWorkDebt: number;
 }
 
 export interface CreatePaymentRequestPayload {

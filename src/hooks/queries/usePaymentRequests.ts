@@ -100,10 +100,9 @@ export function usePaymentRequestsTotalDebtQuery(params?: Record<string, any>) {
       const res = await paymentRequestService.getPaymentRequestsTotalDebt(params);
       if (res.error || !res.data) {
         return {
-          totalPendingAmount: 0,
-          totalApprovedAmount: 0,
-          totalPaidAmount: 0,
-          totalRequestsCount: 0,
+          totalDebt: 0,
+          projectDebt: 0,
+          otherWorkDebt: 0,
         };
       }
       return res.data;

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import RichTextContent from '@/components/announcements/RichTextContent';
+import ExtractedDocumentContent from '@/components/projects/ExtractedDocumentContent';
 import { htmlToEditableText } from '@/utils/productDescriptionText';
 
 export interface FormatPreview {
@@ -25,14 +25,14 @@ export function ExtractedContentView({ html, maxHeight = 384, emptyText }: Extra
   }
 
   return (
-    <View className="rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
+    <View className="rounded-lg border border-slate-200 bg-slate-100 p-1.5 overflow-hidden">
       <ScrollView
         style={{ maxHeight: Math.min(maxHeight, Math.round(windowHeight * 0.6)) }}
         contentContainerStyle={{ padding: 10 }}
         nestedScrollEnabled
         showsVerticalScrollIndicator
       >
-        <RichTextContent html={html || ''} />
+        <ExtractedDocumentContent html={html} />
       </ScrollView>
     </View>
   );

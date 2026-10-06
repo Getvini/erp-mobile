@@ -45,6 +45,14 @@ export default function PaymentRequestsIndexScreen() {
     type: 'ALL',
     approvalStatus: 'ALL',
     paymentStatus: 'ALL',
+    dateField: 'dueDate',
+    fromDate: '',
+    toDate: '',
+    minAmount: '',
+    maxAmount: '',
+    projectId: '',
+    sortBy: 'createdAt',
+    sortOrder: 'DESC',
   });
 
   // Query filters derived from search, tab & modal filters
@@ -52,6 +60,14 @@ export default function PaymentRequestsIndexScreen() {
     const filters: Record<string, any> = { limit: 20 };
     if (search.trim()) filters.search = search.trim();
     if (filterValues.type !== 'ALL') filters.type = filterValues.type;
+    if (filterValues.dateField) filters.dateField = filterValues.dateField;
+    if (filterValues.fromDate) filters.fromDate = filterValues.fromDate;
+    if (filterValues.toDate) filters.toDate = filterValues.toDate;
+    if (filterValues.minAmount) filters.minAmount = filterValues.minAmount;
+    if (filterValues.maxAmount) filters.maxAmount = filterValues.maxAmount;
+    if (filterValues.projectId) filters.projectId = filterValues.projectId;
+    filters.sortBy = filterValues.sortBy;
+    filters.sortOrder = filterValues.sortOrder;
 
     if (activeTab === 'PAID') {
       filters.paymentStatus = 'PAID';
@@ -78,7 +94,11 @@ export default function PaymentRequestsIndexScreen() {
   } = useInfinitePaymentRequestsQuery(queryFilters);
 
   // Total debt summary query
-  const { data: totalDebt } = usePaymentRequestsTotalDebtQuery();
+  const debtFilters = useMemo(() => {
+    const { limit, ...rest } = queryFilters;
+    return rest;
+  }, [queryFilters]);
+  const { data: totalDebt } = usePaymentRequestsTotalDebtQuery(debtFilters);
 
   // Flatten infinite pages into single item list
   const flatItems: PaymentRequest[] = useMemo(() => {
@@ -107,7 +127,8 @@ export default function PaymentRequestsIndexScreen() {
   const hasActiveFilters =
     filterValues.type !== 'ALL' ||
     filterValues.approvalStatus !== 'ALL' ||
-    filterValues.paymentStatus !== 'ALL';
+    filterValues.paymentStatus !== 'ALL' ||
+    Boolean(filterValues.projectId || filterValues.fromDate || filterValues.toDate || filterValues.minAmount || filterValues.maxAmount);
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
@@ -219,7 +240,7 @@ export default function PaymentRequestsIndexScreen() {
           gap: 8,
         }}
       >
-        {/* Chờ duyệt */}
+        {/* Tổng nợ */}
         <View
           style={{
             flex: 1,
@@ -230,13 +251,13 @@ export default function PaymentRequestsIndexScreen() {
             borderLeftColor: '#D97706',
           }}
         >
-          <Text style={{ fontSize: 10, fontWeight: '600', color: '#92400E' }}>Chờ duyệt</Text>
+          <Text style={{ fontSize: 10, fontWeight: '600', color: '#92400E' }}>Tổng nợ</Text>
           <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '800', color: '#B45309', marginTop: 2 }}>
-            {formatVND(totalDebt?.totalPendingAmount || 0)}
+            {formatVND(totalDebt?.totalDebt || 0)}
           </Text>
         </View>
 
-        {/* Đã duyệt */}
+        {/* Nợ theo dự án */}
         <View
           style={{
             flex: 1,
@@ -247,13 +268,13 @@ export default function PaymentRequestsIndexScreen() {
             borderLeftColor: '#16A34A',
           }}
         >
-          <Text style={{ fontSize: 10, fontWeight: '600', color: '#166534' }}>Đã duyệt</Text>
+          <Text style={{ fontSize: 10, fontWeight: '600', color: '#166534' }}>Nợ dự án</Text>
           <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '800', color: '#15803D', marginTop: 2 }}>
-            {formatVND(totalDebt?.totalApprovedAmount || 0)}
+            {formatVND(totalDebt?.projectDebt || 0)}
           </Text>
         </View>
 
-        {/* Đã chi */}
+        {/* Nợ công việc khác */}
         <View
           style={{
             flex: 1,
@@ -264,9 +285,9 @@ export default function PaymentRequestsIndexScreen() {
             borderLeftColor: '#F38820',
           }}
         >
-          <Text style={{ fontSize: 10, fontWeight: '600', color: '#9A3412' }}>Đã thanh toán</Text>
+          <Text style={{ fontSize: 10, fontWeight: '600', color: '#9A3412' }}>Nợ việc khác</Text>
           <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '800', color: '#EA580C', marginTop: 2 }}>
-            {formatVND(totalDebt?.totalPaidAmount || 0)}
+            {formatVND(totalDebt?.otherWorkDebt || 0)}
           </Text>
         </View>
       </View>
