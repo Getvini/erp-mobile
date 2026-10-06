@@ -120,10 +120,13 @@ export interface OpportunityItem {
         name: string;
         unit?: string;
         costPrice?: number;
+        isAI?: boolean;
       };
       quantity: number;
       sellingPrice: number;
+      costAtSale?: number;
       unit?: string;
+      jobs?: OpportunityServiceJob[];
     }>;
   }>;
   services?: Array<{
@@ -133,13 +136,17 @@ export interface OpportunityItem {
     service?: {
       name: string;
       unit?: string;
+      costPrice?: number;
+      isAI?: boolean;
     };
     quantity?: number;
     sellingPrice?: number;
+    costAtSale?: number;
     expectedRevenue?: number;
     description?: string;
     opportunityPackageId?: string | null;
     unit?: string;
+    jobs?: OpportunityServiceJob[];
   }>;
   attachments?: Array<{
     id?: string;
@@ -169,7 +176,50 @@ export interface OpportunityItem {
   };
   createdAt?: string;
   updatedAt?: string;
+  rejectionReason?: string;
+  rejections?: Array<{
+    id: string;
+    reason: string;
+    rejectedAt?: string;
+    resubmittedAt?: string;
+    rejectedBy?: { id?: string; fullName?: string };
+  }>;
 }
+
+export interface OpportunityServiceJob {
+  id: string;
+  name?: string;
+  briefVideo?: string;
+  isBriefVideo?: boolean;
+  isQuotationItem?: boolean;
+  costAtSale?: number;
+  job?: {
+    id?: string;
+    name?: string;
+    costPrice?: number;
+    isBriefVideo?: boolean;
+    isQuotationItem?: boolean;
+  };
+  tasks?: {
+    id: string;
+    name?: string;
+    nickname?: string;
+    status?: string;
+    customerDecision?: 'APPROVED' | 'NOT_PURCHASED' | string;
+    dueDate?: string;
+    projectId?: string;
+    project?: { id?: string };
+    result?: { url?: string; name?: string; note?: string };
+  }[];
+}
+
+export const getVisibleOpportunityJobs = (jobs: OpportunityServiceJob[] = []) =>
+  jobs.filter((job) => job.isBriefVideo || Number(job.job?.costPrice || 0) <= 0);
+
+export const getEditableOpportunityJobs = (jobs: OpportunityServiceJob[] = []) =>
+  getVisibleOpportunityJobs(jobs).filter(
+    (job) => !job.isBriefVideo && job.isQuotationItem === true
+  );
 
 export interface OpportunityListFilters {
   status?: string;
@@ -279,6 +329,10 @@ export const opportunityService = {
 
   async rejectOpportunity(id: string, reason?: string) {
     return apiService.patch<{ message: string }>(`/opportunities/${id}/reject`, { reason });
+  },
+
+  async resubmitOpportunity(id: string) {
+    return apiService.patch<{ message: string }>(`/opportunities/${id}/resubmit`);
   },
 
   async updateOpportunityStage(id: string, stage: string) {

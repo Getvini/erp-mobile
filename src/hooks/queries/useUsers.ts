@@ -17,7 +17,7 @@ import { queryKeys } from '@/services/queryKeys';
  */
 
 /** Danh sách nhân sự (kèm `workload` khi truyền month/year). */
-export function useUsersQuery(filters: UserListFilters = {}) {
+export function useUsersQuery(filters: UserListFilters = {}, enabled = true) {
   return useQuery({
     queryKey: queryKeys.users.list(filters),
     queryFn: async () => {
@@ -27,6 +27,7 @@ export function useUsersQuery(filters: UserListFilters = {}) {
       }
       return res.data || [];
     },
+    enabled,
   });
 }
 

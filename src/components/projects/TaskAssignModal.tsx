@@ -460,6 +460,11 @@ export default function TaskAssignModal({
   const isBulk = Array.isArray(task);
   const tasks = useMemo(() => (Array.isArray(task) ? task : task ? [task] : []), [task]);
   const representativeTask = tasks[0] || null;
+  const isVideoDemoTask = Boolean(
+    representativeTask?.opportunityId &&
+      (representativeTask?.opportunityServiceJob?.isBriefVideo ||
+        representativeTask?.opportunityServiceJob?.job?.isBriefVideo)
+  );
 
   const [performerType, setPerformerType] = useState<'INTERNAL' | 'VENDOR'>('INTERNAL');
   const [isTeamAssignment, setIsTeamAssignment] = useState(false);
@@ -824,13 +829,23 @@ export default function TaskAssignModal({
       }
     } else {
       if (performerType === 'INTERNAL' && !selectedAssigneeId) {
-        Alert.alert('Cảnh báo', 'Vui lòng chọn nhân sự thực hiện trong đội dự án.');
+        Alert.alert(
+          'Cảnh báo',
+          isVideoDemoTask
+            ? 'Vui lòng chọn nhân sự thực hiện.'
+            : 'Vui lòng chọn nhân sự thực hiện trong đội dự án.'
+        );
         return;
       }
       if (performerType === 'VENDOR' && !selectedVendorId) {
         Alert.alert('Cảnh báo', 'Vui lòng chọn đối tác Vendor thực hiện.');
         return;
       }
+    }
+
+    if (!dueDate.trim()) {
+      Alert.alert('Cảnh báo', 'Vui lòng nhập deadline.');
+      return;
     }
 
     // Ràng buộc 1: deadline không được ở quá khứ (mirror erp-UI TaskAssignModal.jsx:377-388)
@@ -907,7 +922,7 @@ export default function TaskAssignModal({
 
             <ScrollView showsVerticalScrollIndicator={false} className="max-h-[460px]">
               {/* Performer Type Selector (Internal vs Vendor) */}
-              {!isTeamAssignment && (
+              {!isTeamAssignment && !isVideoDemoTask && (
                 <>
                   <Text className="text-xs font-bold text-slate-700 mt-3 mb-1.5">1. Hình thức thực hiện</Text>
                   <View className="flex-row gap-2.5 mb-1">
@@ -963,7 +978,7 @@ export default function TaskAssignModal({
               {/* Support Team Request Toggle Banner */}
               <Text className="text-xs font-bold text-slate-700 mt-3 mb-1.5">
                 {performerType === 'INTERNAL'
-                  ? `2. Người thực hiện (${teamMembers.length} thành viên)`
+                  ? `2. Người thực hiện (${teamMembers.length} nhân sự)`
                   : '2. Đối tác Vendor'}
               </Text>
 
@@ -1012,7 +1027,9 @@ export default function TaskAssignModal({
                 <View className="mt-0.5 mb-1.5">
                   {teamMembers.length === 0 ? (
                     <Text className="text-xs text-slate-400 italic py-2">
-                      Đội dự án chưa có thành viên nào. Vui lòng thêm nhân sự vào đội ở Tab Tổng quan.
+                      {isVideoDemoTask
+                        ? 'Không có nhân sự đang hoạt động để phân công.'
+                        : 'Đội dự án chưa có thành viên nào. Vui lòng thêm nhân sự vào đội ở Tab Tổng quan.'}
                     </Text>
                   ) : (
                     <>
@@ -1076,7 +1093,10 @@ export default function TaskAssignModal({
                                 Chạm để chọn người thực hiện
                               </Text>
                               <Text className="text-[11px] text-slate-400">
-                                {teamMembers.length} nhân sự sẵn sàng trong dự án
+                                {teamMembers.length}{' '}
+                                {isVideoDemoTask
+                                  ? 'nhân sự đang hoạt động'
+                                  : 'nhân sự sẵn sàng trong dự án'}
                               </Text>
                             </View>
                           </View>

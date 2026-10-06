@@ -28,6 +28,7 @@ import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { safeGoBack } from '@/utils/navigation';
 import { useTeamMembersQuery } from '@/hooks/queries/useProjects';
 import { useTaskResultCheckQuery } from '@/hooks/queries/useTaskResultChecks';
+import { useUsersQuery } from '@/hooks/queries/useUsers';
 import {
   hasTeamMemberRole,
   resolveEffectiveTeamMembers,
@@ -159,6 +160,42 @@ export default function TaskDetailScreen() {
     (task?.project as any)?.projectManager?.id === currentUserId;
   const isManagement = ['ADMIN', 'BOD', 'PM', 'TEAM_LEAD'].includes(user?.role || '');
   const isProjectOnHold = task?.project?.status === 'ON_HOLD' || task?.status === 'ON_HOLD';
+  const isVideoDemoTask = Boolean(
+    task?.opportunityId &&
+      (task?.opportunityServiceJob?.isBriefVideo || task?.opportunityServiceJob?.job?.isBriefVideo)
+  );
+  const canAssignOpportunityVideoTask =
+    !isProjectOnHold &&
+    isVideoDemoTask &&
+    task?.status === 'PENDING' &&
+    ['PM', 'ADMIN'].includes(user?.role || '');
+  const isTaskAssigned = Boolean(task?.assigneeId || task?.assignee?.id || task?.vendorId);
+  const canAssignUnassignedTask = canAssignOpportunityVideoTask && !isTaskAssigned;
+  const { data: opportunityEmployees = [] } = useUsersQuery({}, isVideoDemoTask);
+  const opportunityAssigneeMembers = useMemo(
+    () =>
+      opportunityEmployees
+        .map((employee) => {
+          const activeAccount =
+            employee.account?.isActive === true
+              ? employee.account
+              : employee.accounts?.find((account) => account.isActive === true);
+
+          if (employee.isLocked || !activeAccount) return null;
+
+          return {
+            id: `opportunity-${employee.id}`,
+            role: activeAccount.role || '',
+            user: {
+              id: employee.id,
+              fullName: employee.fullName,
+              email: activeAccount.email || undefined,
+            },
+          };
+        })
+        .filter((member): member is NonNullable<typeof member> => member !== null),
+    [opportunityEmployees]
+  );
   const canManageProjectTask =
     !isProjectOnHold &&
     (isManagement || isProjectLead || isProjectAccount || isProjectPm);
@@ -448,6 +485,16 @@ export default function TaskDetailScreen() {
 
         {/* Top Action Buttons Grid */}
         <View className="flex-row flex-wrap gap-2">
+          {canAssignUnassignedTask && (
+            <TouchableOpacity
+              className="flex-row items-center gap-1.5 bg-blue-600 px-3 py-2 rounded-xl"
+              onPress={() => setIsAssignModalOpen(true)}
+            >
+              <Feather name="users" size={14} color="#FFFFFF" />
+              <Text className="text-xs font-bold text-white">Phân công</Text>
+            </TouchableOpacity>
+          )}
+
           {task.status === 'AWAITING_REVIEW' && isReviewerForThisTask && (
             <>
               <TouchableOpacity
@@ -1035,7 +1082,7 @@ export default function TaskDetailScreen() {
         onClose={() => setIsAssignModalOpen(false)}
         task={task}
         project={task.project}
-        teamMembers={[]}
+        teamMembers={isVideoDemoTask ? opportunityAssigneeMembers : []}
         onSuccess={loadTask}
       />
 

@@ -54,6 +54,7 @@ import {
   useOpportunityDetailQuery,
   useApproveOpportunityMutation,
   useRejectOpportunityMutation,
+  useResubmitOpportunityMutation,
   useUpdateOpportunityMutation,
   useAddCustomerToOpportunityMutation,
 } from '@/hooks/queries/useOpportunities';
@@ -146,6 +147,7 @@ export default function OpportunityDetailScreen() {
   const addCustomerToOpportunityMutation = useAddCustomerToOpportunityMutation();
   const approveOpportunityMutation = useApproveOpportunityMutation();
   const rejectOpportunityMutation = useRejectOpportunityMutation();
+  const resubmitOpportunityMutation = useResubmitOpportunityMutation();
   const createContractMutation = useCreateContractMutation();
   const updateCustomerMutation = useUpdateCustomerMutation();
   const approveQuotationMutation = useApproveQuotationMutation();
@@ -153,6 +155,7 @@ export default function OpportunityDetailScreen() {
 
   const isApproving = approveOpportunityMutation.isPending;
   const isRejecting = rejectOpportunityMutation.isPending;
+  const isResubmitting = resubmitOpportunityMutation.isPending;
   const isCreatingContract = createContractMutation.isPending;
 
   // Tab Segment State
@@ -365,6 +368,24 @@ export default function OpportunityDetailScreen() {
     }
   };
 
+  const handleResubmitOpportunity = () => {
+    if (!id) return;
+    Alert.alert('Gửi lại duyệt', 'Gửi lại cơ hội này để BOD xem xét?', [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Gửi lại',
+        onPress: async () => {
+          try {
+            await resubmitOpportunityMutation.mutateAsync(id);
+            Alert.alert('Thành công', 'Đã gửi lại cơ hội để duyệt.');
+          } catch (error: any) {
+            Alert.alert('Lỗi', error?.message || 'Không thể gửi lại cơ hội.');
+          }
+        },
+      },
+    ]);
+  };
+
   // BOD Approve Quotation Action
   const handleApproveQuotation = async (quoteId: string) => {
     Alert.alert('Duyệt báo giá', 'Xác nhận phê duyệt bản báo giá này?', [
@@ -445,6 +466,8 @@ export default function OpportunityDetailScreen() {
         return { text: 'Chờ BOD duyệt', color: '#D97706', bg: '#FEF3C7' };
       case 'OPP_APPROVED':
         return { text: 'Đã duyệt cơ hội', color: '#059669', bg: '#D1FAE5' };
+      case 'OPP_REJECTED':
+        return { text: 'Không duyệt', color: '#DC2626', bg: '#FEE2E2' };
       case 'QUOTATION_DRAFTING':
         return { text: 'Đang làm báo giá', color: '#2563EB', bg: '#DBEAFE' };
       case 'PENDING_QUOTE_APPROVAL':
@@ -520,6 +543,38 @@ export default function OpportunityDetailScreen() {
   const standaloneServices = opportunity.services?.filter((s) => !s.opportunityPackageId) || [];
   const packages = opportunity.packages || [];
   const attachments = opportunity.attachments || [];
+  const canEditRejected =
+    opportunity.status === 'OPP_REJECTED' &&
+    (user?.role === 'ADMIN' || user?.id === opportunity.createdBy?.id);
+  const allOpportunityServices = [
+    ...(opportunity.services || []),
+    ...packages.flatMap((pkg) => pkg.services || []),
+  ];
+  const incompleteAiJobs = allOpportunityServices.flatMap((service) => {
+    if (!service.service?.isAI) return [];
+    return (service.jobs || []).filter(
+      (job) =>
+        job.isQuotationItem !== false &&
+        !job.isBriefVideo &&
+        Number(job.costAtSale || 0) <= 0
+    );
+  });
+
+  const handleCreateQuotation = () => {
+    if (incompleteAiJobs.length > 0) {
+      const names = [...new Set(incompleteAiJobs.map((job) => job.name || job.job?.name || 'Hạng mục AI'))];
+      Alert.alert(
+        'Chưa đủ giá vốn',
+        `Vui lòng điền giá vốn các hạng mục trước khi tạo báo giá: ${names.join(', ')}`
+      );
+      setActiveTab('FINANCIAL');
+      return;
+    }
+    router.push({
+      pathname: '/opportunities/quotations/create',
+      params: { opportunityId: id },
+    });
+  };
 
   const priorityKey = opportunity.priority || 'Medium';
   const priorityTheme = PRIORITY_THEMES[priorityKey] || {
@@ -685,12 +740,7 @@ export default function OpportunityDetailScreen() {
               {canCreateQuotation && (
                 <TouchableOpacity
                   className="flex-row items-center gap-1.5 bg-emerald-600 px-3.5 py-2 rounded-lg"
-                  onPress={() =>
-                    router.push({
-                      pathname: '/opportunities/quotations/create',
-                      params: { opportunityId: id },
-                    })
-                  }
+                  onPress={handleCreateQuotation}
                   activeOpacity={0.8}
                 >
                   <Feather name="plus" size={14} color="#FFFFFF" />
@@ -743,6 +793,41 @@ export default function OpportunityDetailScreen() {
             </View>
           )}
         </View>
+
+        {canEditRejected && (
+          <View className="mb-3.5 rounded-[18px] border border-red-200 bg-red-50 p-4">
+            <View className="flex-row items-start gap-3">
+              <View className="h-9 w-9 items-center justify-center rounded-xl bg-red-100">
+                <Feather name="alert-circle" size={19} color="#DC2626" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-sm font-extrabold text-red-700">Cơ hội không được duyệt</Text>
+                {opportunity.rejectionReason ? (
+                  <Text className="mt-1 text-xs leading-[18px] text-red-600">
+                    {opportunity.rejectionReason}
+                  </Text>
+                ) : null}
+                <Text className="mt-2 text-[11px] leading-4 text-red-500">
+                  Cập nhật thông tin cần thiết rồi gửi lại để BOD xem xét.
+                </Text>
+                <TouchableOpacity
+                  className={`mt-3 min-h-[44px] flex-row items-center justify-center gap-2 rounded-xl bg-blue-600 ${
+                    isResubmitting ? 'opacity-60' : ''
+                  }`}
+                  onPress={handleResubmitOpportunity}
+                  disabled={isResubmitting}
+                >
+                  {isResubmitting ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Feather name="send" size={16} color="#FFFFFF" />
+                  )}
+                  <Text className="text-xs font-extrabold text-white">Gửi lại duyệt</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* SEGMENTED TAB SELECTOR */}
         <View className="flex-row bg-slate-200 p-1 rounded-xl mb-3.5 border border-slate-200">
@@ -924,6 +1009,49 @@ export default function OpportunityDetailScreen() {
                     <Text className="text-xs font-semibold text-slate-800">{opportunity.referralPartner.name}</Text>
                   </View>
                 )}
+
+                {opportunity.status === 'OPP_REJECTED' && opportunity.rejectionReason ? (
+                  <View className="border-t border-slate-100 pt-2">
+                    <Text className="text-xs text-slate-500">Lý do không duyệt</Text>
+                    <Text className="mt-1 text-xs font-semibold leading-[18px] text-red-600">
+                      {opportunity.rejectionReason}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {opportunity.rejections?.length ? (
+                  <View className="border-t border-slate-100 pt-2">
+                    <Text className="mb-2 text-xs text-slate-500">
+                      Lịch sử không duyệt ({opportunity.rejections.length})
+                    </Text>
+                    <View className="gap-2">
+                      {opportunity.rejections.map((item) => (
+                        <View key={item.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                          <View className="flex-row justify-between gap-2">
+                            <Text className="flex-1 text-[11px] text-slate-500">
+                              {item.rejectedBy?.fullName || 'Không rõ người duyệt'}
+                            </Text>
+                            <Text className="text-[11px] text-slate-500">
+                              {formatDate(item.rejectedAt)}
+                            </Text>
+                          </View>
+                          <Text className="mt-1 text-xs font-semibold leading-[18px] text-slate-900">
+                            {item.reason}
+                          </Text>
+                          <Text
+                            className={`mt-2 text-[11px] font-semibold ${
+                              item.resubmittedAt ? 'text-emerald-600' : 'text-orange-600'
+                            }`}
+                          >
+                            {item.resubmittedAt
+                              ? `Đã gửi lại ngày ${formatDate(item.resubmittedAt)}`
+                              : 'Chưa gửi lại'}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
               </View>
             </View>
           </View>
@@ -932,7 +1060,12 @@ export default function OpportunityDetailScreen() {
         {/* TAB 2: DỰ TOÁN TÀI CHÍNH & DỊCH VỤ */}
         {activeTab === 'FINANCIAL' && (
           <View className="mb-3.5">
-            <OpportunityFinancialTab opportunity={opportunity} />
+            <OpportunityFinancialTab
+              opportunity={opportunity}
+              currentUser={user}
+              onAddCustomer={() => setIsCustomerModalVisible(true)}
+              onRefresh={refetchAll}
+            />
           </View>
         )}
 
@@ -1148,7 +1281,7 @@ export default function OpportunityDetailScreen() {
         onReject={() => setIsRejectModalVisible(true)}
         onCreateQuotation={
           (opportunity as any)?.stage === 'QUALIFIED' || (opportunity as any)?.stage === 'PROPOSAL' || opportunity?.status === 'QUALIFIED' || opportunity?.status === 'PROPOSAL'
-            ? () => router.push(`/opportunities/${id}/quotations/create`)
+            ? handleCreateQuotation
             : undefined
         }
       />

@@ -153,6 +153,48 @@ export function useRejectOpportunityMutation() {
   });
 }
 
+/** Gửi lại cơ hội đã bị từ chối để BOD duyệt lại. */
+export function useResubmitOpportunityMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await opportunityService.resubmitOpportunity(id);
+      return res.data;
+    },
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.detail(id) });
+    },
+  });
+}
+
+/** Cập nhật giá vốn các hạng mục thuộc dịch vụ của cơ hội. */
+export function useUpdateOpportunityServiceMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      opportunityId,
+      jobs,
+    }: {
+      id: string;
+      opportunityId: string;
+      jobs: { id: string; costAtSale: number }[];
+    }) => {
+      const res = await opportunityService.updateOpportunityService(id, { jobs });
+      return res.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.opportunities.detail(variables.opportunityId),
+      });
+    },
+  });
+}
+
 /**
  * Hook to update opportunity stage
  */

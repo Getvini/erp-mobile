@@ -68,6 +68,15 @@ export interface TaskDetail extends TaskItem {
   code?: string;
   nickname?: string;
   projectId?: string;
+  opportunityId?: string;
+  opportunityServiceJob?: {
+    id?: string;
+    isBriefVideo?: boolean;
+    job?: {
+      id?: string;
+      isBriefVideo?: boolean;
+    };
+  };
   jobId?: string;
   job?: {
     id: string;
@@ -96,6 +105,7 @@ export interface TaskDetail extends TaskItem {
   isExtraTask?: boolean;
   progress?: number;
   assigneeId?: string;
+  vendorId?: string;
   assignee?: {
     id: string;
     fullName?: string;
