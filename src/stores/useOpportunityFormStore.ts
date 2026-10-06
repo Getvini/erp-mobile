@@ -15,6 +15,11 @@ export interface ServiceJobBrief {
   isBriefVideo: boolean;
   included: boolean;
   briefVideo: string;
+  quantity?: number;
+  unit?: string;
+  costPrice?: number;
+  costAtSale?: number;
+  isQuotationItem?: boolean;
 }
 
 export interface PackageServiceItem {
@@ -120,16 +125,16 @@ interface OpportunityFormStore {
     value?: any,
     serviceObj?: any
   ) => void;
-  setPackageServiceJobIncluded: (pkgIndex: number, serviceIndex: number, jobId: string, included: boolean) => void;
-  setPackageServiceJobBrief: (pkgIndex: number, serviceIndex: number, jobId: string, briefVideo: string) => void;
+  setPackageServiceJobIncluded: (pkgIndex: number, serviceIndex: number, jobId: string, included: boolean, fallbackJobs?: ServiceJobBrief[]) => void;
+  setPackageServiceJobBrief: (pkgIndex: number, serviceIndex: number, jobId: string, briefVideo: string, fallbackJobs?: ServiceJobBrief[]) => void;
 
   // Services Actions
   addService: () => void;
   removeService: (index: number) => void;
   selectServiceItem: (index: number, serviceId: string, serviceObj?: any) => void;
   setServiceQuantity: (index: number, qty: number) => void;
-  setServiceJobIncluded: (serviceIndex: number, jobId: string, included: boolean) => void;
-  setServiceJobBrief: (serviceIndex: number, jobId: string, briefVideo: string) => void;
+  setServiceJobIncluded: (serviceIndex: number, jobId: string, included: boolean, fallbackJobs?: ServiceJobBrief[]) => void;
+  setServiceJobBrief: (serviceIndex: number, jobId: string, briefVideo: string, fallbackJobs?: ServiceJobBrief[]) => void;
 
   // Links Actions
   addLink: () => void;
@@ -360,14 +365,17 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
           return { formData: { ...state.formData, packages: next } };
         }),
 
-      setPackageServiceJobIncluded: (pkgIndex, serviceIndex, jobId, included) =>
+      setPackageServiceJobIncluded: (pkgIndex, serviceIndex, jobId, included, fallbackJobs) =>
         set((state) => {
           const next = [...state.formData.packages];
-          if (next[pkgIndex]?.services?.[serviceIndex]?.jobs) {
+          if (next[pkgIndex]?.services?.[serviceIndex]) {
             const pServices = [...next[pkgIndex].services!];
+            const sourceJobs = pServices[serviceIndex].jobs?.length
+              ? pServices[serviceIndex].jobs!
+              : (fallbackJobs || []);
             pServices[serviceIndex] = {
               ...pServices[serviceIndex],
-              jobs: pServices[serviceIndex].jobs!.map((job) =>
+              jobs: sourceJobs.map((job) =>
                 String(job.jobId) === String(jobId)
                   ? { ...job, included, briefVideo: included ? job.briefVideo : '' }
                   : job
@@ -378,14 +386,17 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
           return { formData: { ...state.formData, packages: next } };
         }),
 
-      setPackageServiceJobBrief: (pkgIndex, serviceIndex, jobId, briefVideo) =>
+      setPackageServiceJobBrief: (pkgIndex, serviceIndex, jobId, briefVideo, fallbackJobs) =>
         set((state) => {
           const next = [...state.formData.packages];
-          if (next[pkgIndex]?.services?.[serviceIndex]?.jobs) {
+          if (next[pkgIndex]?.services?.[serviceIndex]) {
             const pServices = [...next[pkgIndex].services!];
+            const sourceJobs = pServices[serviceIndex].jobs?.length
+              ? pServices[serviceIndex].jobs!
+              : (fallbackJobs || []);
             pServices[serviceIndex] = {
               ...pServices[serviceIndex],
-              jobs: pServices[serviceIndex].jobs!.map((job) =>
+              jobs: sourceJobs.map((job) =>
                 String(job.jobId) === String(jobId)
                   ? { ...job, briefVideo }
                   : job
@@ -440,13 +451,16 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
           return { formData: { ...state.formData, services: next } };
         }),
 
-      setServiceJobIncluded: (serviceIndex, jobId, included) =>
+      setServiceJobIncluded: (serviceIndex, jobId, included, fallbackJobs) =>
         set((state) => {
           const next = [...state.formData.services];
-          if (next[serviceIndex] && next[serviceIndex].jobs) {
+          if (next[serviceIndex]) {
+            const sourceJobs = next[serviceIndex].jobs?.length
+              ? next[serviceIndex].jobs!
+              : (fallbackJobs || []);
             next[serviceIndex] = {
               ...next[serviceIndex],
-              jobs: next[serviceIndex].jobs!.map((job) =>
+              jobs: sourceJobs.map((job) =>
                 String(job.jobId) === String(jobId)
                   ? { ...job, included, briefVideo: included ? job.briefVideo : '' }
                   : job
@@ -456,13 +470,16 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
           return { formData: { ...state.formData, services: next } };
         }),
 
-      setServiceJobBrief: (serviceIndex, jobId, briefVideo) =>
+      setServiceJobBrief: (serviceIndex, jobId, briefVideo, fallbackJobs) =>
         set((state) => {
           const next = [...state.formData.services];
-          if (next[serviceIndex] && next[serviceIndex].jobs) {
+          if (next[serviceIndex]) {
+            const sourceJobs = next[serviceIndex].jobs?.length
+              ? next[serviceIndex].jobs!
+              : (fallbackJobs || []);
             next[serviceIndex] = {
               ...next[serviceIndex],
-              jobs: next[serviceIndex].jobs!.map((job) =>
+              jobs: sourceJobs.map((job) =>
                 String(job.jobId) === String(jobId)
                   ? { ...job, briefVideo }
                   : job

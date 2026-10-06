@@ -47,6 +47,7 @@ import {
   AttachedFile,
   SelectedPackage,
   SelectedService,
+  ServiceJobBrief,
   OpportunityFormData,
   INITIAL_OPPORTUNITY_FORM_DATA } from
 '@/stores/useOpportunityFormStore';
@@ -101,6 +102,22 @@ export const DEFAULT_LINK_PLACEHOLDERS = [
 'https://drive.google.com/... (Link tài liệu)',
 'https://docs.google.com/... (Link kế hoạch)',
 'https://example.com/spec.pdf (Link báo giá đối thủ)'];
+
+const normalizeServiceJobsForForm = (jobs: any[]): ServiceJobBrief[] =>
+  jobs
+    .map((job) => ({
+      jobId: String(job.jobId || job.job?.id || job.id || ''),
+      name: job.name || job.job?.name || 'Hạng mục',
+      isBriefVideo: Boolean(job.isBriefVideo || job.job?.isBriefVideo),
+      included: Boolean(job.included),
+      briefVideo: job.briefVideo || '',
+      quantity: job.quantity,
+      unit: job.unit || job.job?.unit,
+      costPrice: job.costPrice ?? job.job?.costPrice,
+      costAtSale: job.costAtSale,
+      isQuotationItem: job.isQuotationItem ?? job.job?.isQuotationItem,
+    }))
+    .filter((job) => Boolean(job.jobId));
 
 // Format VND currency input with thousand separator (dots)
 export const formatVNDInput = formatNumberInput;
@@ -1651,6 +1668,7 @@ export default function CreateOpportunityScreen() {
                                   included: !Boolean(sj.job?.isBriefVideo || sj.isBriefVideo),
                                   briefVideo: '',
                                 }));
+                            const editableJobs = normalizeServiceJobsForForm(allJobs);
 
                             return (
                               <View
@@ -1692,8 +1710,12 @@ export default function CreateOpportunityScreen() {
                                 <ServiceJobAccordion
                                   jobs={allJobs}
                                   mode="opportunity_create"
-                                  onJobIncludedChange={(jobId, included) => setPackageServiceJobIncluded(idx, sIdx, jobId, included)}
-                                  onJobBriefChange={(jobId, briefText) => setPackageServiceJobBrief(idx, sIdx, jobId, briefText)}
+                                  onJobIncludedChange={(jobId, included) =>
+                                    setPackageServiceJobIncluded(idx, sIdx, jobId, included, editableJobs)
+                                  }
+                                  onJobBriefChange={(jobId, briefText) =>
+                                    setPackageServiceJobBrief(idx, sIdx, jobId, briefText, editableJobs)
+                                  }
                                 />
                               </View>
                             );
@@ -1733,6 +1755,7 @@ export default function CreateOpportunityScreen() {
                       included: !Boolean(sj.job?.isBriefVideo || sj.isBriefVideo),
                       briefVideo: '',
                     }));
+                const editableJobs = normalizeServiceJobsForForm(allJobs);
 
                 return (
                   <View key={idx} className="bg-slate-50 rounded-[12px] p-[10px] border border-slate-200 mb-[8px] gap-[8px]">
@@ -1770,8 +1793,12 @@ export default function CreateOpportunityScreen() {
                     <ServiceJobAccordion
                       jobs={allJobs}
                       mode="opportunity_create"
-                      onJobIncludedChange={(jobId, included) => setServiceJobIncluded(idx, jobId, included)}
-                      onJobBriefChange={(jobId, briefText) => setServiceJobBrief(idx, jobId, briefText)}
+                      onJobIncludedChange={(jobId, included) =>
+                        setServiceJobIncluded(idx, jobId, included, editableJobs)
+                      }
+                      onJobBriefChange={(jobId, briefText) =>
+                        setServiceJobBrief(idx, jobId, briefText, editableJobs)
+                      }
                     />
                   </View>
                 );

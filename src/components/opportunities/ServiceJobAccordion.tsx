@@ -117,6 +117,10 @@ export const ServiceJobAccordion: React.FC<ServiceJobAccordionProps> = ({
                       activeOpacity={0.8}
                       onPress={() => onJobIncludedChange?.(jobId, !isIncluded)}
                       style={styles.checkboxRow}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: isIncluded }}
+                      accessibilityLabel={`Thêm hạng mục video demo ${jobName}`}
                     >
                       <View style={[styles.checkbox, isIncluded && styles.checkboxChecked]}>
                         {isIncluded && <Feather name="check" size={12} color="#FFFFFF" />}
@@ -248,6 +252,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 6,
+    minHeight: 44,
   },
   checkbox: {
     width: 18,
