@@ -24,6 +24,8 @@ interface UserSelectorModalProps {
   selectedIds?: string[];
   /** Lọc cứng theo role (backend hỗ trợ query `role`, đồng thời lọc lại client-side). */
   roleFilter?: string;
+  /** Giới hạn danh sách theo tập user ID, dùng cho các luồng như Team Lead giao việc. */
+  allowedUserIds?: string[];
   title?: string;
   /** Callback tiện dụng cho chế độ chọn nhiều. */
   onConfirm?: (users: UserItem[]) => void;
@@ -34,6 +36,7 @@ interface UserSelectorSheetProps {
   onSelect: (user: UserItem) => void;
   selectedIds?: string[];
   roleFilter?: string;
+  allowedUserIds?: string[];
   title: string;
   onConfirm?: (users: UserItem[]) => void;
 }
@@ -43,6 +46,7 @@ const UserSelectorSheet: React.FC<UserSelectorSheetProps> = ({
   onSelect,
   selectedIds,
   roleFilter,
+  allowedUserIds,
   title,
   onConfirm,
 }) => {
@@ -60,6 +64,7 @@ const UserSelectorSheet: React.FC<UserSelectorSheetProps> = ({
   const filteredUsers = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return users.filter((user) => {
+      if (allowedUserIds && !allowedUserIds.includes(user.id)) return false;
       if (roleFilter && getUserAccount(user)?.role !== roleFilter) return false;
       if (!keyword) return true;
       const account = getUserAccount(user);
@@ -70,7 +75,7 @@ const UserSelectorSheet: React.FC<UserSelectorSheetProps> = ({
         (account?.email || '').toLowerCase().includes(keyword)
       );
     });
-  }, [roleFilter, search, users]);
+  }, [allowedUserIds, roleFilter, search, users]);
 
   const togglePick = (user: UserItem) => {
     Haptics.selectionAsync();
@@ -289,6 +294,7 @@ export const UserSelectorModal: React.FC<UserSelectorModalProps> = ({
   onSelect,
   selectedIds,
   roleFilter,
+  allowedUserIds,
   title = 'Chọn nhân sự',
   onConfirm,
 }) => (
@@ -299,6 +305,7 @@ export const UserSelectorModal: React.FC<UserSelectorModalProps> = ({
         onSelect={onSelect}
         selectedIds={selectedIds}
         roleFilter={roleFilter}
+        allowedUserIds={allowedUserIds}
         title={title}
         onConfirm={onConfirm}
       />

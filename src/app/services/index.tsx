@@ -24,14 +24,19 @@ import {
 import type { ServiceItem } from '@/services/catalogService';
 import { BrandColors } from '@/constants/colors';
 import { useAuthStore } from '@/stores/useAuthStore';
-import { canAccessServiceCatalog, canBulkDeleteServices } from '@/utils/rbac';
+import {
+  canAccessServiceCatalog,
+  canBulkDeleteServices,
+  canCreateServices,
+} from '@/utils/rbac';
 import { safeGoBack } from '@/utils/navigation';
 
 export default function ServicesScreen() {
   const router = useRouter();
   const role = useAuthStore((state) => state.user?.role);
   const canAccess = canAccessServiceCatalog(role);
-  // Tạo / Nhân bản / Xóa chỉ dành cho ADMIN & BOD (Service.Route.ts: roleMiddleware(["ADMIN","BOD"])).
+  const canCreate = canCreateServices(role);
+  // Nhân bản / Xóa chỉ dành cho ADMIN & BOD; quyền tạo được tách riêng để khớp Web.
   const canManage = canBulkDeleteServices(role);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -375,7 +380,7 @@ export default function ServicesScreen() {
         />
       )}
 
-      {canManage && !isSelectionMode ? (
+      {canCreate && !isSelectionMode ? (
         <TouchableOpacity
           testID="createServiceButton"
           className="absolute bottom-[84px] right-4 min-h-[56px] flex-row items-center justify-center gap-2 rounded-2xl bg-primary px-5 shadow-lg"

@@ -16,9 +16,11 @@ import { TaskItem } from '@/services/dashboardService';
 import { TASK_STATUS_CONFIG } from '@/services/taskService';
 import { BrandColors } from '@/constants/colors';
 import BottomNavBar from '@/components/BottomNavBar';
+import TaskCreateModal from '@/components/tasks/TaskCreateModal';
 import { safeGoBack } from '@/utils/navigation';
 import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { useTasksQuery } from '@/hooks/queries/useTasks';
+import { useTeamsQuery } from '@/hooks/queries/useTeams';
 import { useAuth } from '@/context/AuthContext';
 import { isManagementRole, isProjectManagerRole, isSalesRole } from '@/utils/rbac';
 
@@ -42,7 +44,7 @@ type StatusFilter =
 
 type ScopeFilter = 'MINE' | 'ALL';
 
-const STATUS_TABS: Array<{ id: StatusFilter; label: string }> = [
+const STATUS_TABS: { id: StatusFilter; label: string }[] = [
   { id: 'ALL', label: 'Tất cả' },
   { id: 'NOT_STARTED', label: 'Chưa thực hiện' },
   { id: 'DOING', label: 'Đang thực hiện' },
@@ -133,11 +135,19 @@ export default function TasksScreen() {
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('MINE');
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
+  const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
   const PAGE_LIMIT = 50;
 
   const currentUserId = user?.id;
   const userRole = user?.role;
   const canViewAllTasks = isManagementRole(userRole) || isProjectManagerRole(userRole) || isSalesRole(userRole);
+  const { data: teams = [] } = useTeamsQuery();
+  const isTeamLead = useMemo(
+    () => teams.some((team) => team.teamLeadId === currentUserId || team.teamLead?.id === currentUserId),
+    [currentUserId, teams],
+  );
+  const canCreateInternalTask =
+    isManagementRole(userRole) || isProjectManagerRole(userRole) || isTeamLead;
 
   const { data: tasksRes, isLoading, isFetching, refetch } = useTasksQuery({
     status: activeTab !== 'ALL' ? activeTab : undefined,
@@ -225,8 +235,22 @@ export default function TasksScreen() {
         >
           <Feather name="arrow-left" size={20} color="#0F172A" />
         </TouchableOpacity>
-        <Text className="text-[17px] font-bold text-slate-900">Nhiệm vụ & Tiến độ</Text>
-        <View className="w-10" />
+        <Text className="flex-1 px-2 text-center text-[17px] font-bold text-slate-900" numberOfLines={1}>
+          Nhiệm vụ & Tiến độ
+        </Text>
+        {canCreateInternalTask ? (
+          <TouchableOpacity
+            className="h-10 min-w-10 flex-row items-center justify-center rounded-[10px] bg-blue-600 px-2.5"
+            onPress={() => setIsCreateModalVisible(true)}
+            activeOpacity={0.8}
+            accessibilityLabel="Tạo công việc khác"
+          >
+            <Feather name="plus" size={17} color="#FFFFFF" />
+            <Text className="ml-1 text-xs font-bold text-white">Tạo khác</Text>
+          </TouchableOpacity>
+        ) : (
+          <View className="w-10" />
+        )}
       </View>
 
       {/* Search Input */}
@@ -400,6 +424,19 @@ export default function TasksScreen() {
 
       {/* Bottom Nav */}
       <BottomNavBar />
+
+      {user && canCreateInternalTask ? (
+        <TaskCreateModal
+          visible={isCreateModalVisible}
+          currentUser={user}
+          teams={teams}
+          onClose={() => setIsCreateModalVisible(false)}
+          onCreated={(taskId) => {
+            setIsCreateModalVisible(false);
+            router.push(`/tasks/${taskId}` as any);
+          }}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

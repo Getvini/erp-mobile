@@ -87,11 +87,11 @@ export const canDeleteCustomers = (role?: string): boolean => {
 
 /**
  * Check if the user role can access Contracts module.
- * Strictly mirrors: { path: '/contracts', roles: ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE'] } in erp-UI/Sidebar.jsx
+ * Strictly mirrors: { path: '/contracts', roles: ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE', 'PM'] } in erp-UI/Sidebar.jsx
  */
 export const canAccessContracts = (role?: string): boolean => {
   if (!role) return false;
-  return ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE'].includes(role);
+  return ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE', 'PM'].includes(role);
 };
 
 /**
@@ -161,27 +161,40 @@ export const isStaffRole = (role?: string): boolean => {
 // PHASE P2 — Danh mục & Đối tác ngoài
 // ============================================================================
 
-/** Vendors — Sidebar.jsx: roles ['ADMIN','BOD']; Vendor.Route.ts không roleMiddleware nên UI phải tự chặn. */
+/** Vendors — Sidebar.jsx: roles ['ADMIN','BOD','PM']; Vendor.Route.ts không roleMiddleware nên UI phải tự chặn. */
 export const canAccessVendors = (role?: string): boolean => {
+  if (!role) return false;
+  return ['ADMIN', 'BOD', 'PM'].includes(role);
+};
+
+/** Web chỉ cho ADMIN/BOD quản trị dữ liệu vendor; PM được xem để phục vụ dự án. */
+export const canManageVendors = (role?: string): boolean => {
   if (!role) return false;
   return ['ADMIN', 'BOD'].includes(role);
 };
 
-/** Tạo/sửa/xóa nhà cung cấp — cùng nhóm quyền truy cập module. */
-export const canManageVendors = canAccessVendors;
-
-/** Referral Partners — Sidebar.jsx: roles ['ADMIN','BOD','BD','ADMIN_SALE']. */
+/** Referral Partners — Sidebar.jsx: roles ['ADMIN','BOD','BD','ADMIN_SALE','PM']. */
 export const canAccessReferralPartners = (role?: string): boolean => {
+  if (!role) return false;
+  return ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE', 'PM'].includes(role);
+};
+
+/** PM chỉ có quyền xem theo Sidebar; nhóm kinh doanh và quản lý được thao tác dữ liệu. */
+export const canManageReferralPartners = (role?: string): boolean => {
   if (!role) return false;
   return ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE'].includes(role);
 };
 
-export const canManageReferralPartners = canAccessReferralPartners;
-
-/** Services + Service Packages — Sidebar.jsx: roles ['ADMIN','BOD','BD','ADMIN_SALE']. */
+/** Services + Service Packages — Sidebar.jsx: roles ['ADMIN','BOD','BD','ADMIN_SALE','PM']. */
 export const canAccessServiceCatalog = (role?: string): boolean => {
   if (!role) return false;
-  return ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE'].includes(role);
+  return ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE', 'PM'].includes(role);
+};
+
+/** Nút thêm Dịch vụ trên Web: ADMIN/BOD/BD. */
+export const canCreateServices = (role?: string): boolean => {
+  if (!role) return false;
+  return ['ADMIN', 'BOD', 'BD'].includes(role);
 };
 
 /** Xóa hàng loạt dịch vụ — Service.Route.ts: `roleMiddleware(["ADMIN","BOD"])`. */
@@ -235,3 +248,6 @@ export const canManageDocumentLibrary = (role?: string): boolean => {
   if (!role) return false;
   return ['BOD', 'ADMIN', 'ADMIN_SALE'].includes(role);
 };
+
+/** Settings trong Sidebar Web chỉ hiển thị cho ADMIN. */
+export const canAccessSettings = (role?: string): boolean => role === 'ADMIN';

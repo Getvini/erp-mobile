@@ -570,12 +570,14 @@ describe('P3 — Document Library: endpoint & payload parity', () => {
 });
 
 describe('P2/P3 — RBAC theo Sidebar & route backend', () => {
-  it('Vendors & Users chỉ ADMIN/BOD', () => {
+  it('Vendor cho ADMIN/BOD/PM; Users chỉ ADMIN/BOD', () => {
     ['ADMIN', 'BOD'].forEach((role) => {
       expect(canAccessVendors(role)).toBe(true);
       expect(canAccessUsers(role)).toBe(true);
     });
-    ['BD', 'PM', 'ADMIN_SALE', 'STAFF_A'].forEach((role) => {
+    expect(canAccessVendors('PM')).toBe(true);
+    expect(canAccessUsers('PM')).toBe(false);
+    ['BD', 'ADMIN_SALE', 'STAFF_A'].forEach((role) => {
       expect(canAccessVendors(role)).toBe(false);
       expect(canAccessUsers(role)).toBe(false);
     });
@@ -583,12 +585,10 @@ describe('P2/P3 — RBAC theo Sidebar & route backend', () => {
   });
 
   it('Referral Partners & Catalog cho Kinh doanh, Teams & Jobs thêm PM', () => {
-    ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE'].forEach((role) => {
+    ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE', 'PM'].forEach((role) => {
       expect(canAccessReferralPartners(role)).toBe(true);
       expect(canAccessServiceCatalog(role)).toBe(true);
     });
-    expect(canAccessReferralPartners('PM')).toBe(false);
-    expect(canAccessServiceCatalog('PM')).toBe(false);
 
     ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE', 'PM'].forEach((role) => {
       expect(canAccessTeams(role)).toBe(true);

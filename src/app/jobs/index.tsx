@@ -19,7 +19,7 @@ import { BrandColors } from '@/constants/colors';
 import { useJobsQuery } from '@/hooks/queries/useJobs';
 import { JOB_CATEGORY_OPTIONS, Job } from '@/services/jobService';
 import { useAuthStore } from '@/stores/useAuthStore';
-import { canAccessJobs, canManageJobs, isManagementRole } from '@/utils/rbac';
+import { canAccessJobs, canManageJobs } from '@/utils/rbac';
 
 const ALL_CATEGORY = 'ALL';
 
@@ -40,7 +40,7 @@ export default function JobsScreen() {
   const [isFormVisible, setIsFormVisible] = useState(false);
 
   const hasAccess = canAccessJobs(user?.role);
-  const canWriteJobs = canManageJobs(user?.role) && isManagementRole(user?.role);
+  const canWriteJobs = canManageJobs(user?.role);
 
   const { data, isLoading, isFetching, isError, error, refetch } = useJobsQuery();
 
