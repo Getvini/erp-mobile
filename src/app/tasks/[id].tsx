@@ -199,25 +199,32 @@ export default function TaskDetailScreen() {
   const canManageProjectTask =
     !isProjectOnHold &&
     (isManagement || isProjectLead || isProjectAccount || isProjectPm);
-  const canDecideOutcome =
-    !isProjectOnHold &&
-    canDecideTaskOutcome(
-      task
-        ? {
-            ...task,
-            project: {
-              ...task.project,
-              team: {
-                ...task.project?.team,
-                members: effectiveTeamMembers,
-              },
-            },
-          }
-        : task,
-      currentUserId,
-    );
   const isAssigneeOrHelper =
     currentUserId === task?.assigneeId || currentUserId === task?.helperId;
+  const canReviewOpportunityVideoTask =
+    !isProjectOnHold &&
+    isVideoDemoTask &&
+    task?.status === 'AWAITING_REVIEW' &&
+    ['PM', 'ADMIN'].includes(user?.role || '') &&
+    !isAssigneeOrHelper;
+  const canDecideOutcome =
+    !isProjectOnHold &&
+    (canReviewOpportunityVideoTask ||
+      canDecideTaskOutcome(
+        task
+          ? {
+              ...task,
+              project: {
+                ...task.project,
+                team: {
+                  ...task.project?.team,
+                  members: effectiveTeamMembers,
+                },
+              },
+            }
+          : task,
+        currentUserId,
+      ));
   const isReviewerForThisTask =
     canManageProjectTask && !isAssigneeOrHelper && canDecideOutcome;
   const canEditDescription = canManageProjectTask;
