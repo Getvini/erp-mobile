@@ -37,6 +37,7 @@ import {
   parseNumberInput,
 } from '@/utils/formatters';
 import { ServiceJobAccordion } from '@/components/opportunities/ServiceJobAccordion';
+import { SelectServiceModal, SelectPackageModal } from '@/components/quotations';
 
 interface QuotationFormItem {
   serviceId: string;
@@ -93,12 +94,10 @@ export default function QuotationCreateEditScreen() {
   // Add Service modal
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
   const [availableServices, setAvailableServices] = useState<any[]>([]);
-  const [serviceSearch, setServiceSearch] = useState('');
 
   // Add Package modal
   const [showAddPackageModal, setShowAddPackageModal] = useState(false);
   const [packageTemplates, setPackageTemplates] = useState<any[]>([]);
-  const [packageSearch, setPackageSearch] = useState('');
 
   const opportunity: OpportunityItem | null = oppData || null;
 
@@ -383,7 +382,7 @@ export default function QuotationCreateEditScreen() {
   };
 
   // Add a standalone service from available list
-  const handleSelectServiceToAdd = (service: any) => {
+  const handleSelectServiceToAdd = useCallback((service: any) => {
     const costPrice = parseFloat(service.costPrice) || 0;
     const minPrice = roundToTenThousands(costPrice / 0.8);
     const recommendedPrice = roundToTenThousands(costPrice / 0.6);
@@ -405,10 +404,10 @@ export default function QuotationCreateEditScreen() {
 
     setItems((prev) => [...prev, newItem]);
     setShowAddServiceModal(false);
-  };
+  }, [priceType]);
 
   // Add a package template
-  const handleSelectPackageToAdd = (template: any) => {
+  const handleSelectPackageToAdd = useCallback((template: any) => {
     if (items.some((item) => item.packageName === template.name)) {
       Alert.alert('Thông báo', `Gói "${template.name}" đã có trong báo giá.`);
       return;
@@ -440,7 +439,10 @@ export default function QuotationCreateEditScreen() {
 
     setItems((prev) => [...prev, ...packageItems]);
     setShowAddPackageModal(false);
-  };
+  }, [items, priceType]);
+
+  const handleCloseServiceModal = useCallback(() => setShowAddServiceModal(false), []);
+  const handleClosePackageModal = useCallback(() => setShowAddPackageModal(false), []);
 
   // Group items for display
   const displayGroups = useMemo(() => {
@@ -550,29 +552,17 @@ export default function QuotationCreateEditScreen() {
     }
   };
 
-  const filteredAvailableServices = useMemo(() => {
-    const currentStandaloneIds = new Set(
+  const selectedServiceIds = useMemo(() => {
+    return new Set(
       items
         .filter((i) => i.packageName === 'STANDALONE')
         .map((i) => String(i.serviceId))
     );
-    return availableServices.filter(
-      (s) =>
-        !currentStandaloneIds.has(String(s.id)) &&
-        (serviceSearch.trim() === '' ||
-          s.name?.toLowerCase().includes(serviceSearch.toLowerCase()))
-    );
-  }, [availableServices, items, serviceSearch]);
+  }, [items]);
 
-  const filteredPackageTemplates = useMemo(() => {
-    const currentPkgNames = new Set(items.map((i) => i.packageName));
-    return packageTemplates.filter(
-      (p) =>
-        !currentPkgNames.has(p.name) &&
-        (packageSearch.trim() === '' ||
-          p.name?.toLowerCase().includes(packageSearch.toLowerCase()))
-    );
-  }, [packageTemplates, items, packageSearch]);
+  const selectedPackageNames = useMemo(() => {
+    return new Set(items.map((i) => i.packageName));
+  }, [items]);
 
   if (isLoading) {
     return (
@@ -1064,123 +1054,22 @@ export default function QuotationCreateEditScreen() {
       </KeyboardAvoidingView>
 
       {/* Modal: Add Standalone Service */}
-      <Modal
+      <SelectServiceModal
         visible={showAddServiceModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowAddServiceModal(false)}
-      >
-        <View className="flex-1 justify-end bg-black/50">
-          <View className="max-h-[80%] rounded-t-[20px] bg-white p-4">
-            <View className="mb-3 flex-row items-center justify-between">
-              <Text className="text-base font-bold text-slate-900">Chọn dịch vụ lẻ thêm vào</Text>
-              <TouchableOpacity
-                onPress={() => setShowAddServiceModal(false)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Feather name="x" size={20} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Search Box */}
-            <View className="mb-3 flex-row items-center gap-2 rounded-[10px] bg-slate-100 px-3 py-2">
-              <Feather name="search" size={16} color="#94A3B8" />
-              <TextInput
-                className="flex-1 p-0 text-sm text-slate-900"
-                placeholder="Tìm kiếm dịch vụ..."
-                placeholderTextColor="#94A3B8"
-                value={serviceSearch}
-                onChangeText={setServiceSearch}
-              />
-            </View>
-
-            <FlatList
-              data={filteredAvailableServices}
-              keyExtractor={(item) => String(item.id)}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  className="flex-row items-center justify-between border-b border-slate-100 py-3"
-                  onPress={() => handleSelectServiceToAdd(item)}
-                  activeOpacity={0.7}
-                >
-                  <View className="flex-1">
-                    <Text className="text-sm font-semibold text-slate-900">{item.name}</Text>
-                    <Text className="mt-0.5 text-xs text-slate-500">
-                      Đơn vị: {item.unit || 'gói'} | Giá vốn:{' '}
-                      {formatNumber(item.costPrice || 0)} ₫
-                    </Text>
-                  </View>
-                  <Feather name="plus" size={18} color="#059669" />
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={
-                <View className="items-center justify-center py-8">
-                  <Text className="text-[13px] text-slate-400">Không có dịch vụ phù hợp</Text>
-                </View>
-              }
-            />
-          </View>
-        </View>
-      </Modal>
+        onClose={handleCloseServiceModal}
+        onSelect={handleSelectServiceToAdd}
+        availableServices={availableServices}
+        selectedServiceIds={selectedServiceIds}
+      />
 
       {/* Modal: Add Service Package Template */}
-      <Modal
+      <SelectPackageModal
         visible={showAddPackageModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowAddPackageModal(false)}
-      >
-        <View className="flex-1 justify-end bg-black/50">
-          <View className="max-h-[80%] rounded-t-[20px] bg-white p-4">
-            <View className="mb-3 flex-row items-center justify-between">
-              <Text className="text-base font-bold text-slate-900">Chọn gói mẫu thêm vào</Text>
-              <TouchableOpacity
-                onPress={() => setShowAddPackageModal(false)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Feather name="x" size={20} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Search Box */}
-            <View className="mb-3 flex-row items-center gap-2 rounded-[10px] bg-slate-100 px-3 py-2">
-              <Feather name="search" size={16} color="#94A3B8" />
-              <TextInput
-                className="flex-1 p-0 text-sm text-slate-900"
-                placeholder="Tìm kiếm gói dịch vụ..."
-                placeholderTextColor="#94A3B8"
-                value={packageSearch}
-                onChangeText={setPackageSearch}
-              />
-            </View>
-
-            <FlatList
-              data={filteredPackageTemplates}
-              keyExtractor={(item) => String(item.id)}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  className="flex-row items-center justify-between border-b border-slate-100 py-3"
-                  onPress={() => handleSelectPackageToAdd(item)}
-                  activeOpacity={0.7}
-                >
-                  <View className="flex-1">
-                    <Text className="text-sm font-semibold text-slate-900">{item.name}</Text>
-                    <Text className="mt-0.5 text-xs text-slate-500">
-                      Gồm {(item.items || []).length} dịch vụ con
-                    </Text>
-                  </View>
-                  <Feather name="plus" size={18} color="#2563EB" />
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={
-                <View className="items-center justify-center py-8">
-                  <Text className="text-[13px] text-slate-400">Không có gói dịch vụ phù hợp</Text>
-                </View>
-              }
-            />
-          </View>
-        </View>
-      </Modal>
+        onClose={handleClosePackageModal}
+        onSelect={handleSelectPackageToAdd}
+        packageTemplates={packageTemplates}
+        selectedPackageNames={selectedPackageNames}
+      />
     </SafeAreaView>
   );
 }
