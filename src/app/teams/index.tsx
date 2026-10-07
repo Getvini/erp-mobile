@@ -12,7 +12,6 @@ import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Team } from '@/services/teamService';
 import { useTeamsQuery } from '@/hooks/queries/useTeams';
-import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { useAuth } from '@/context/AuthContext';
 import { canAccessTeams, isManagementRole } from '@/utils/rbac';
 import { BrandColors } from '@/constants/colors';
@@ -43,8 +42,6 @@ export default function TeamsScreen() {
     error,
     refetch,
   } = useTeamsQuery();
-
-  useSSERefresh('invalidate_Teams', refetch);
 
   const filteredTeams = useMemo<Team[]>(() => {
     const query = searchQuery.trim().toLowerCase();

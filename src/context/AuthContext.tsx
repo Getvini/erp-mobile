@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useCallback } from 'react';
+import React, { createContext, useContext, useCallback, useMemo } from 'react';
 import { UserProfile } from '@/services/api';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useUserProfileQuery, useLoginMutation, useLogoutMutation } from '@/hooks/queries/useAuthQuery';
@@ -42,16 +42,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {}
   }, [logoutMutation]);
 
+  const contextValue = useMemo(
+    () => ({
+      user,
+      isAuthenticated,
+      isLoading,
+      login,
+      logout,
+    }),
+    [user, isAuthenticated, isLoading, login, logout]
+  );
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isAuthenticated,
-        isLoading,
-        login,
-        logout,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

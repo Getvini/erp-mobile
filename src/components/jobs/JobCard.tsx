@@ -22,7 +22,7 @@ const DEFAULT_CATEGORY_COLOR = { color: '#475569', bg: '#F1F5F9', border: '#E2E8
  * Hiển thị: mã, tên, badge category, giá vốn, vinicoin (>0), thời gian hoàn thành (giờ),
  * badge "Video AI" khi `isBriefVideo`.
  */
-export default function JobCard({ job, onPress }: JobCardProps) {
+function JobCardComponent({ job, onPress }: JobCardProps) {
   const categories = Array.isArray(job.categories) ? job.categories : [];
   const costPrice = toJobNumber(job.costPrice);
   const vinicoin = toJobNumber(job.vinicoin);
@@ -126,3 +126,6 @@ export default function JobCard({ job, onPress }: JobCardProps) {
     </TouchableOpacity>
   );
 }
+
+export const JobCard = React.memo(JobCardComponent);
+export default JobCard;

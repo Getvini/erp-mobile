@@ -24,7 +24,6 @@ import { PipelineTabs } from '@/components/opportunities/PipelineTabs';
 import { OpportunityCard } from '@/components/opportunities/OpportunityCard';
 import BottomNavBar from '@/components/BottomNavBar';
 import { STORAGE_DRAFT_KEY } from './create';
-import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { useOpportunitiesQuery } from '@/hooks/queries/useOpportunities';
 
 export default function OpportunitiesScreen() {
@@ -69,8 +68,6 @@ export default function OpportunitiesScreen() {
   }, [opportunityResponse, opportunities]);
 
   const isLoading = isQueryLoading && !opportunityResponse;
-
-  useSSERefresh('invalidate_Opportunities', refetch);
 
   // Draft Opportunity State & Detection
   const [draftOpportunity, setDraftOpportunity] = useState<any | null>(null);

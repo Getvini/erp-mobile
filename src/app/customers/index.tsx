@@ -15,7 +15,6 @@ import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CustomerItem } from '@/services/customerService';
 import { useCustomersQuery } from '@/hooks/queries/useCustomers';
-import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { BrandColors } from '@/constants/colors';
 import BottomNavBar from '@/components/BottomNavBar';
 import { useAuth } from '@/context/AuthContext';
@@ -116,8 +115,6 @@ export default function CustomersScreen() {
     search: searchQuery,
     source: activeSourceTab !== 'ALL' ? activeSourceTab : undefined,
   });
-
-  useSSERefresh('invalidate_Customers', refetch);
 
   const handleRefresh = () => {
     refetch();

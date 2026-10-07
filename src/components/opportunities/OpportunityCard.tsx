@@ -9,7 +9,7 @@ interface OpportunityCardProps {
   onPress: () => void;
 }
 
-export const OpportunityCard: React.FC<OpportunityCardProps> = ({ item, onPress }) => {
+export const OpportunityCard: React.FC<OpportunityCardProps> = React.memo(({ item, onPress }) => {
   const customerName = item.customer?.name || item.leadName || 'Chưa xác định';
   const isLead = !item.customer && !!item.leadName;
   const phoneNumber = item.customer?.phone || item.leadPhone;

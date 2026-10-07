@@ -18,7 +18,6 @@ import {
   useTeamDetailQuery,
   useTeamMembersByTeamQuery,
 } from '@/hooks/queries/useTeams';
-import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { useAuth } from '@/context/AuthContext';
 import { canAccessTeams, isManagementRole } from '@/utils/rbac';
 import { getTeamMemberRoles } from '@/utils/teamMember';
@@ -80,6 +79,11 @@ export default function TeamDetailScreen() {
     refetch: refetchMembers,
   } = useTeamMembersByTeamQuery(teamId, period);
 
+  const handleRefresh = useCallback(() => {
+    refetch();
+    refetchMembers();
+  }, [refetch, refetchMembers]);
+
   const members = useMemo<TeamMemberEntry[]>(() => {
     if (fetchedMembers.length > 0) return fetchedMembers;
     return Array.isArray(team?.members) ? team.members : [];
@@ -87,13 +91,6 @@ export default function TeamDetailScreen() {
 
   const deleteMutation = useDeleteTeamMutation();
   const removeMemberMutation = useRemoveTeamMemberMutation();
-
-  const handleSseRefresh = useCallback(() => {
-    refetch();
-    refetchMembers();
-  }, [refetch, refetchMembers]);
-
-  useSSERefresh('invalidate_Teams', handleSseRefresh);
 
   /** PM chỉ được quản lý thành viên khi chính họ giữ vai trò PROJECT_MANAGER trong đội này. */
   const isProjectManagerOfTeam = useMemo(() => {
@@ -439,7 +436,7 @@ export default function TeamDetailScreen() {
           refreshControl={
             <RefreshControl
               refreshing={isFetching}
-              onRefresh={handleSseRefresh}
+              onRefresh={handleRefresh}
               colors={[BrandColors.primary]}
               tintColor={BrandColors.primary}
             />
@@ -465,7 +462,7 @@ export default function TeamDetailScreen() {
         visible={isEditTeamOpen}
         onClose={() => setIsEditTeamOpen(false)}
         team={team || null}
-        onSuccess={refetch}
+        onSuccess={handleRefresh}
       />
 
       {/* Đổi Team Lead (chỉ ADMIN/BOD) */}
@@ -474,7 +471,7 @@ export default function TeamDetailScreen() {
         onClose={() => setIsChangeLeadOpen(false)}
         team={team || null}
         leadOnly
-        onSuccess={handleSseRefresh}
+        onSuccess={handleRefresh}
       />
 
       {/* Thêm / sửa vai trò thành viên */}
@@ -485,7 +482,7 @@ export default function TeamDetailScreen() {
         team={team || { id: teamId, name: '' }}
         member={memberModal.member}
         members={members}
-        onSuccess={handleSseRefresh}
+        onSuccess={handleRefresh}
       />
     </SafeAreaView>
   );

@@ -1,12 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   Modal,
   Pressable,
-  Animated,
-  PanResponder,
   useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -14,6 +12,13 @@ import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated';
 
 interface DashboardFABProps {
   userRole?: string;
@@ -39,20 +44,27 @@ export function DashboardFAB({ userRole }: DashboardFABProps) {
   const defaultX = Math.max(minX, maxX);
   const defaultY = Math.max(minY, maxY);
 
-  const pan = useRef(new Animated.ValueXY({ x: defaultX, y: defaultY })).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const currentPos = useRef({ x: defaultX, y: defaultY });
+  const translateX = useSharedValue(defaultX);
+  const translateY = useSharedValue(defaultY);
+  const startX = useSharedValue(defaultX);
+  const startY = useSharedValue(defaultY);
+  const scale = useSharedValue(1);
+
   const [fabCoords, setFabCoords] = useState({ x: defaultX, y: defaultY });
 
-  // Sync pan changes with ref
-  useEffect(() => {
-    const id = pan.addListener((value) => {
-      currentPos.current = value;
-    });
-    return () => {
-      pan.removeListener(id);
-    };
-  }, [pan]);
+  const triggerHapticLight = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  }, []);
+
+  const persistPosition = useCallback((x: number, y: number) => {
+    setFabCoords({ x, y });
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ x, y })).catch(() => {});
+  }, []);
+
+  const toggleOpen = useCallback(() => {
+    triggerHapticLight();
+    setIsOpen((prev) => !prev);
+  }, [triggerHapticLight]);
 
   // Load saved position on mount
   useEffect(() => {
@@ -64,33 +76,82 @@ export function DashboardFAB({ userRole }: DashboardFABProps) {
             if (typeof x === 'number' && typeof y === 'number') {
               const clampedX = Math.max(minX, Math.min(maxX, x));
               const clampedY = Math.max(minY, Math.min(maxY, y));
-              pan.setValue({ x: clampedX, y: clampedY });
-              currentPos.current = { x: clampedX, y: clampedY };
+              translateX.value = clampedX;
+              translateY.value = clampedY;
               setFabCoords({ x: clampedX, y: clampedY });
             }
           } catch {}
         }
       })
       .catch(() => {});
-  }, []);
+  }, [minX, maxX, minY, maxY, translateX, translateY]);
 
   // Re-clamp position if screen rotates or dimensions change
   useEffect(() => {
-    const curX = currentPos.current.x;
-    const curY = currentPos.current.y;
+    const curX = translateX.value;
+    const curY = translateY.value;
     const clampedX = Math.max(minX, Math.min(maxX, curX));
     const clampedY = Math.max(minY, Math.min(maxY, curY));
     if (clampedX !== curX || clampedY !== curY) {
-      pan.setValue({ x: clampedX, y: clampedY });
-      currentPos.current = { x: clampedX, y: clampedY };
+      translateX.value = clampedX;
+      translateY.value = clampedY;
       setFabCoords({ x: clampedX, y: clampedY });
     }
-  }, [screenWidth, screenHeight, minX, maxX, minY, maxY]);
+  }, [screenWidth, screenHeight, minX, maxX, minY, maxY, translateX, translateY]);
 
-  const toggleOpen = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    setIsOpen(!isOpen);
-  };
+  const panGesture = Gesture.Pan()
+    .minDistance(6)
+    .onStart(() => {
+      'worklet';
+      startX.value = translateX.value;
+      startY.value = translateY.value;
+      scale.value = withSpring(1.12, { damping: 12 });
+      runOnJS(triggerHapticLight)();
+    })
+    .onUpdate((e) => {
+      'worklet';
+      translateX.value = startX.value + e.translationX;
+      translateY.value = startY.value + e.translationY;
+    })
+    .onEnd(() => {
+      'worklet';
+      scale.value = withSpring(1, { damping: 12 });
+
+      let targetX = Math.max(minX, Math.min(maxX, translateX.value));
+      let targetY = Math.max(minY, Math.min(maxY, translateY.value));
+
+      // Magnetic docking to edges if within 35px
+      if (targetX < minX + 35) {
+        targetX = minX;
+      } else if (targetX > maxX - 35) {
+        targetX = maxX;
+      }
+
+      translateX.value = withSpring(targetX, { damping: 14, stiffness: 120 });
+      translateY.value = withSpring(targetY, { damping: 14, stiffness: 120 });
+
+      runOnJS(persistPosition)(targetX, targetY);
+    });
+
+  const tapGesture = Gesture.Tap().onEnd(() => {
+    'worklet';
+    runOnJS(toggleOpen)();
+  });
+
+  const composedGesture = Gesture.Exclusive(panGesture, tapGesture);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    zIndex: 50,
+    opacity: isOpen ? 0 : 1,
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
 
   const handleAction = (path: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -98,118 +159,36 @@ export function DashboardFAB({ userRole }: DashboardFABProps) {
     router.push(path as any);
   };
 
-  // PanResponder for dragging
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        // Trigger drag only when moved beyond 5px
-        return Math.hypot(gestureState.dx, gestureState.dy) > 5;
-      },
-      onPanResponderGrant: () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-        pan.setOffset({
-          x: currentPos.current.x,
-          y: currentPos.current.y,
-        });
-        pan.setValue({ x: 0, y: 0 });
-        Animated.spring(scaleAnim, {
-          toValue: 1.12,
-          friction: 5,
-          useNativeDriver: false,
-        }).start();
-      },
-      onPanResponderMove: Animated.event(
-        [null, { dx: pan.x, dy: pan.y }],
-        { useNativeDriver: false }
-      ),
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderRelease: () => {
-        pan.flattenOffset();
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          friction: 5,
-          useNativeDriver: false,
-        }).start();
-
-        let targetX = Math.max(minX, Math.min(maxX, currentPos.current.x));
-        let targetY = Math.max(minY, Math.min(maxY, currentPos.current.y));
-
-        // Magnetic docking to edges if within 35px
-        if (targetX < minX + 35) {
-          targetX = minX;
-        } else if (targetX > maxX - 35) {
-          targetX = maxX;
-        }
-
-        Animated.spring(pan, {
-          toValue: { x: targetX, y: targetY },
-          bounciness: 6,
-          speed: 14,
-          useNativeDriver: false,
-        }).start();
-
-        currentPos.current = { x: targetX, y: targetY };
-        setFabCoords({ x: targetX, y: targetY });
-
-        // Save position persistently
-        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ x: targetX, y: targetY })).catch(() => {});
-      },
-      onPanResponderTerminate: () => {
-        pan.flattenOffset();
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          friction: 5,
-          useNativeDriver: false,
-        }).start();
-      },
-    })
-  ).current;
-
   const isLeft = fabCoords.x < screenWidth / 2;
   const isBottom = fabCoords.y > screenHeight / 2;
 
   return (
     <>
-      {/* Draggable Floating Action Button */}
-      <Animated.View
-        {...panResponder.panHandlers}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          zIndex: 50,
-          opacity: isOpen ? 0 : 1,
-          transform: [
-            { translateX: pan.x },
-            { translateY: pan.y },
-            { scale: scaleAnim },
-          ],
-        }}
-      >
-        <TouchableOpacity
-          accessibilityLabel="Thao tác nhanh"
-          accessibilityRole="button"
-          activeOpacity={0.85}
-          onPress={toggleOpen}
-          style={{
-            width: BUTTON_SIZE,
-            height: BUTTON_SIZE,
-            borderRadius: BUTTON_SIZE / 2,
-            backgroundColor: '#F38820',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderWidth: 2,
-            borderColor: '#FFFFFF',
-            elevation: 8,
-            shadowColor: '#F38820',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.35,
-            shadowRadius: 6,
-          }}
-        >
-          <Feather name="plus" size={26} color="#FFFFFF" />
-        </TouchableOpacity>
+      {/* 100% Native Thread Draggable Floating Action Button via RNGH + Reanimated */}
+      <Animated.View style={animatedStyle}>
+        <GestureDetector gesture={composedGesture}>
+          <View
+            accessibilityLabel="Thao tác nhanh"
+            accessibilityRole="button"
+            style={{
+              width: BUTTON_SIZE,
+              height: BUTTON_SIZE,
+              borderRadius: BUTTON_SIZE / 2,
+              backgroundColor: '#F38820',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 2,
+              borderColor: '#FFFFFF',
+              elevation: 8,
+              shadowColor: '#F38820',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.35,
+              shadowRadius: 6,
+            }}
+          >
+            <Feather name="plus" size={26} color="#FFFFFF" />
+          </View>
+        </GestureDetector>
       </Animated.View>
 
       {/* Speed Dial Options Overlay Modal */}

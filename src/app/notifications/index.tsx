@@ -24,7 +24,6 @@ import {
 } from '@/utils/notificationPresenter';
 import { BrandColors } from '@/constants/colors';
 import BottomNavBar from '@/components/BottomNavBar';
-import { useSSERefresh } from '@/hooks/useSSERefresh';
 import {
   useMarkAllNotificationsReadMutation,
   useMarkNotificationReadMutation,
@@ -52,8 +51,6 @@ export default function NotificationsScreen() {
 
   const markReadMutation = useMarkNotificationReadMutation();
   const markAllReadMutation = useMarkAllNotificationsReadMutation();
-
-  useSSERefresh('invalidate_Notifications', refetch);
 
   const unreadCount = notifications.filter((item) => !item.isRead).length;
   const categoryCounts = useMemo(

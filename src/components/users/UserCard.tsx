@@ -26,7 +26,7 @@ const getRoleBadgeStyle = (role?: string): { bg: string; text: string } => {
   }
 };
 
-export const UserCard: React.FC<UserCardProps> = ({ user, onPress }) => {
+export const UserCard: React.FC<UserCardProps> = React.memo(({ user, onPress }) => {
   const account = getUserAccount(user);
   const role = account?.role;
   const roleStyle = getRoleBadgeStyle(role);
@@ -144,6 +144,6 @@ export const UserCard: React.FC<UserCardProps> = ({ user, onPress }) => {
       </View>
     </TouchableOpacity>
   );
-};
+});
 
 export default UserCard;

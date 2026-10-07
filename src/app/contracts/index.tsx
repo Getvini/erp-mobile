@@ -24,7 +24,6 @@ import {
 } from '@/services/contractService';
 import { useContractsQuery } from '@/hooks/queries/useContracts';
 import BottomNavBar from '@/components/BottomNavBar';
-import { useSSERefresh } from '@/hooks/useSSERefresh';
 
 const CONTRACT_TABS = [
   { key: 'ALL', label: 'Tất cả' },
@@ -67,8 +66,6 @@ export default function ContractsScreen() {
   }, [contractsRes]);
 
   const totalCount = (contractsRes as any)?.meta?.total || contracts.length;
-
-  useSSERefresh('invalidate_Contracts', refetch);
 
   const handleRefresh = () => refetch();
   const handleClearSearch = () => setSearchQuery('');

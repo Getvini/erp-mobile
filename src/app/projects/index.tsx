@@ -20,7 +20,6 @@ import {
 import BottomNavBar from '@/components/BottomNavBar';
 import { safeGoBack } from '@/utils/navigation';
 import { formatNumber } from '@/utils/formatters';
-import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { useProjectsQuery } from '@/hooks/queries/useProjects';
 
 const STATUS_FILTERS = [
@@ -118,8 +117,6 @@ export default function ProjectsScreen() {
     if (!projectsRes) return [];
     return Array.isArray(projectsRes) ? projectsRes : [];
   }, [projectsRes]);
-
-  useSSERefresh('invalidate_Projects', refetch);
 
   const handleRefresh = () => {
     refetch();

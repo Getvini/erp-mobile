@@ -25,7 +25,6 @@ import {
   QuotationItem,
 } from '@/services/quotationService';
 import { formatVND, formatNumber } from '@/utils/formatters';
-import { useSSERefresh } from '@/hooks/useSSERefresh';
 
 export default function QuotationDetailScreen() {
   const router = useRouter();
@@ -84,8 +83,6 @@ export default function QuotationDetailScreen() {
     }
     return { hasApprovedSibling: false, approvedQuotationVersion: null };
   }, [oppQuotesRes, quotId]);
-
-  useSSERefresh('invalidate_Quotations', refetch);
 
   const handleRefresh = () => {
     refetch();

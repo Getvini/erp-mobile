@@ -56,7 +56,7 @@ export const handleVendorEmail = (email?: string | null) => {
  * Thẻ nhà cung cấp trong danh sách: tên, badge loại, SĐT, email,
  * số hạng mục phụ trách + thao tác gọi/mail 1 chạm.
  */
-export default function VendorCard({ vendor, onPress }: VendorCardProps) {
+function VendorCardComponent({ vendor, onPress }: VendorCardProps) {
   const type = (vendor.type as VendorType) ?? 'BUSINESS';
   const badge = TYPE_BADGE_STYLES[type] ?? TYPE_BADGE_STYLES.BUSINESS;
   const jobCount = countVendorJobs(vendor);
@@ -143,3 +143,6 @@ export default function VendorCard({ vendor, onPress }: VendorCardProps) {
     </TouchableOpacity>
   );
 }
+
+export const VendorCard = React.memo(VendorCardComponent);
+export default VendorCard;

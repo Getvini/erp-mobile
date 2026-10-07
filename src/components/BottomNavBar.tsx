@@ -7,7 +7,7 @@ import { BrandColors } from '@/constants/colors';
 import { useAuth } from '@/context/AuthContext';
 import { canAccessCustomers } from '@/utils/rbac';
 
-export default function BottomNavBar() {
+function BottomNavBarComponent() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
@@ -34,6 +34,16 @@ export default function BottomNavBar() {
   const navigateTo = (route: string) => {
     if (!isAuthenticated && route !== '/(auth)/login') {
       router.push('/(auth)/login');
+      return;
+    }
+    // Tránh re-mount không cần thiết nếu người dùng nhấn vào chính tab đang đứng
+    if (
+      (route === '/' && isHome) ||
+      (route === '/tasks' && isTasks) ||
+      (route === '/projects' && isProjects) ||
+      (route === '/customers' && isCustomers) ||
+      (route === '/profile' && isProfile)
+    ) {
       return;
     }
     router.replace(route as any);
@@ -131,3 +141,6 @@ export default function BottomNavBar() {
     </View>
   );
 }
+
+const BottomNavBar = React.memo(BottomNavBarComponent);
+export default BottomNavBar;

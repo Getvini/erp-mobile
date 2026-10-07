@@ -297,6 +297,9 @@ class ApiService {
 
       return { data, status: response.status };
     } catch (err: any) {
+      if (err?.name === 'AbortError' || options.signal?.aborted) {
+        return { error: 'Yêu cầu đã bị hủy.', status: 0 };
+      }
       const duration = Date.now() - startTime;
       if (__DEV__) {
         console.log(`💥 [API Network Error] [${method}] ${cleanEndpoint} [${duration}ms]:`, err?.message || err);
@@ -308,7 +311,7 @@ class ApiService {
     }
   }
 
-  async get<T = any>(endpoint: string, params?: Record<string, any>) {
+  async get<T = any>(endpoint: string, params?: Record<string, any>, options?: RequestInit) {
     let url = endpoint;
     if (params) {
       const searchParams = new URLSearchParams();
@@ -322,43 +325,48 @@ class ApiService {
         url += (url.includes('?') ? '&' : '?') + qs;
       }
     }
-    return this.request<T>(url, { method: 'GET' });
+    return this.request<T>(url, { ...options, method: 'GET' });
   }
 
-  async post<T = any>(endpoint: string, body?: any) {
+  async post<T = any>(endpoint: string, body?: any, options?: RequestInit) {
     return this.request<T>(endpoint, {
+      ...options,
       method: 'POST',
       body: body ? JSON.stringify(body) : undefined,
     });
   }
 
-  async put<T = any>(endpoint: string, body?: any) {
+  async put<T = any>(endpoint: string, body?: any, options?: RequestInit) {
     return this.request<T>(endpoint, {
+      ...options,
       method: 'PUT',
       body: body ? JSON.stringify(body) : undefined,
     });
   }
 
-  async patch<T = any>(endpoint: string, body?: any) {
+  async patch<T = any>(endpoint: string, body?: any, options?: RequestInit) {
     return this.request<T>(endpoint, {
+      ...options,
       method: 'PATCH',
       body: body ? JSON.stringify(body) : undefined,
     });
   }
 
-  async delete<T = any>(endpoint: string) {
-    return this.request<T>(endpoint, { method: 'DELETE' });
+  async delete<T = any>(endpoint: string, options?: RequestInit) {
+    return this.request<T>(endpoint, { ...options, method: 'DELETE' });
   }
 
-  async postForm<T = any>(endpoint: string, formData: FormData) {
+  async postForm<T = any>(endpoint: string, formData: FormData, options?: RequestInit) {
     return this.request<T>(endpoint, {
+      ...options,
       method: 'POST',
       body: formData as any,
     });
   }
 
-  async patchForm<T = any>(endpoint: string, formData: FormData) {
+  async patchForm<T = any>(endpoint: string, formData: FormData, options?: RequestInit) {
     return this.request<T>(endpoint, {
+      ...options,
       method: 'PATCH',
       body: formData as any,
     });

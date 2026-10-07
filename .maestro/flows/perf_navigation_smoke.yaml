@@ -1,0 +1,27 @@
+appId: com.getvini.erp
+---
+- launchApp
+- waitForAnimationToEnd
+
+# 1. Chuyển đổi giữa các phân hệ điều hướng chính
+- tapOn: "Nhiệm vụ"
+- waitForAnimationToEnd
+
+- tapOn: "Dự án"
+- waitForAnimationToEnd
+
+- tapOn: "Tổng quan"
+- waitForAnimationToEnd
+
+# 2. Mở phân hệ Tài chính kiểm tra FlashList v2 & Filters
+- tapOn: "Quản lý tài chính"
+- waitForAnimationToEnd
+- assertVisible: "Quản lý tài chính"
+- tapOn: "Lịch trình"
+- waitForAnimationToEnd
+- tapOn: "Hợp đồng"
+- waitForAnimationToEnd
+
+# 3. Trở về Trang chủ
+- tapOn:
+    id: backButton

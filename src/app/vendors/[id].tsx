@@ -27,7 +27,6 @@ import {
   useVendorDetailQuery,
   useVendorJobsQuery,
 } from '@/hooks/queries/useVendors';
-import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { VendorJobItem, VendorType, requiresIdCard } from '@/services/vendorService';
 import { BrandColors } from '@/constants/colors';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -80,8 +79,6 @@ export default function VendorDetailScreen() {
     refetch();
     refetchJobs();
   }, [refetch, refetchJobs]);
-
-  useSSERefresh(['invalidate_Vendors', 'invalidate_Services'], refreshAll);
 
   const hasIdCardImages = Boolean(vendor?.idCardFront || vendor?.idCardBack);
 

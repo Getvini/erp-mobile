@@ -7,7 +7,6 @@ import BottomNavBar from '@/components/BottomNavBar';
 import VendorCard from '@/components/vendors/VendorCard';
 import VendorFormModal from '@/components/vendors/VendorFormModal';
 import { useVendorsQuery } from '@/hooks/queries/useVendors';
-import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { VendorItem } from '@/services/vendorService';
 import { BrandColors } from '@/constants/colors';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -36,8 +35,6 @@ export default function VendorsScreen() {
   // Backend trả mảng thô & bỏ qua query param ⇒ KHÔNG truyền filter vào hook,
   // tìm kiếm được lọc client-side để tránh refetch theo từng ký tự.
   const { data: vendors = [], isLoading, isFetching, isError, error, refetch } = useVendorsQuery();
-
-  useSSERefresh(['invalidate_Vendors', 'invalidate_Services'], refetch);
 
   const filteredVendors = useMemo(() => {
     const keyword = searchQuery.trim().toLowerCase();

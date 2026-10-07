@@ -2,7 +2,6 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
@@ -24,7 +23,6 @@ import { SalesDashboardView } from '@/components/dashboard/views/SalesDashboardV
 import { TeamLeadDashboardView } from '@/components/dashboard/views/TeamLeadDashboardView';
 import { MemberDashboardView } from '@/components/dashboard/views/MemberDashboardView';
 import { formatVND } from '@/utils/formatters';
-import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { useUnreadNotificationCount } from '@/hooks/queries/useNotifications';
 import {
   canAccessCustomers,
@@ -40,7 +38,6 @@ import {
 export default function HomeScreen() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading, logout } = useAuth();
-  const [searchQuery, setSearchQuery] = useState('');
 
   // Month & Year state
   const now = new Date();
@@ -116,9 +113,8 @@ export default function HomeScreen() {
   };
 
   // Badge số thông báo chưa đọc trên header (đồng bộ realtime qua SSE).
-  const { data: unreadNotificationCount = 0, refetch: refetchUnreadNotifications } =
+  const { data: unreadNotificationCount = 0 } =
     useUnreadNotificationCount(Boolean(user));
-  useSSERefresh('invalidate_Notifications', refetchUnreadNotifications);
 
   if (isLoading) {
     return (
@@ -205,27 +201,6 @@ export default function HomeScreen() {
           />
         }
       >
-        {/* Quick Search Bar */}
-        <View className="flex-row items-center bg-surface rounded-xl border border-border px-3.5 h-11 mb-4 shadow-xs">
-          <Feather name="search" size={18} color="#94A3B8" />
-          <TextInput
-            className="flex-1 ml-2.5 text-sm text-text-primary"
-            placeholder="Tìm kiếm dự án, nhiệm vụ..."
-            placeholderTextColor="#94A3B8"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            returnKeyType="search"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity
-              onPress={() => setSearchQuery('')}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Feather name="x" size={16} color="#94A3B8" />
-            </TouchableOpacity>
-          )}
-        </View>
-
         {/* Focus Banner (mirroring AdminFocusCard / TodayFocusCard on Web) */}
         <FocusBanner
           userName={user?.fullName || user?.username}

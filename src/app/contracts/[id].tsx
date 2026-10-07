@@ -51,7 +51,6 @@ import {
   useProjectByContractQuery,
   useAssignProjectMutation } from
 '@/hooks/queries/useProjects';
-import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { safeGoBack } from '@/utils/navigation';
 import { getProjectManagerUser, hasTeamMemberRole } from '@/utils/teamMember';
 import { MilestoneTrackerTab } from '@/components/finance/MilestoneTrackerTab';
@@ -163,11 +162,6 @@ export default function ContractDetailScreen() {
       setSelectedPmId('');
     }
   }, [project]);
-
-  useSSERefresh(['invalidate_Contracts', 'invalidate_Projects'], () => {
-    refetch();
-    refetchProject();
-  });
 
   const handleRefresh = () => {
     refetch();

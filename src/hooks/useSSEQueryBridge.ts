@@ -45,6 +45,8 @@ export const getQueryKeyForSseTag = (tag: string): readonly unknown[] | null => 
       return queryKeys.paymentRequests.all;
     case 'Notifications':
       return queryKeys.notifications.all;
+    case 'Vendors':
+      return queryKeys.vendors.all;
     case 'Teams':
     case 'Users':
       // Module Nhân sự / Đội nhóm thuộc Phase P3 — dữ liệu team hiện nằm trong project detail.
@@ -70,6 +72,24 @@ export function useSSEQueryBridge() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
+    // Buffer debounce để gom nhiều SSE invalidation liên tiếp trong 300ms
+    const pendingTags = new Set<string>();
+    let tagDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const flushTags = () => {
+      if (pendingTags.size === 0) return;
+      pendingTags.forEach((tag) => {
+        invalidateSseTag(queryClient, tag);
+      });
+      pendingTags.clear();
+    };
+
+    const scheduleInvalidateTag = (tag: string) => {
+      pendingTags.add(tag);
+      if (tagDebounceTimer) clearTimeout(tagDebounceTimer);
+      tagDebounceTimer = setTimeout(flushTags, 300);
+    };
+
     // Danh sách tag cần lắng nghe — hợp nhất EVENT_TO_TAGS_MAP (đã bao trùm P1).
     const bridgeTags = [
       'Opportunities',
@@ -93,30 +113,36 @@ export function useSSEQueryBridge() {
 
     const unsubscribers = bridgeTags.map((tag) =>
       sseEventBus.on(`invalidate_${tag}`, () => {
-        invalidateSseTag(queryClient, tag);
+        scheduleInvalidateTag(tag);
       }),
     );
 
     // Thông báo nghiệp vụ (không phải module event) — mirror erp-UI useSSE.js:150-182
+    let notificationDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     const unsubNotification = sseEventBus.on('notification', (payload: any) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
+      if (notificationDebounceTimer) clearTimeout(notificationDebounceTimer);
+      notificationDebounceTimer = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
 
-      if (payload?.type === 'TASK_COMPLETED') {
-        queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
-      }
+        if (payload?.type === 'TASK_COMPLETED') {
+          queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+        }
 
-      if (isPaymentRequestNotification(payload?.type)) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.paymentRequests.all });
-      }
+        if (isPaymentRequestNotification(payload?.type)) {
+          queryClient.invalidateQueries({ queryKey: queryKeys.paymentRequests.all });
+        }
 
-      if (isProjectLifecycleNotification(payload?.type)) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
-        queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
-        queryClient.invalidateQueries({ queryKey: queryKeys.debts.all });
-      }
+        if (isProjectLifecycleNotification(payload?.type)) {
+          queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+          queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
+          queryClient.invalidateQueries({ queryKey: queryKeys.debts.all });
+        }
+      }, 300);
     });
 
     return () => {
+      if (tagDebounceTimer) clearTimeout(tagDebounceTimer);
+      if (notificationDebounceTimer) clearTimeout(notificationDebounceTimer);
       unsubscribers.forEach((unsubscribe) => {
         if (typeof unsubscribe === 'function') unsubscribe();
       });

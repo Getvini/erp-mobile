@@ -16,7 +16,7 @@ export interface PaymentRequestCardProps {
   onPress?: () => void;
 }
 
-export const PaymentRequestCard: React.FC<PaymentRequestCardProps> = ({ item, onPress }) => {
+export const PaymentRequestCard: React.FC<PaymentRequestCardProps> = React.memo(({ item, onPress }) => {
   const router = useRouter();
 
   const handleCardPress = () => {
@@ -190,4 +190,6 @@ export const PaymentRequestCard: React.FC<PaymentRequestCardProps> = ({ item, on
       </View>
     </TouchableOpacity>
   );
-};
+});
+
+export default PaymentRequestCard;

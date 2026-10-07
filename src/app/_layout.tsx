@@ -28,6 +28,8 @@ if (typeof Symbol !== 'undefined' && !('description' in Symbol.prototype)) {
 
 SplashScreen.preventAutoHideAsync();
 
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const scheme = colorScheme === 'dark' ? 'dark' : 'light';
@@ -38,10 +40,11 @@ export default function RootLayout() {
   }, [colors.background]);
 
   return (
-    <QueryProvider>
-      <AuthProvider>
-        <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryProvider>
+        <AuthProvider>
+          <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
           <SSEManager />
           <AnimatedSplashOverlay />
           <Stack
@@ -78,6 +81,7 @@ export default function RootLayout() {
         </ThemeProvider>
       </AuthProvider>
     </QueryProvider>
+    </GestureHandlerRootView>
   );
 }
 

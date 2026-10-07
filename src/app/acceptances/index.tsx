@@ -19,7 +19,6 @@ import {
 import { BrandColors } from '@/constants/colors';
 import BottomNavBar from '@/components/BottomNavBar';
 import AcceptanceReviewModal from '@/components/projects/AcceptanceReviewModal';
-import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { useAcceptancesQuery } from '@/hooks/queries/useAcceptances';
 
 type StatusFilter = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'PROCESSED' | 'CANCELLED';
@@ -47,8 +46,6 @@ export default function AcceptancesScreen() {
     if (!requestsRes) return [];
     return Array.isArray(requestsRes) ? requestsRes : [];
   }, [requestsRes]);
-
-  useSSERefresh('invalidate_Acceptances', refetch);
 
   const handleRefresh = () => {
     refetch();

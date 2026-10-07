@@ -28,7 +28,6 @@ import {
   QuotationItem,
   QuotationStatus,
 } from '@/services/quotationService';
-import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { safeGoBack } from '@/utils/navigation';
 import {
   contractService,
@@ -235,11 +234,6 @@ export default function OpportunityDetailScreen() {
     useCallback(() => {
       refetchAll();
     }, [refetchAll])
-  );
-
-  useSSERefresh(
-    ['invalidate_Opportunities', 'invalidate_Tasks'],
-    refetchAll
   );
 
   const isLoading = (isOppLoading || isQuoteLoading) && !opportunity;

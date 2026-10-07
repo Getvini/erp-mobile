@@ -17,7 +17,6 @@ import { TASK_STATUS_CONFIG } from '@/services/taskService';
 import { BrandColors } from '@/constants/colors';
 import BottomNavBar from '@/components/BottomNavBar';
 import { safeGoBack } from '@/utils/navigation';
-import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { useTasksQuery } from '@/hooks/queries/useTasks';
 import { useAuth } from '@/context/AuthContext';
 import { isManagementRole, isProjectManagerRole, isSalesRole } from '@/utils/rbac';
@@ -157,8 +156,6 @@ export default function TasksScreen() {
     if (Array.isArray(tasksRes)) return tasksRes.length;
     return tasksRes.total ?? tasks.length;
   }, [tasksRes, tasks.length]);
-
-  useSSERefresh('invalidate_Tasks', refetch);
 
   const handleRefresh = () => {
     setPage(1);

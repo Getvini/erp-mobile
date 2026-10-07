@@ -40,7 +40,6 @@ import AddTeamMemberModal from '@/components/projects/AddTeamMemberModal';
 import EditTeamMemberRoleModal from '@/components/projects/EditTeamMemberRoleModal';
 import TaskAssignModal from '@/components/projects/TaskAssignModal';
 import CreateMonthlyWorkModal from '@/components/projects/CreateMonthlyWorkModal';
-import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { safeGoBack } from '@/utils/navigation';
 import {
   getProjectManagerUser,
@@ -331,9 +330,6 @@ export default function ProjectDetailScreen() {
   const loadAcceptances = useCallback(() => {
     refetchAcceptances();
   }, [refetchAcceptances]);
-
-  useSSERefresh('invalidate_Projects', refetchProject);
-  useSSERefresh(['invalidate_Tasks', 'invalidate_TaskReviews'], loadTasks);
 
   const isTaskAssignable = useCallback((t: TaskDetail): boolean => {
     if (t.assigneeId || (t as any).assignee?.id) return false;

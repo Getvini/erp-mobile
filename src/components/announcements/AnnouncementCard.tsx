@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -27,16 +27,28 @@ const DEFAULT_THEME = { bg: '#F1F5F9', text: '#475569', border: '#E2E8F0' };
 const shouldShowStatusBadge = (status?: string): boolean =>
   status === 'DRAFT' || status === 'CANCELLED' || status === 'SCHEDULED';
 
-export const AnnouncementCard: React.FC<AnnouncementCardProps> = ({
+export const AnnouncementCard: React.FC<AnnouncementCardProps> = React.memo(({
   announcement,
   onPress,
   hideUnreadDot = false,
 }) => {
-  const categoryTheme = ANNOUNCEMENT_CATEGORY_THEMES[announcement.category] || DEFAULT_THEME;
-  const priorityTheme = ANNOUNCEMENT_PRIORITY_THEMES[announcement.priority || 'NORMAL'] || DEFAULT_THEME;
-  const statusTheme = ANNOUNCEMENT_STATUS_THEMES[announcement.status] || DEFAULT_THEME;
+  const categoryTheme = useMemo(
+    () => ANNOUNCEMENT_CATEGORY_THEMES[announcement.category] || DEFAULT_THEME,
+    [announcement.category]
+  );
+  const priorityTheme = useMemo(
+    () => ANNOUNCEMENT_PRIORITY_THEMES[announcement.priority || 'NORMAL'] || DEFAULT_THEME,
+    [announcement.priority]
+  );
+  const statusTheme = useMemo(
+    () => ANNOUNCEMENT_STATUS_THEMES[announcement.status] || DEFAULT_THEME,
+    [announcement.status]
+  );
 
-  const preview = truncatePlainText(htmlToPlainText(announcement.content), 120);
+  const preview = useMemo(
+    () => truncatePlainText(htmlToPlainText(announcement.content), 120),
+    [announcement.content]
+  );
   const isUnread = hideUnreadDot ? false : !announcement.isRead;
 
   const handlePress = () => {
@@ -136,6 +148,6 @@ export const AnnouncementCard: React.FC<AnnouncementCardProps> = ({
       </View>
     </TouchableOpacity>
   );
-};
+});
 
 export default AnnouncementCard;

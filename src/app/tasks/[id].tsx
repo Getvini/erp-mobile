@@ -24,7 +24,6 @@ import TaskLifecycleActions from '@/components/tasks/TaskLifecycleActions';
 import TaskResultChecksPanel from '@/components/tasks/TaskResultChecksPanel';
 import SubmittedScopeSummary from '@/components/tasks/SubmittedScopeSummary';
 import ConfirmedCheckErrors from '@/components/tasks/ConfirmedCheckErrors';
-import { useSSERefresh } from '@/hooks/useSSERefresh';
 import { safeGoBack } from '@/utils/navigation';
 import { useTeamMembersQuery } from '@/hooks/queries/useProjects';
 import { useTaskResultCheckQuery } from '@/hooks/queries/useTaskResultChecks';
@@ -135,11 +134,6 @@ export default function TaskDetailScreen() {
     refetchTask();
     refetchReviews();
   }, [refetchTask, refetchReviews]);
-
-  useSSERefresh(
-    ['invalidate_Tasks', 'invalidate_TaskReviews', 'invalidate_TaskResultChecks'],
-    loadTask
-  );
 
   // Thành viên dự án để chọn người thực hiện cho công việc con
   const { data: teamMembersData } = useTeamMembersQuery(task?.project?.team?.id);
