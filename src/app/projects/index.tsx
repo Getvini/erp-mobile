@@ -122,21 +122,23 @@ export default function ProjectsScreen() {
     refetch();
   };
 
-  const filteredProjects = projects.filter((p) => {
-    // Filter by status
-    if (selectedStatusFilter !== 'ALL' && p.status !== selectedStatusFilter) {
-      return false;
-    }
-    // Filter by search query
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      p.name?.toLowerCase().includes(q) ||
-      p.code?.toLowerCase().includes(q) ||
-      p.contract?.customer?.name?.toLowerCase().includes(q) ||
-      p.contract?.contractCode?.toLowerCase().includes(q)
-    );
-  });
+  const filteredProjects = useMemo(() => {
+    return projects.filter((p) => {
+      // Filter by status
+      if (selectedStatusFilter !== 'ALL' && p.status !== selectedStatusFilter) {
+        return false;
+      }
+      // Filter by search query
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        p.name?.toLowerCase().includes(q) ||
+        p.code?.toLowerCase().includes(q) ||
+        p.contract?.customer?.name?.toLowerCase().includes(q) ||
+        p.contract?.contractCode?.toLowerCase().includes(q)
+      );
+    });
+  }, [projects, selectedStatusFilter, searchQuery]);
 
   const getStatusColor = useCallback((status: string) => {
     const config = PROJECT_STATUS_CONFIG[status];

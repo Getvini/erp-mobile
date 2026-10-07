@@ -172,26 +172,46 @@ export default function TasksScreen() {
     setPage(1);
   };
 
-  const filteredTasks = tasks.filter((t) => {
-    // Nếu chọn xem "Của tôi", chỉ giữ lại các task mà mình làm chính hoặc hỗ trợ
-    if (scopeFilter === 'MINE' && currentUserId) {
-      const isAssignee = (t as any).assigneeId === currentUserId || t.assignee?.id === currentUserId;
-      const isHelper = (t as any).helperId === currentUserId || (t as any).helper?.id === currentUserId;
-      const isSupportLead = (t as any).supportLeadId === currentUserId;
-      if (!isAssignee && !isHelper && !isSupportLead) {
-        return false;
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((t) => {
+      // Nếu chọn xem "Của tôi", chỉ giữ lại các task mà mình làm chính hoặc hỗ trợ
+      if (scopeFilter === 'MINE' && currentUserId) {
+        const isAssignee = (t as any).assigneeId === currentUserId || t.assignee?.id === currentUserId;
+        const isHelper = (t as any).helperId === currentUserId || (t as any).helper?.id === currentUserId;
+        const isSupportLead = (t as any).supportLeadId === currentUserId;
+        if (!isAssignee && !isHelper && !isSupportLead) {
+          return false;
+        }
       }
-    }
 
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      t.name?.toLowerCase().includes(q) ||
-      t.code?.toLowerCase().includes(q) ||
-      t.project?.name?.toLowerCase().includes(q) ||
-      t.assignee?.fullName?.toLowerCase().includes(q)
-    );
-  });
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        t.name?.toLowerCase().includes(q) ||
+        t.code?.toLowerCase().includes(q) ||
+        t.project?.name?.toLowerCase().includes(q) ||
+        t.assignee?.fullName?.toLowerCase().includes(q)
+      );
+    });
+  }, [tasks, scopeFilter, currentUserId, searchQuery]);
+
+  const renderStatusTab = useCallback(
+    ({ item }: { item: { id: StatusFilter; label: string } }) => {
+      const isActive = activeTab === item.id;
+      return (
+        <TouchableOpacity
+          className={`rounded-full px-3.5 py-1.5 ${isActive ? 'bg-primary' : 'bg-slate-100'}`}
+          onPress={() => handleStatusTabChange(item.id)}
+          activeOpacity={0.75}
+        >
+          <Text className={`text-[13px] font-semibold ${isActive ? 'text-white' : 'text-slate-500'}`}>
+            {item.label}
+          </Text>
+        </TouchableOpacity>
+      );
+    },
+    [activeTab]
+  );
 
   const getStatusBadge = useCallback((status: string) => {
     const config = TASK_STATUS_CONFIG[status];
@@ -316,20 +336,7 @@ export default function TasksScreen() {
           data={STATUS_TABS}
           keyExtractor={(item) => item.id}
           contentContainerClassName="gap-2 px-4"
-          renderItem={({ item }) => {
-            const isActive = activeTab === item.id;
-            return (
-              <TouchableOpacity
-                className={`rounded-full px-3.5 py-1.5 ${isActive ? 'bg-primary' : 'bg-slate-100'}`}
-                onPress={() => handleStatusTabChange(item.id)}
-                activeOpacity={0.75}
-              >
-                <Text className={`text-[13px] font-semibold ${isActive ? 'text-white' : 'text-slate-500'}`}>
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          }}
+          renderItem={renderStatusTab}
         />
       </View>
 

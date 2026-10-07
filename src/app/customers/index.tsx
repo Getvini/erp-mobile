@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -140,20 +140,22 @@ export default function CustomersScreen() {
     Linking.openURL(`mailto:${email}`);
   }, []);
 
-  const filteredCustomers = customers.filter((c) => {
-    if (activeSourceTab !== 'ALL') {
-      const matchSource = (c as any).source === activeSourceTab;
-      if (!matchSource) return false;
-    }
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      c.name?.toLowerCase().includes(q) ||
-      c.code?.toLowerCase().includes(q) ||
-      c.phoneNumber?.toLowerCase().includes(q) ||
-      c.email?.toLowerCase().includes(q)
-    );
-  });
+  const filteredCustomers = useMemo(() => {
+    return customers.filter((c) => {
+      if (activeSourceTab !== 'ALL') {
+        const matchSource = (c as any).source === activeSourceTab;
+        if (!matchSource) return false;
+      }
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        c.name?.toLowerCase().includes(q) ||
+        c.code?.toLowerCase().includes(q) ||
+        c.phoneNumber?.toLowerCase().includes(q) ||
+        c.email?.toLowerCase().includes(q)
+      );
+    });
+  }, [customers, activeSourceTab, searchQuery]);
 
   const renderCustomerCard = useCallback(({ item }: { item: CustomerItem }) => {
     return (

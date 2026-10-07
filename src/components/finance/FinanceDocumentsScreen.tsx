@@ -377,9 +377,27 @@ export function FinanceDocumentsScreen({ initialView }: { initialView: FinanceVi
   const setView = (view: FinanceView) => router.replace(VIEW_ROUTES[view] as any);
   const resetPage = () => setPage(1);
   const isTablet = width >= 700;
-  const renderRow = useCallback(({ item }: { item: PaymentDashboardRow }) => (
-    <FinanceRowCard row={item} view={initialView} multiColumn={isTablet}onUpload={(row, type) => setUploadTarget({ row, type })} onPreview={setPreview} />
-  ), [initialView]);
+
+  const handleUpload = useCallback((row: PaymentDashboardRow, type: 'acceptance' | 'invoice') => {
+    setUploadTarget({ row, type });
+  }, []);
+
+  const handlePreview = useCallback((doc: FinanceDocument) => {
+    setPreview(doc);
+  }, []);
+
+  const renderRow = useCallback(
+    ({ item }: { item: PaymentDashboardRow }) => (
+      <FinanceRowCard
+        row={item}
+        view={initialView}
+        multiColumn={isTablet}
+        onUpload={handleUpload}
+        onPreview={handlePreview}
+      />
+    ),
+    [initialView, isTablet, handleUpload, handlePreview]
+  );
 
   if (!hasAccess) {
     return <SafeAreaView className="flex-1 items-center justify-center bg-slate-50 px-6"><Feather name="shield" size={48} color="#EF4444" /><Text className="mt-4 text-center text-lg font-extrabold text-slate-900">Bạn không có quyền xem dữ liệu tài chính</Text><TouchableOpacity onPress={() => safeGoBack(router)} className="mt-5 h-12 justify-center rounded-xl bg-primary px-6"><Text className="font-bold text-white">Quay lại</Text></TouchableOpacity></SafeAreaView>;

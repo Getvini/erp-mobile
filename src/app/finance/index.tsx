@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { BrandColors } from '@/constants/colors';
 import BottomNavBar from '@/components/BottomNavBar';
 import DatePickerModal from '@/components/common/DatePickerModal';
 import { DebtProgressRing } from '@/components/finance/DebtProgressRing';
+import { FinanceFilterToolbar } from '@/components/finance/FinanceFilterToolbar';
 import { FinancePaymentModal } from '@/components/finance/FinancePaymentModal';
 import { FinanceRoadmapModal } from '@/components/finance/FinanceRoadmapModal';
 import { safeGoBack } from '@/utils/navigation';
@@ -36,18 +37,8 @@ import {
   useActivateDebtMutation,
 } from '@/hooks/queries';
 
-const PRESET_OPTIONS: Array<{ key: 'this_month' | 'last_month' | 'this_quarter' | 'all'; label: string }> = [
-  { key: 'this_month', label: 'Tháng này' },
-  { key: 'last_month', label: 'Tháng trước' },
-  { key: 'this_quarter', label: 'Quý này' },
-  { key: 'all', label: 'Tất cả' },
-];
-
-const DEBT_STATUS_OPTIONS: Array<{ key: 'ALL' | 'HAS_DEBT' | 'NO_DEBT'; label: string }> = [
-  { key: 'ALL', label: 'Tất cả công nợ' },
-  { key: 'HAS_DEBT', label: 'Còn nợ cần thu' },
-  { key: 'NO_DEBT', label: 'Đã hoàn thành thu' },
-];
+const LIST_CONTENT_STYLE = { padding: 16, paddingBottom: 24 };
+const financeKeyExtractor = (item: any, idx: number) => item.id || `${item.contractCode || 'item'}-${idx}`;
 
 export default function FinanceDashboardScreen() {
   const router = useRouter();
@@ -74,10 +65,6 @@ export default function FinanceDashboardScreen() {
 
   // Store Actions (stable references in Zustand)
   const setViewType = useFinanceStore((s) => s.setViewType);
-  const setSearchTerm = useFinanceStore((s) => s.setSearchTerm);
-  const setPreset = useFinanceStore((s) => s.setPreset);
-  const setDebtStatusFilter = useFinanceStore((s) => s.setDebtStatusFilter);
-  const resetFilters = useFinanceStore((s) => s.resetFilters);
   const toggleContractExpand = useFinanceStore((s) => s.toggleContractExpand);
   const setExpandedContracts = useFinanceStore((s) => s.setExpandedContracts);
   const openPaymentModal = useFinanceStore((s) => s.openPaymentModal);
@@ -457,6 +444,191 @@ export default function FinanceDashboardScreen() {
     );
   };
 
+  const renderFinanceItem = useCallback(
+    ({ item, index }: { item: any; index: number }) => {
+      if (viewType === 'list') {
+        return renderContractGroupCard(item as ContractDebtGroup);
+      }
+      const m = item as any;
+      const isCompleted = m.status === 'COMPLETED';
+      const isActive = m.status === 'ACTIVE';
+
+      return (
+        <View
+          key={m.id || index}
+          className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm gap-2 mb-3"
+        >
+          <View className="flex-row items-center justify-between gap-2">
+            <Text className="text-xs font-bold text-indigo-600 flex-1 mr-2" numberOfLines={1}>
+              {m.contractCode} • {m.customerName}
+            </Text>
+            <View
+              className={`px-2 py-0.5 rounded-md shrink-0 ${
+                isCompleted
+                  ? 'bg-emerald-100'
+                  : isActive
+                  ? 'bg-indigo-100'
+                  : 'bg-slate-100'
+              }`}
+            >
+              <Text
+                className={`text-[9px] font-bold uppercase ${
+                  isCompleted
+                    ? 'text-emerald-800'
+                    : isActive
+                    ? 'text-indigo-800'
+                    : 'text-slate-500'
+                }`}
+              >
+                {isCompleted
+                  ? 'ĐÃ THU'
+                  : isActive
+                  ? 'ĐANG THU'
+                  : 'CHƯA KÍCH HOẠCH'}
+              </Text>
+            </View>
+          </View>
+
+          <Text className="text-sm font-bold text-slate-900">{m.name}</Text>
+
+          <View className="flex-row items-center justify-between border-t border-slate-100 pt-2">
+            <Text className="text-xs text-slate-500">
+              Hạn thanh toán: {m.dueDate || 'N/A'}
+            </Text>
+            <Text className="text-sm font-black text-slate-900">
+              {formatVND(m.amount)}
+            </Text>
+          </View>
+        </View>
+      );
+    },
+    [
+      viewType,
+      expandedContracts,
+      activateDebtMutation.isPending,
+      activateDebtMutation.variables,
+      formatVND,
+    ]
+  );
+
+  const listHeader = useMemo(
+    () => (
+      <View>
+        {/* TOOLBAR BỘ LỌC (Memoized with Zustand atomic selectors) */}
+        <FinanceFilterToolbar />
+
+        {/* Debt Progress Ring Component */}
+        <DebtProgressRing
+          totalAmount={stats.planned || stats.collected + stats.pending}
+          paidAmount={stats.collected}
+          remainingAmount={stats.pending}
+        />
+
+        {/* Executive 4 Metric Cards */}
+        <View className="gap-3 mb-4">
+          <View className="flex-row gap-3">
+            {/* Card 1: Dự kiến trong kỳ */}
+            <View className="flex-1 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
+              <Text className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">
+                Dự kiến trong kỳ
+              </Text>
+              <Text className="text-base font-black text-slate-900" numberOfLines={1}>
+                {formatVND(stats.planned)}
+              </Text>
+            </View>
+
+            {/* Card 2: Đã thu trong kỳ */}
+            <View className="flex-1 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
+              <View className="flex-row items-center justify-between mb-1">
+                <Text className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                  Đã thu trong kỳ
+                </Text>
+                <Text className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-100">
+                  {stats.collectionRate}%
+                </Text>
+              </View>
+              <Text className="text-base font-black text-emerald-600" numberOfLines={1}>
+                {formatVND(stats.collected)}
+              </Text>
+            </View>
+          </View>
+
+          <View className="flex-row gap-3">
+            {/* Card 3: Còn phải thu */}
+            <View className="flex-1 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
+              <Text className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">
+                Còn phải thu
+              </Text>
+              <Text className="text-base font-black text-rose-600" numberOfLines={1}>
+                {formatVND(stats.pending)}
+              </Text>
+            </View>
+
+            {/* Card 4: Hợp đồng liên quan */}
+            <View className="flex-1 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
+              <Text className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">
+                Hợp đồng liên quan
+              </Text>
+              <Text className="text-base font-black text-slate-800" numberOfLines={1}>
+                {stats.contractsCount} hợp đồng
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Mode Switcher Tabs */}
+        <View className="flex-row bg-slate-200/60 p-1 rounded-2xl mb-4">
+          <TouchableOpacity
+            className={`flex-1 py-2.5 rounded-xl items-center justify-center min-h-[40px] flex-row gap-1.5 ${
+              viewType === 'list' ? 'bg-white shadow-xs' : ''
+            }`}
+            onPress={() => {
+              Haptic.impactAsync(Haptic.ImpactFeedbackStyle.Light);
+              setViewType('list');
+            }}
+          >
+            <Feather
+              name="list"
+              size={14}
+              color={viewType === 'list' ? '#0F172A' : '#64748B'}
+            />
+            <Text
+              className={`text-xs font-bold ${
+                viewType === 'list' ? 'text-slate-900' : 'text-slate-500'
+              }`}
+            >
+              Hợp đồng ({filteredContracts.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className={`flex-1 py-2.5 rounded-xl items-center justify-center min-h-[40px] flex-row gap-1.5 ${
+              viewType === 'schedule' ? 'bg-white shadow-xs' : ''
+            }`}
+            onPress={() => {
+              Haptic.impactAsync(Haptic.ImpactFeedbackStyle.Light);
+              setViewType('schedule');
+            }}
+          >
+            <Feather
+              name="calendar"
+              size={14}
+              color={viewType === 'schedule' ? '#0F172A' : '#64748B'}
+            />
+            <Text
+              className={`text-xs font-bold ${
+                viewType === 'schedule' ? 'text-slate-900' : 'text-slate-500'
+              }`}
+            >
+              Lịch trình ({allMilestones.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    ),
+    [stats, viewType, setViewType, filteredContracts.length, allMilestones.length]
+  );
+
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
       {/* Header Area */}
@@ -504,66 +676,10 @@ export default function FinanceDashboardScreen() {
       ) : (
         <FlashList<any>
           data={viewType === 'list' ? filteredContracts : allMilestones}
-          renderItem={({ item, index }) => {
-            if (viewType === 'list') {
-              return renderContractGroupCard(item as ContractDebtGroup);
-            }
-            const m = item as any;
-            const isCompleted = m.status === 'COMPLETED';
-            const isActive = m.status === 'ACTIVE';
-
-            return (
-              <View
-                key={m.id || index}
-                className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm gap-2 mb-3"
-              >
-                <View className="flex-row items-center justify-between gap-2">
-                  <Text className="text-xs font-bold text-indigo-600 flex-1 mr-2" numberOfLines={1}>
-                    {m.contractCode} • {m.customerName}
-                  </Text>
-                  <View
-                    className={`px-2 py-0.5 rounded-md shrink-0 ${
-                      isCompleted
-                        ? 'bg-emerald-100'
-                        : isActive
-                        ? 'bg-indigo-100'
-                        : 'bg-slate-100'
-                    }`}
-                  >
-                    <Text
-                      className={`text-[9px] font-bold uppercase ${
-                        isCompleted
-                          ? 'text-emerald-800'
-                          : isActive
-                          ? 'text-indigo-800'
-                          : 'text-slate-500'
-                      }`}
-                    >
-                      {isCompleted
-                        ? 'ĐÃ THU'
-                        : isActive
-                        ? 'ĐANG THU'
-                        : 'CHƯA KÍCH HOẠCH'}
-                    </Text>
-                  </View>
-                </View>
-
-                <Text className="text-sm font-bold text-slate-900">{m.name}</Text>
-
-                <View className="flex-row items-center justify-between border-t border-slate-100 pt-2">
-                  <Text className="text-xs text-slate-500">
-                    Hạn thanh toán: {m.dueDate || 'N/A'}
-                  </Text>
-                  <Text className="text-sm font-black text-slate-900">
-                    {formatVND(m.amount)}
-                  </Text>
-                </View>
-              </View>
-            );
-          }}
+          renderItem={renderFinanceItem}
           getItemType={() => (viewType === 'list' ? 'contract_group' : 'milestone_schedule')}
-          keyExtractor={(item: any, idx) => item.id || `${item.contractCode || 'item'}-${idx}`}
-          contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+          keyExtractor={financeKeyExtractor}
+          contentContainerStyle={LIST_CONTENT_STYLE}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -572,222 +688,7 @@ export default function FinanceDashboardScreen() {
               tintColor={BrandColors.primary}
             />
           }
-          ListHeaderComponent={
-            <View>
-              {/* TOOLBAR BỘ LỌC */}
-              <View className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm mb-4 gap-3">
-                {/* 1. Thanh Tìm kiếm Mã HĐ / Khách hàng */}
-                <View className="flex-row items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
-                  <Feather name="search" size={16} color="#94A3B8" />
-                  <TextInput
-                    className="flex-1 ml-2 text-sm text-slate-900 p-0"
-                    placeholder="Tìm mã hợp đồng, khách hàng..."
-                    placeholderTextColor="#94A3B8"
-                    value={searchTerm}
-                    onChangeText={setSearchTerm}
-                  />
-                  {searchTerm ? (
-                    <TouchableOpacity onPress={() => setSearchTerm('')}>
-                      <Feather name="x-circle" size={16} color="#94A3B8" />
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-
-                {/* 2. Bộ lọc thời gian (Presets) */}
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingRight: 16 }}
-                  className="flex-row"
-                >
-                  {PRESET_OPTIONS.map((opt) => {
-                    const isSelected = preset === opt.key;
-                    return (
-                      <TouchableOpacity
-                        key={opt.key}
-                        activeOpacity={0.8}
-                        className={`shrink-0 px-3.5 py-1.5 rounded-lg border min-h-[32px] justify-center items-center mr-2 ${
-                          isSelected
-                            ? 'bg-indigo-50 border-indigo-200'
-                            : 'bg-slate-50 border-slate-200'
-                        }`}
-                        onPress={() => {
-                          Haptic.impactAsync(Haptic.ImpactFeedbackStyle.Light);
-                          setPreset(opt.key);
-                        }}
-                      >
-                        <Text
-                          numberOfLines={1}
-                          className={`text-xs font-bold ${
-                            isSelected ? 'text-indigo-600' : 'text-slate-600'
-                          }`}
-                        >
-                          {opt.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-
-                {/* 3. Bộ lọc trạng thái công nợ & Reset */}
-                <View className="flex-row items-center justify-between gap-2 pt-1 border-t border-slate-100">
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ paddingRight: 12 }}
-                    className="flex-1 flex-row"
-                  >
-                    {DEBT_STATUS_OPTIONS.map((opt) => {
-                      const isSelected = debtStatusFilter === opt.key;
-                      return (
-                        <TouchableOpacity
-                          key={opt.key}
-                          activeOpacity={0.8}
-                          className={`shrink-0 px-3 py-1.5 rounded-md border min-h-[30px] justify-center items-center mr-2 ${
-                            isSelected
-                              ? 'bg-slate-900 border-slate-900'
-                              : 'bg-white border-slate-200'
-                          }`}
-                          onPress={() => {
-                            Haptic.impactAsync(Haptic.ImpactFeedbackStyle.Light);
-                            setDebtStatusFilter(opt.key);
-                          }}
-                        >
-                          <Text
-                            numberOfLines={1}
-                            className={`text-[11px] font-bold ${
-                              isSelected ? 'text-white' : 'text-slate-600'
-                            }`}
-                          >
-                            {opt.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-
-                  <TouchableOpacity
-                    className="flex-row items-center gap-1 bg-slate-100 px-2.5 py-1 rounded-md min-h-[28px]"
-                    onPress={() => {
-                      Haptic.impactAsync(Haptic.ImpactFeedbackStyle.Light);
-                      resetFilters();
-                    }}
-                  >
-                    <Feather name="rotate-ccw" size={12} color="#64748B" />
-                    <Text className="text-[11px] font-bold text-slate-600">Reset</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Debt Progress Ring Component */}
-              <DebtProgressRing
-                totalAmount={stats.planned || (stats.collected + stats.pending)}
-                paidAmount={stats.collected}
-                remainingAmount={stats.pending}
-              />
-
-              {/* Executive 4 Metric Cards */}
-              <View className="gap-3 mb-4">
-                <View className="flex-row gap-3">
-                  {/* Card 1: Dự kiến trong kỳ */}
-                  <View className="flex-1 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
-                    <Text className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">
-                      Dự kiến trong kỳ
-                    </Text>
-                    <Text className="text-base font-black text-slate-900" numberOfLines={1}>
-                      {formatVND(stats.planned)}
-                    </Text>
-                  </View>
-
-                  {/* Card 2: Đã thu trong kỳ */}
-                  <View className="flex-1 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
-                    <View className="flex-row items-center justify-between mb-1">
-                      <Text className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                        Đã thu trong kỳ
-                      </Text>
-                      <Text className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-100">
-                        {stats.collectionRate}%
-                      </Text>
-                    </View>
-                    <Text className="text-base font-black text-emerald-600" numberOfLines={1}>
-                      {formatVND(stats.collected)}
-                    </Text>
-                  </View>
-                </View>
-
-                <View className="flex-row gap-3">
-                  {/* Card 3: Còn phải thu */}
-                  <View className="flex-1 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
-                    <Text className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">
-                      Còn phải thu
-                    </Text>
-                    <Text className="text-base font-black text-rose-600" numberOfLines={1}>
-                      {formatVND(stats.pending)}
-                    </Text>
-                  </View>
-
-                  {/* Card 4: Hợp đồng liên quan */}
-                  <View className="flex-1 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
-                    <Text className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">
-                      Hợp đồng liên quan
-                    </Text>
-                    <Text className="text-base font-black text-slate-800" numberOfLines={1}>
-                      {stats.contractsCount} hợp đồng
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Mode Switcher Tabs */}
-              <View className="flex-row bg-slate-200/60 p-1 rounded-2xl mb-4">
-                <TouchableOpacity
-                  className={`flex-1 py-2.5 rounded-xl items-center justify-center min-h-[40px] flex-row gap-1.5 ${
-                    viewType === 'list' ? 'bg-white shadow-xs' : ''
-                  }`}
-                  onPress={() => {
-                    Haptic.impactAsync(Haptic.ImpactFeedbackStyle.Light);
-                    setViewType('list');
-                  }}
-                >
-                  <Feather
-                    name="list"
-                    size={14}
-                    color={viewType === 'list' ? '#0F172A' : '#64748B'}
-                  />
-                  <Text
-                    className={`text-xs font-bold ${
-                      viewType === 'list' ? 'text-slate-900' : 'text-slate-500'
-                    }`}
-                  >
-                    Hợp đồng ({filteredContracts.length})
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  className={`flex-1 py-2.5 rounded-xl items-center justify-center min-h-[40px] flex-row gap-1.5 ${
-                    viewType === 'schedule' ? 'bg-white shadow-xs' : ''
-                  }`}
-                  onPress={() => {
-                    Haptic.impactAsync(Haptic.ImpactFeedbackStyle.Light);
-                    setViewType('schedule');
-                  }}
-                >
-                  <Feather
-                    name="calendar"
-                    size={14}
-                    color={viewType === 'schedule' ? '#0F172A' : '#64748B'}
-                  />
-                  <Text
-                    className={`text-xs font-bold ${
-                      viewType === 'schedule' ? 'text-slate-900' : 'text-slate-500'
-                    }`}
-                  >
-                    Lịch trình ({allMilestones.length})
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          }
+          ListHeaderComponent={listHeader}
           ListEmptyComponent={
             <View className="py-10 items-center justify-center gap-2 bg-white rounded-2xl border border-slate-200 p-6 mb-4">
               <Feather name={viewType === 'list' ? 'file-text' : 'calendar'} size={36} color="#CBD5E1" />
