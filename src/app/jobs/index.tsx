@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -58,6 +58,18 @@ export default function JobsScreen() {
       return name.includes(keyword) || code.includes(keyword) || nickname.includes(keyword);
     });
   }, [jobs, activeCategory, searchQuery]);
+
+  const handleJobPress = useCallback(
+    (job: Job) => {
+      router.push(`/jobs/${job.id}` as any);
+    },
+    [router],
+  );
+
+  const renderJobItem = useCallback(
+    ({ item }: { item: Job }) => <JobCard job={item} onPress={handleJobPress} />,
+    [handleJobPress],
+  );
 
   if (isAuthLoading) {
     return (
@@ -193,9 +205,7 @@ export default function JobsScreen() {
         <FlatList
           data={filteredJobs}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <JobCard job={item} onPress={() => router.push(`/jobs/${item.id}` as any)} />
-          )}
+          renderItem={renderJobItem}
           contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
           keyboardShouldPersistTaps="handled"
           refreshControl={

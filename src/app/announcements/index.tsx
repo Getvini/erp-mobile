@@ -109,6 +109,13 @@ export default function AnnouncementsScreen() {
     [markReadMutation, router],
   );
 
+  const renderAnnouncementItem = useCallback(
+    ({ item }: { item: AnnouncementItem }) => (
+      <AnnouncementCard announcement={item} onPress={handleOpen} />
+    ),
+    [handleOpen],
+  );
+
   const toggleFilter = (key: FilterKey, value: string, current?: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     const next = current === value ? undefined : value;
@@ -320,9 +327,7 @@ export default function AnnouncementsScreen() {
       <FlatList
         data={announcements}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <AnnouncementCard announcement={item} onPress={handleOpen} />
-        )}
+        renderItem={renderAnnouncementItem}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
         ListFooterComponent={renderFooter}

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
   RefreshControl,
   FlatList,
@@ -82,6 +82,14 @@ export default function UsersScreen() {
     [filteredUsers, visibleCount],
   );
   const hasMore = visibleCount < filteredUsers.length;
+
+  const handleUserPress = useCallback((user: UserItem) => {
+    router.push(`/users/${user.id}` as any);
+  }, [router]);
+
+  const renderUserItem = useCallback(({ item }: { item: UserItem }) => (
+    <UserCard user={item} onPress={handleUserPress} />
+  ), [handleUserPress]);
 
   if (!hasAccess) {
     return (
@@ -226,12 +234,7 @@ export default function UsersScreen() {
           testID="usersList"
           data={visibleUsers}
           keyExtractor={(item: UserItem) => item.id}
-          renderItem={({ item }) => (
-            <UserCard
-              user={item}
-              onPress={(user) => router.push(`/users/${user.id}` as any)}
-            />
-          )}
+          renderItem={renderUserItem}
           contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 120, flexGrow: 1 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -35,6 +35,87 @@ const CONTRACT_TABS = [
   { key: 'COMPLETED', label: 'Hoàn thành' },
   { key: 'CANCELLED', label: 'Đã hủy' },
 ];
+
+const ContractCardItem = React.memo(function ContractCardItem({
+  item,
+  onPress,
+}: {
+  item: ContractItem;
+  onPress: (id: string) => void;
+}) {
+  const statusMeta = CONTRACT_STATUS_CONFIG[item.status] || {
+    text: CONTRACT_STATUS_LABELS[item.status] || item.status || 'Chưa xác định',
+    color: '#475569',
+    bg: '#F1F5F9',
+    border: '#E2E8F0',
+  };
+
+  const code = item.contractCode || (item as any).contract_code || '—';
+  const customerName = item.customer?.name || 'Khách hàng chưa cập nhật';
+  const oppName = item.opportunity?.name || '';
+  const sellingPrice = Number(item.totalWithVat || (item as any).totalWithVat || 0);
+
+  return (
+    <TouchableOpacity
+      className="bg-white rounded-2xl p-4 mb-3 border border-[#E2E8F0]"
+      activeOpacity={0.75}
+      onPress={() => onPress(item.id)}
+    >
+      {/* Header: Code & Status */}
+      <View className="flex-row justify-between items-center mb-2">
+        <View className="flex-row items-center gap-1 bg-[#EFF6FF] px-2 py-0.5 rounded-md border border-[#BFDBFE]">
+          <Feather name="file-text" size={13} color="#2563EB" />
+          <Text className="text-xs font-bold text-[#2563EB]">{code}</Text>
+        </View>
+        <View
+          className="px-2 py-0.5 rounded-md border"
+          style={{ backgroundColor: statusMeta.bg, borderColor: statusMeta.border }}
+        >
+          <Text className="text-[11px] font-bold" style={{ color: statusMeta.color }}>
+            {statusMeta.text}
+          </Text>
+        </View>
+      </View>
+
+      {/* Contract Title */}
+      <Text className="text-[15px] font-bold text-[#0F172A] mb-2 leading-5" numberOfLines={2}>
+        {item.name || 'Hợp đồng'}
+      </Text>
+
+      {/* Customer & Opportunity Info */}
+      <View className="gap-1 mb-3 pb-2.5 border-b border-[#F1F5F9]">
+        <View className="flex-row items-center gap-1.5">
+          <Feather name="user" size={14} color="#64748B" />
+          <Text className="text-[13px] text-[#334155] font-semibold flex-1" numberOfLines={1}>
+            {customerName}
+          </Text>
+        </View>
+        {oppName ? (
+          <View className="flex-row items-center gap-1.5">
+            <Feather name="trending-up" size={14} color="#64748B" />
+            <Text className="text-xs text-[#64748B] flex-1" numberOfLines={1}>
+              Cơ hội: {oppName}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      {/* Footer: Price & Date */}
+      <View className="flex-row justify-between items-end">
+        <View>
+          <Text className="text-[11px] text-[#64748B] mb-0.5">Giá trị hợp đồng</Text>
+          <Text className="text-[15px] font-extrabold text-primary">{formatVND(sellingPrice)}</Text>
+        </View>
+        <View className="flex-row items-center gap-1">
+          <Text className="text-[11px] text-[#94A3B8]">
+            {item.createdAt ? new Date(item.createdAt).toLocaleDateString('vi-VN') : ''}
+          </Text>
+          <Feather name="chevron-right" size={18} color="#94A3B8" />
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 export default function ContractsScreen() {
   const router = useRouter();
@@ -75,80 +156,44 @@ export default function ContractsScreen() {
     return { count: contracts.length, totalSelling };
   }, [contracts]);
 
-  const renderContractCard = ({ item }: { item: ContractItem }) => {
-    const statusMeta = CONTRACT_STATUS_CONFIG[item.status] || {
-      text: CONTRACT_STATUS_LABELS[item.status] || item.status || 'Chưa xác định',
-      color: '#475569',
-      bg: '#F1F5F9',
-      border: '#E2E8F0',
-    };
+  const handleContractPress = useCallback(
+    (id: string) => {
+      router.push(`/contracts/${id}` as any);
+    },
+    [router],
+  );
 
-    const code = item.contractCode || (item as any).contract_code || '—';
-    const customerName = item.customer?.name || 'Khách hàng chưa cập nhật';
-    const oppName = item.opportunity?.name || '';
-    const sellingPrice = Number(item.totalWithVat || (item as any).totalWithVat || 0);
+  const renderContractCard = useCallback(
+    ({ item }: { item: ContractItem }) => (
+      <ContractCardItem item={item} onPress={handleContractPress} />
+    ),
+    [handleContractPress],
+  );
 
-    return (
-      <TouchableOpacity
-        className="bg-white rounded-2xl p-4 mb-3 border border-[#E2E8F0]"
-        activeOpacity={0.75}
-        onPress={() => router.push(`/contracts/${item.id}` as any)}
-      >
-        {/* Header: Code & Status */}
-        <View className="flex-row justify-between items-center mb-2">
-          <View className="flex-row items-center gap-1 bg-[#EFF6FF] px-2 py-0.5 rounded-md border border-[#BFDBFE]">
-            <Feather name="file-text" size={13} color="#2563EB" />
-            <Text className="text-xs font-bold text-[#2563EB]">{code}</Text>
-          </View>
-          <View
-            className="px-2 py-0.5 rounded-md border"
-            style={{ backgroundColor: statusMeta.bg, borderColor: statusMeta.border }}
+  const renderTabItem = useCallback(
+    ({ item }: { item: (typeof CONTRACT_TABS)[number] }) => {
+      const isActive = activeTab === item.key;
+      return (
+        <TouchableOpacity
+          className={
+            'px-3.5 py-1.5 rounded-full border ' +
+            (isActive ? 'bg-[#EFF6FF] border-[#BFDBFE]' : 'bg-[#F1F5F9] border-[#E2E8F0]')
+          }
+          onPress={() => setActiveTab(item.key)}
+          activeOpacity={0.75}
+        >
+          <Text
+            className={
+              'text-[13px] font-semibold ' + (isActive ? 'text-[#2563EB] font-bold' : 'text-[#64748B]')
+            }
           >
-            <Text className="text-[11px] font-bold" style={{ color: statusMeta.color }}>
-              {statusMeta.text}
-            </Text>
-          </View>
-        </View>
-
-        {/* Contract Title */}
-        <Text className="text-[15px] font-bold text-[#0F172A] mb-2 leading-5" numberOfLines={2}>
-          {item.name || 'Hợp đồng'}
-        </Text>
-
-        {/* Customer & Opportunity Info */}
-        <View className="gap-1 mb-3 pb-2.5 border-b border-[#F1F5F9]">
-          <View className="flex-row items-center gap-1.5">
-            <Feather name="user" size={14} color="#64748B" />
-            <Text className="text-[13px] text-[#334155] font-semibold flex-1" numberOfLines={1}>
-              {customerName}
-            </Text>
-          </View>
-          {oppName ? (
-            <View className="flex-row items-center gap-1.5">
-              <Feather name="trending-up" size={14} color="#64748B" />
-              <Text className="text-xs text-[#64748B] flex-1" numberOfLines={1}>
-                Cơ hội: {oppName}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-
-        {/* Footer: Price & Date */}
-        <View className="flex-row justify-between items-end">
-          <View>
-            <Text className="text-[11px] text-[#64748B] mb-0.5">Giá trị hợp đồng</Text>
-            <Text className="text-[15px] font-extrabold text-primary">{formatVND(sellingPrice)}</Text>
-          </View>
-          <View className="flex-row items-center gap-1">
-            <Text className="text-[11px] text-[#94A3B8]">
-              {item.createdAt ? new Date(item.createdAt).toLocaleDateString('vi-VN') : ''}
-            </Text>
-            <Feather name="chevron-right" size={18} color="#94A3B8" />
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+            {item.label}
+          </Text>
+        </TouchableOpacity>
+      );
+    },
+    [activeTab],
+  );
 
   if (isAuthLoading) {
     return (
@@ -238,20 +283,7 @@ export default function ContractsScreen() {
           keyExtractor={(item) => item.key}
           contentContainerClassName="px-4 gap-2"
           contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
-          renderItem={({ item }) => {
-            const isActive = activeTab === item.key;
-            return (
-              <TouchableOpacity
-                className={'px-3.5 py-1.5 rounded-full border ' + (isActive ? 'bg-[#EFF6FF] border-[#BFDBFE]' : 'bg-[#F1F5F9] border-[#E2E8F0]')}
-                onPress={() => setActiveTab(item.key)}
-                activeOpacity={0.75}
-              >
-                <Text className={'text-[13px] font-semibold ' + (isActive ? 'text-[#2563EB] font-bold' : 'text-[#64748B]')}>
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          }}
+          renderItem={renderTabItem}
         />
       </View>
 

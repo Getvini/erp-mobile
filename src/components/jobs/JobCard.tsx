@@ -12,7 +12,7 @@ import { formatVND } from '@/utils/formatters';
 
 interface JobCardProps {
   job: Job;
-  onPress: () => void;
+  onPress?: (job: Job) => void;
 }
 
 const DEFAULT_CATEGORY_COLOR = { color: '#475569', bg: '#F1F5F9', border: '#E2E8F0' };
@@ -34,7 +34,7 @@ function JobCardComponent({ job, onPress }: JobCardProps) {
     <TouchableOpacity
       className="bg-white rounded-2xl p-4 mb-3 border border-[#E2E8F0]"
       activeOpacity={0.75}
-      onPress={onPress}
+      onPress={() => onPress?.(job)}
     >
       {/* Header: mã hạng mục + badge AI/Video AI */}
       <View className="flex-row justify-between items-center mb-2">

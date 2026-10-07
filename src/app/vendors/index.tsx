@@ -66,6 +66,11 @@ export default function VendorsScreen() {
     [router],
   );
 
+  const renderVendorItem = useCallback(
+    ({ item }: { item: VendorItem }) => <VendorCard vendor={item} onPress={handleOpenDetail} />,
+    [handleOpenDetail],
+  );
+
   if (!hasAccess) {
     return (
       <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
@@ -174,7 +179,7 @@ export default function VendorsScreen() {
           testID="vendorsList"
           data={visibleVendors}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <VendorCard vendor={item} onPress={handleOpenDetail} />}
+          renderItem={renderVendorItem}
           contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           onEndReached={handleEndReached}

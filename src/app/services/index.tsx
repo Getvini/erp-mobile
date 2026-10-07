@@ -145,6 +145,13 @@ export default function ServicesScreen() {
     );
   }, [bulkDeleteMutation, exitSelectionMode, selectedIds]);
 
+  const handleServicePress = useCallback(
+    (service: ServiceItem) => {
+      router.push(`/services/${service.id}` as any);
+    },
+    [router],
+  );
+
   const renderServiceCard = useCallback(
     ({ item }: { item: ServiceItem }) => (
       <ServiceCard
@@ -152,11 +159,11 @@ export default function ServicesScreen() {
         selectable={isSelectionMode}
         selected={selectedIds.includes(item.id)}
         onToggleSelect={handleToggleSelect}
-        onPress={(service) => router.push(`/services/${service.id}` as any)}
+        onPress={handleServicePress}
         onLongPress={canManage ? handleLongPress : undefined}
       />
     ),
-    [canManage, handleLongPress, handleToggleSelect, isSelectionMode, router, selectedIds],
+    [canManage, handleLongPress, handleServicePress, handleToggleSelect, isSelectionMode, selectedIds],
   );
 
   if (!canAccess) {

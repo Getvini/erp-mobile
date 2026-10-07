@@ -184,4 +184,6 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = React.memo(({ ite
       </View>
     </TouchableOpacity>
   );
-};
+});
+
+export default OpportunityCard;
