@@ -80,7 +80,11 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
         percentage: Number(m.percentage) || 0,
         amount: Number(m.amount) || 0,
         dueDate: m.dueDate ? m.dueDate.split('T')[0] : '',
-        isLocked: m.status === 'PAID' || m.status === 'COMPLETED',
+        isLocked:
+          m.status === 'PAID' ||
+          m.status === 'COMPLETED' ||
+          (Array.isArray((m as any).payments) && (m as any).payments.length > 0) ||
+          Number((m as any).paidAmount || 0) > 0,
       }));
       setMilestones(rows);
     }
@@ -139,8 +143,30 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
   };
 
   const handleRemoveRow = (index: number) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    setMilestones((prev) => prev.filter((_, i) => i !== index));
+    const target = milestones[index];
+    if (target?.isLocked) {
+      Alert.alert(
+        'Không thể xóa',
+        `Đợt thanh toán "${target.name}" đã phát sinh thanh toán hoặc đã hoàn thành, không thể xóa theo quy định kế toán.`
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Xóa đợt thanh toán',
+      `Bạn có chắc chắn muốn xóa "${target?.name || `Đợt ${index + 1}`}"? Hãy nhớ cân đối lại tỷ lệ % của các đợt còn lại cho đủ 100%.`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa đợt',
+          style: 'destructive',
+          onPress: () => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+            setMilestones((prev) => prev.filter((_, i) => i !== index));
+          },
+        },
+      ]
+    );
   };
 
   const handleNameChange = (index: number, text: string) => {

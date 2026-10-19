@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
-import { isManagementRole } from '@/utils/rbac';
+import { isManagementRole, canManageContract } from '@/utils/rbac';
 import { BrandColors } from '@/constants/colors';
 import * as DocumentPicker from 'expo-document-picker';
 import { uploadToCloudinary, PickedFile } from '@/services/cloudinaryService';
@@ -58,6 +58,7 @@ import { useDebtsByContractQuery } from '@/hooks/queries/useDebts';
 import { usePaymentMilestonesByContractQuery } from '@/hooks/queries/useMilestones';
 import { ContractAddendumsTab } from '@/components/contracts/ContractAddendumsTab';
 import { ContractAddendum } from '@/services/contractAddendumService';
+import { ContractExtraTasksSection } from '@/components/contracts/ContractExtraTasksSection';
 
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '—';
@@ -78,7 +79,7 @@ export default function ContractDetailScreen() {
   const contractId = String(params.id || '');
   const router = useRouter();
   const { user } = useAuth();
-  const isAdminOrBod = isManagementRole(user?.role);
+  const isAdminOrBod = canManageContract(user?.role);
 
   // TanStack Query for contract detail
   const { data: contractData, isLoading: isContractLoading, isFetching, isError: isContractError, error: contractError, refetch } = useContractDetailQuery(contractId);
@@ -145,8 +146,8 @@ export default function ContractDetailScreen() {
   const [selectedPmId, setSelectedPmId] = useState<string>('');
   const [isPmPickerVisible, setIsPmPickerVisible] = useState(false);
 
-  // P1.9 — Tab Phụ lục hợp đồng
-  const [activeTab, setActiveTab] = useState<'MAIN' | 'ADDENDUM'>('MAIN');
+  // P1.9 — Tab Phụ lục hợp đồng & Công việc phát sinh
+  const [activeTab, setActiveTab] = useState<'MAIN' | 'ADDENDUM' | 'EXTRA'>('MAIN');
 
   // P1.9 — Đổi tên hiển thị (nickname) dịch vụ trong hợp đồng
   const [nicknameTarget, setNicknameTarget] = useState<
@@ -621,6 +622,10 @@ export default function ContractDetailScreen() {
   const addendumList: ContractAddendum[] = Array.isArray((contract as any).addendums)
     ? ((contract as any).addendums as ContractAddendum[])
     : [];
+  const extraTasks: any[] = (project as any)?.tasks?.filter(
+    (t: any) => t.status === 'AWAITING_PRICING' || t.isExtra === true
+  ) || [];
+  const hasTabs = addendumList.length > 0 || extraTasks.length > 0;
   const canEditServiceNickname =
     !isLocked && ['PM', 'BOD', 'ADMIN', 'ADMIN_SALE'].includes(userRole);
   const nicknameSubmitting = updateNicknameMutation.isPending;
@@ -651,8 +656,8 @@ export default function ContractDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* P1.9 — TAB PHỤ LỤC: chỉ hiện khi hợp đồng có phụ lục (giống Web ContractDetailPage.jsx:297-310) */}
-      {addendumList.length > 0 && (
+      {/* P1.9 — TAB SWITCHER: hiện khi có phụ lục HOẶC công việc phát sinh (giống Web ContractDetailPage.jsx:263-311) */}
+      {hasTabs && (
         <View className="flex-row items-center gap-[8px] px-[16px] py-[10px] bg-white border-b border-b-slate-100">
           <TouchableOpacity
             onPress={() => setActiveTab('MAIN')}
@@ -675,31 +680,59 @@ export default function ContractDetailScreen() {
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => setActiveTab('ADDENDUM')}
-            activeOpacity={0.8}
-            className={`flex-1 min-h-[48px] flex-row items-center justify-center gap-[6px] rounded-[10px] border ${
-              activeTab === 'ADDENDUM'
-                ? 'bg-[#FFF4EA] border-[#FDCB9E]'
-                : 'bg-white border-slate-200'
-            }`}
-          >
-            <Feather
-              name="file-plus"
-              size={14}
-              color={activeTab === 'ADDENDUM' ? BrandColors.primary : '#64748B'}
-            />
-            <Text
-              className={`text-[13px] font-bold ${
-                activeTab === 'ADDENDUM' ? 'text-[#D97210]' : 'text-slate-500'
+          {extraTasks.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setActiveTab('EXTRA')}
+              activeOpacity={0.8}
+              className={`flex-1 min-h-[48px] flex-row items-center justify-center gap-[6px] rounded-[10px] border ${
+                activeTab === 'EXTRA' ? 'bg-[#FFF4EA] border-[#FDCB9E]' : 'bg-white border-slate-200'
               }`}
             >
-              Phụ lục
-            </Text>
-            <View className="bg-[#F3E8FF] px-[6px] py-[1px] rounded-full">
-              <Text className="text-[10px] font-black text-[#7E22CE]">{addendumList.length}</Text>
-            </View>
-          </TouchableOpacity>
+              <Feather
+                name="alert-circle"
+                size={14}
+                color={activeTab === 'EXTRA' ? BrandColors.primary : '#64748B'}
+              />
+              <Text
+                className={`text-[13px] font-bold ${
+                  activeTab === 'EXTRA' ? 'text-[#D97210]' : 'text-slate-500'
+                }`}
+              >
+                Phát sinh
+              </Text>
+              <View className="bg-amber-100 px-[6px] py-[1px] rounded-full">
+                <Text className="text-[10px] font-black text-amber-800">{extraTasks.length}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {addendumList.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setActiveTab('ADDENDUM')}
+              activeOpacity={0.8}
+              className={`flex-1 min-h-[48px] flex-row items-center justify-center gap-[6px] rounded-[10px] border ${
+                activeTab === 'ADDENDUM'
+                  ? 'bg-[#FFF4EA] border-[#FDCB9E]'
+                  : 'bg-white border-slate-200'
+              }`}
+            >
+              <Feather
+                name="file-plus"
+                size={14}
+                color={activeTab === 'ADDENDUM' ? BrandColors.primary : '#64748B'}
+              />
+              <Text
+                className={`text-[13px] font-bold ${
+                  activeTab === 'ADDENDUM' ? 'text-[#D97210]' : 'text-slate-500'
+                }`}
+              >
+                Phụ lục
+              </Text>
+              <View className="bg-[#F3E8FF] px-[6px] py-[1px] rounded-full">
+                <Text className="text-[10px] font-black text-[#7E22CE]">{addendumList.length}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -715,6 +748,26 @@ export default function ContractDetailScreen() {
           onRetry={handleRefresh}
           onRefresh={handleRefresh}
         />
+      ) : activeTab === 'EXTRA' && extraTasks.length > 0 ? (
+        <ScrollView
+          contentContainerClassName="p-[16px] pb-[120px]"
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              colors={[BrandColors.primary]}
+              tintColor={BrandColors.primary}
+            />
+          }
+        >
+          <ContractExtraTasksSection
+            tasks={extraTasks}
+            projectId={project?.id}
+            contractId={contractId}
+            onRefresh={handleRefresh}
+          />
+        </ScrollView>
       ) : (
       <ScrollView
         contentContainerClassName="p-[16px] pb-[120px]"
