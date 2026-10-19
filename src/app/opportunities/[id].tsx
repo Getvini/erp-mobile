@@ -53,6 +53,7 @@ import {
   useOpportunityDetailQuery,
   useApproveOpportunityMutation,
   useRejectOpportunityMutation,
+  useResubmitOpportunityMutation,
   useUpdateOpportunityMutation,
   useAddCustomerToOpportunityMutation,
 } from '@/hooks/queries/useOpportunities';
@@ -145,6 +146,7 @@ export default function OpportunityDetailScreen() {
   const addCustomerToOpportunityMutation = useAddCustomerToOpportunityMutation();
   const approveOpportunityMutation = useApproveOpportunityMutation();
   const rejectOpportunityMutation = useRejectOpportunityMutation();
+  const resubmitOpportunityMutation = useResubmitOpportunityMutation();
   const createContractMutation = useCreateContractMutation();
   const updateCustomerMutation = useUpdateCustomerMutation();
   const approveQuotationMutation = useApproveQuotationMutation();
@@ -152,6 +154,7 @@ export default function OpportunityDetailScreen() {
 
   const isApproving = approveOpportunityMutation.isPending;
   const isRejecting = rejectOpportunityMutation.isPending;
+  const isResubmitting = resubmitOpportunityMutation.isPending;
   const isCreatingContract = createContractMutation.isPending;
 
   // Tab Segment State
@@ -359,6 +362,28 @@ export default function OpportunityDetailScreen() {
     }
   };
 
+  const handleResubmitOpportunity = async () => {
+    if (!id || !opportunity) return;
+    Alert.alert(
+      'Gửi lại cơ hội',
+      'Bạn có chắc chắn muốn gửi lại cơ hội này để Ban Giám Đốc (BOD) xem xét phê duyệt?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Gửi duyệt',
+          onPress: async () => {
+            try {
+              await resubmitOpportunityMutation.mutateAsync(opportunity.id);
+              Alert.alert('Thành công', 'Đã gửi lại cơ hội để BOD xem xét phê duyệt.');
+            } catch (err: any) {
+              Alert.alert('Lỗi', err?.message || 'Có lỗi xảy ra khi gửi lại cơ hội.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   // BOD Approve Quotation Action
   const handleApproveQuotation = async (quoteId: string) => {
     Alert.alert('Duyệt báo giá', 'Xác nhận phê duyệt bản báo giá này?', [
@@ -505,6 +530,13 @@ export default function OpportunityDetailScreen() {
 
   const canViewQuotations = hasCustomer && quotations.length > 0;
   const canCreateContract = opportunity.status === 'QUOTE_APPROVED';
+  const isRejected = opportunity.status === 'OPP_REJECTED';
+  const canResubmit =
+    isRejected &&
+    (user?.role === 'ADMIN' ||
+      user?.role === 'BOD' ||
+      (opportunity.createdBy as any)?.id === user?.id ||
+      (opportunity as any)?.creator?.id === user?.id);
   const linkedContract =
     opportunity.contracts && opportunity.contracts.length > 0
       ? opportunity.contracts[0]
@@ -584,6 +616,56 @@ export default function OpportunityDetailScreen() {
           />
         }
       >
+        {/* REJECTION WARNING BANNER (Khi BOD từ chối cơ hội) */}
+        {isRejected && (
+          <View className="mb-3.5 rounded-2xl border border-red-200 bg-red-50 p-4 shadow-xs">
+            <View className="flex-row items-center gap-2 mb-1.5">
+              <Feather name="alert-circle" size={18} color="#DC2626" />
+              <Text className="text-sm font-bold text-red-700">Cơ hội không được duyệt</Text>
+            </View>
+            {opportunity.rejectionReason ? (
+              <Text className="text-xs text-red-600 mb-2 leading-4">
+                Lý do: {opportunity.rejectionReason}
+              </Text>
+            ) : null}
+            <Text className="text-[11px] text-red-500 mb-3">
+              Chỉnh sửa thông tin cơ hội và bấm "Gửi lại duyệt" để BOD xem xét lại.
+            </Text>
+            <View className="flex-row gap-2">
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() =>
+                  router.push({
+                    pathname: '/opportunities/create',
+                    params: { mode: 'edit', editId: opportunity.id },
+                  } as any)
+                }
+                className="flex-1 flex-row items-center justify-center py-2.5 px-3 rounded-xl bg-white border border-slate-300 gap-1.5"
+              >
+                <Feather name="edit-3" size={14} color="#334155" />
+                <Text className="text-xs font-semibold text-slate-700">Chỉnh sửa</Text>
+              </TouchableOpacity>
+              {canResubmit && (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  disabled={isResubmitting}
+                  onPress={handleResubmitOpportunity}
+                  className="flex-1 flex-row items-center justify-center py-2.5 px-3 rounded-xl bg-blue-600 gap-1.5"
+                >
+                  {isResubmitting ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Feather name="send" size={14} color="#FFFFFF" />
+                      <Text className="text-xs font-bold text-white">Gửi lại duyệt</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
+
         {/* 2. STATUS & PROGRESS STEPPER CARD */}
         <View className="bg-white rounded-[18px] p-4 mb-3.5 border border-slate-200 shadow-sm">
           <View className="flex-row justify-between items-center mb-2.5">
@@ -1136,10 +1218,11 @@ export default function OpportunityDetailScreen() {
       {/* 12. STICKY BOTTOM BAR */}
       <OpportunityBottomActionBar
         stage={(opportunity as any)?.stage || opportunity?.status}
-        isPending={isApproving || isRejecting}
+        isPending={isApproving || isRejecting || isResubmitting}
         canApprove={isAdminOrBod && isAwaitingApproval}
         onApprove={handleApproveOpportunity}
         onReject={() => setIsRejectModalVisible(true)}
+        onResubmit={canResubmit ? handleResubmitOpportunity : undefined}
         onCreateQuotation={
           (opportunity as any)?.stage === 'QUALIFIED' || (opportunity as any)?.stage === 'PROPOSAL' || opportunity?.status === 'QUALIFIED' || opportunity?.status === 'PROPOSAL'
             ? () => router.push(`/opportunities/${id}/quotations/create`)

@@ -154,6 +154,42 @@ export function useRejectOpportunityMutation() {
 }
 
 /**
+ * Hook to resubmit a rejected opportunity (PATCH /opportunities/:id/resubmit)
+ */
+export function useResubmitOpportunityMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await opportunityService.resubmitOpportunity(id);
+      return res.data;
+    },
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.detail(id) });
+    },
+  });
+}
+
+/**
+ * Hook to save opportunity draft on server (PATCH /opportunities/:id/draft)
+ */
+export function useSaveDraftOpportunityMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: string; payload: Partial<CreateOpportunityPayload> }) => {
+      const res = await opportunityService.saveDraftOpportunity(id, payload);
+      return res.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.detail(variables.id) });
+    },
+  });
+}
+
+/**
  * Hook to update opportunity stage
  */
 export function useUpdateOpportunityStageMutation() {

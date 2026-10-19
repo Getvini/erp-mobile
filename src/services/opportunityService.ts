@@ -82,6 +82,7 @@ export interface OpportunityItem {
   region?: string[] | string;
   durationMonths?: number;
   status: OpportunityStatus | string;
+  rejectionReason?: string;
   customerType?: CustomerType | string;
   source?: 'INTERNAL' | 'REFERRAL_PARTNER' | string;
   customerId?: string;
@@ -279,6 +280,14 @@ export const opportunityService = {
 
   async rejectOpportunity(id: string, reason?: string) {
     return apiService.patch<{ message: string }>(`/opportunities/${id}/reject`, { reason });
+  },
+
+  async resubmitOpportunity(id: string) {
+    return apiService.patch<OpportunityItem>(`/opportunities/${id}/resubmit`);
+  },
+
+  async saveDraftOpportunity(id: string, payload: Partial<CreateOpportunityPayload>) {
+    return apiService.patch<OpportunityItem>(`/opportunities/${id}/draft`, payload);
   },
 
   async updateOpportunityStage(id: string, stage: string) {

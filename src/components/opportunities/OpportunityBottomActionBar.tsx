@@ -10,6 +10,7 @@ interface OpportunityBottomActionBarProps {
   canApprove?: boolean;
   onApprove?: () => void;
   onReject?: () => void;
+  onResubmit?: () => void;
   onCreateQuotation?: () => void;
   onAdvanceStage?: () => void;
 }
@@ -40,6 +41,7 @@ export function OpportunityBottomActionBar({
   canApprove = false,
   onApprove,
   onReject,
+  onResubmit,
   onCreateQuotation,
   onAdvanceStage,
 }: OpportunityBottomActionBarProps) {
@@ -67,6 +69,24 @@ export function OpportunityBottomActionBar({
 
       {/* Action Buttons */}
       <View className="flex-row items-center gap-2">
+        {onResubmit && (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            disabled={isPending}
+            onPress={() => handlePress(onResubmit)}
+            className="px-4 py-2.5 rounded-xl bg-blue-600 min-h-[44px] flex-row items-center gap-1.5 shadow-xs"
+          >
+            {isPending ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Feather name="send" size={15} color="#FFFFFF" />
+                <Text className="text-xs font-bold text-white">Gửi lại duyệt</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+
         {canApprove && onReject && (
           <TouchableOpacity
             activeOpacity={0.8}
