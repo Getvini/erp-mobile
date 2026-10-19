@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { StatCard } from '../StatCard';
 import { ReviewQueueWidget } from '../ReviewQueueWidget';
 import { HotProjectsWidget } from '../HotProjectsWidget';
+import { RevenueCashflowMiniChart } from '../RevenueCashflowMiniChart';
 import { AdminMetrics, TaskItem } from '@/services/dashboardService';
 import { BrandColors } from '@/constants/colors';
 import { formatVND } from '@/utils/formatters';
@@ -79,6 +80,12 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
           onPress={() => router.push('/finance' as any)}
         />
       </View>
+
+      {/* Revenue & Debt Cashflow Mini Chart */}
+      <RevenueCashflowMiniChart
+        totalRevenue={adminMetrics?.totalRevenue}
+        totalDebt={adminMetrics?.totalDebt}
+      />
 
       {/* Review Queue (Items needing approval) */}
       <ReviewQueueWidget

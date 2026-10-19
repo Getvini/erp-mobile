@@ -19,6 +19,7 @@ import { BrandColors } from '@/constants/colors';
 import BottomNavBar from '@/components/BottomNavBar';
 import DatePickerModal from '@/components/common/DatePickerModal';
 import { DebtProgressRing } from '@/components/finance/DebtProgressRing';
+import { DebtAgingMiniChart } from '@/components/finance/DebtAgingMiniChart';
 import { FinanceFilterToolbar } from '@/components/finance/FinanceFilterToolbar';
 import { FinancePaymentModal } from '@/components/finance/FinancePaymentModal';
 import { FinanceRoadmapModal } from '@/components/finance/FinanceRoadmapModal';
@@ -575,6 +576,9 @@ export default function FinanceDashboardScreen() {
             </View>
           </View>
         </View>
+
+        {/* Debt Aging Mini Chart */}
+        <DebtAgingMiniChart contractGroups={filteredContracts} />
 
         {/* Mode Switcher Tabs */}
         <View className="flex-row bg-slate-200/60 p-1 rounded-2xl mb-4">

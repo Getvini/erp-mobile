@@ -18,6 +18,7 @@ import {
   usePaymentRequestsTotalDebtQuery,
 } from '@/hooks/queries/usePaymentRequests';
 import { PaymentRequestCard } from '@/components/payment-requests/PaymentRequestCard';
+import { PaymentRequestMiniChart } from '@/components/payment-requests/PaymentRequestMiniChart';
 import {
   PaymentRequestFilterModal,
   FilterValues,
@@ -397,6 +398,14 @@ export default function PaymentRequestsIndexScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 90 }}
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.3}
+          ListHeaderComponent={
+            flatItems.length > 0 ? (
+              <PaymentRequestMiniChart
+                requests={flatItems}
+                totalDebt={totalDebt?.totalDebt}
+              />
+            ) : null
+          }
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
