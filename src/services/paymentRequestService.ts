@@ -160,6 +160,8 @@ export interface PaymentRequest {
   createdById?: string;
   confirmedDueDate?: string;
   paidAt?: string;
+  paymentMethod?: string;
+  cashVoucherInfo?: any;
   invoiceFiles?: { id?: string; url: string; name?: string }[];
   invoiceImages?: { id?: string; url: string; name?: string }[];
   invoicePdfs?: { id?: string; url: string; name?: string }[];
@@ -215,6 +217,8 @@ export interface UpdatePaymentRequestPayload {
   beneficiaryAccount?: string;
   beneficiaryBank?: string;
   invoiceFiles?: any[];
+  cashVoucherInfo?: any;
+  paymentMethod?: string;
 }
 
 export interface ReviewPaymentRequestPayload {

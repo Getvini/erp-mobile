@@ -40,6 +40,7 @@ import {
 } from '@/utils/formatters';
 import { InvoiceUploadPicker, UploadedFileItem } from '@/components/payment-requests/InvoiceUploadPicker';
 import { DatePickerModal } from '@/components/common/DatePickerModal';
+import { CashVoucherBottomSheet, CashVoucherInfo } from '@/components/payment-requests/CashVoucherBottomSheet';
 
 export default function PaymentRequestDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -66,8 +67,26 @@ export default function PaymentRequestDetailScreen() {
   const [actionAmount, setActionAmount] = useState('');
   const [actionDueDate, setActionDueDate] = useState('');
   const [actionFiles, setActionFiles] = useState<UploadedFileItem[]>([]);
+  const [cashVoucherVisible, setCashVoucherVisible] = useState(false);
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+
+  const handleSaveCashVoucher = async (info: CashVoucherInfo) => {
+    if (!request) return;
+    try {
+      await updateMutation.mutateAsync({
+        id: request.id,
+        cashVoucherInfo: info,
+        paymentMethod: 'CASH',
+      });
+      setCashVoucherVisible(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      Alert.alert('Thành công', 'Đã lưu thông tin phiếu chi tiền mặt!');
+      refetch();
+    } catch (err: any) {
+      Alert.alert('Lỗi', err?.message || 'Không thể lưu thông tin phiếu chi.');
+    }
+  };
 
   if (isLoading) {
     return (
@@ -197,7 +216,7 @@ export default function PaymentRequestDetailScreen() {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
-      if (['REJECT', 'REQUEST_MORE_DOCS', 'BOD_REJECT'].includes(modalAction) && !actionNote.trim()) {
+      if (['REJECT', 'REQUEST_MORE_DOCS', 'BOD_REJECT', 'CANCEL'].includes(modalAction) && !actionNote.trim()) {
         Alert.alert('Thiếu thông tin', 'Vui lòng nhập lý do trước khi xác nhận.');
         return;
       }
@@ -289,6 +308,10 @@ export default function PaymentRequestDetailScreen() {
   const isPaid = request.paymentStatus === 'PAID';
   const isDraft = request.approvalStatus === 'DRAFT';
   const needsMoreDocs = request.approvalStatus === 'NEED_MORE_DOCS';
+  const isTerminal = ['REJECTED', 'CANCELLED'].includes(request.approvalStatus);
+  const isOwnPending = ['DRAFT', 'PENDING_REVIEWER', 'NEED_MORE_DOCS', 'PENDING_BOD'].includes(request.approvalStatus) && isOwner;
+  const isApprovedUnpaid = isApproved && !isPaid && isBOD;
+  const canCancel = !isTerminal && !isPaid && (isOwnPending || isApprovedUnpaid);
   const invoiceFiles = [
     ...(request.invoiceImages || []),
     ...(request.invoicePdfs || []),
@@ -342,8 +365,26 @@ export default function PaymentRequestDetailScreen() {
           </View>
         </View>
 
-        {/* Dual Badges in Header */}
-        <View style={{ flexDirection: 'row', gap: 6 }}>
+        {/* Dual Badges and Cancel Action in Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {canCancel && (
+            <TouchableOpacity
+              onPress={() => openActionModal('CANCEL')}
+              accessibilityRole="button"
+              accessibilityLabel="Hủy yêu cầu thanh toán"
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 5,
+                borderRadius: 6,
+                backgroundColor: '#FEF2F2',
+                borderWidth: 1,
+                borderColor: '#FECACA',
+              }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#DC2626' }}>Hủy đề xuất</Text>
+            </TouchableOpacity>
+          )}
+
           <View
             style={{
               paddingHorizontal: 8,
@@ -612,6 +653,74 @@ export default function PaymentRequestDetailScreen() {
           )}
         </View>
 
+        {/* Cash Voucher Card */}
+        {(request.cashVoucherInfo || request.paymentMethod === 'CASH' || isApproved || isPaid) && (
+          <View
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: 14,
+              padding: 16,
+              marginBottom: 14,
+              borderWidth: 1,
+              borderColor: '#E2E8F0',
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <MaterialIcons name="receipt-long" size={20} color="#F38820" />
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E293B' }}>
+                  Phiếu Chi Tiền Mặt
+                </Text>
+              </View>
+              {request.cashVoucherInfo?.voucherNo && (
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#64748B' }}>
+                  {request.cashVoucherInfo.voucherNo}
+                </Text>
+              )}
+            </View>
+
+            {request.cashVoucherInfo ? (
+              <View style={{ gap: 4, marginBottom: 12 }}>
+                <Text style={{ fontSize: 13, color: '#475569' }}>
+                  Người nhận: <Text style={{ fontWeight: '600', color: '#0F172A' }}>{request.cashVoucherInfo.receiverName}</Text>
+                </Text>
+                <Text style={{ fontSize: 13, color: '#475569' }}>
+                  Lý do chi: <Text style={{ color: '#0F172A' }}>{request.cashVoucherInfo.reason}</Text>
+                </Text>
+                <Text style={{ fontSize: 13, color: '#475569' }}>
+                  Định khoản: Nợ {request.cashVoucherInfo.debitAccount} / Có {request.cashVoucherInfo.creditAccount}
+                </Text>
+              </View>
+            ) : (
+              <Text style={{ fontSize: 12, color: '#64748B', marginBottom: 10 }}>
+                Chưa lập phiếu chi tiền mặt cho đề xuất này.
+              </Text>
+            )}
+
+            <TouchableOpacity
+              onPress={() => setCashVoucherVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Mở phiếu chi tiền mặt"
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                paddingVertical: 10,
+                borderRadius: 8,
+                backgroundColor: '#FFF7ED',
+                borderWidth: 1,
+                borderColor: '#FFEDD5',
+              }}
+            >
+              <Feather name="file-text" size={15} color="#F38820" />
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#F38820' }}>
+                {request.cashVoucherInfo ? 'Xem / Cập nhật phiếu chi' : 'Lập phiếu chi tiền mặt'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* History / Timeline if any */}
         {request.history && request.history.length > 0 && (
           <View
@@ -743,9 +852,25 @@ export default function PaymentRequestDetailScreen() {
           {isPendingReview && isReviewer && (
             <>
               <TouchableOpacity
-                onPress={() => handleReviewAction('REQUEST_MORE_DOCS')}
+                onPress={() => handleReviewAction('REJECT')}
                 style={{
                   flex: 1,
+                  height: 48,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: '#FECACA',
+                  backgroundColor: '#FEF2F2',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#DC2626' }}>Từ chối</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => handleReviewAction('REQUEST_MORE_DOCS')}
+                style={{
+                  flex: 1.2,
                   height: 48,
                   borderRadius: 10,
                   borderWidth: 1,
@@ -761,7 +886,7 @@ export default function PaymentRequestDetailScreen() {
               <TouchableOpacity
                 onPress={() => handleReviewAction('APPROVE')}
                 style={{
-                  flex: 1.5,
+                  flex: 1.3,
                   height: 48,
                   borderRadius: 10,
                   backgroundColor: '#16A34A',
@@ -769,7 +894,7 @@ export default function PaymentRequestDetailScreen() {
                   justifyContent: 'center',
                 }}
               >
-                <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>Duyệt đề xuất</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFF' }}>Duyệt đề xuất</Text>
               </TouchableOpacity>
             </>
           )}
@@ -863,10 +988,14 @@ export default function PaymentRequestDetailScreen() {
                   ? 'Ghi chú duyệt đề xuất'
                   : modalAction === 'REQUEST_MORE_DOCS'
                   ? 'Nội dung yêu cầu bổ sung'
+                  : modalAction === 'REJECT'
+                  ? 'Lý do từ chối đề xuất'
                   : modalAction === 'BOD_APPROVE'
                   ? 'Xác nhận phê duyệt (BOD)'
                   : modalAction === 'BOD_REJECT'
-                  ? 'Lý do từ chối'
+                  ? 'Lý do từ chối (BOD)'
+                  : modalAction === 'CANCEL'
+                  ? 'Lý do hủy yêu cầu thanh toán'
                   : 'Ghi chú thao tác'}
               </Text>
 
@@ -938,7 +1067,7 @@ export default function PaymentRequestDetailScreen() {
               <TextInput
                 value={actionNote}
                 onChangeText={setActionNote}
-                placeholder={['REJECT', 'REQUEST_MORE_DOCS', 'BOD_REJECT'].includes(modalAction) ? 'Nhập lý do bắt buộc...' : 'Nhập ghi chú nếu có...'}
+                placeholder={['REJECT', 'REQUEST_MORE_DOCS', 'BOD_REJECT', 'CANCEL'].includes(modalAction) ? 'Nhập lý do bắt buộc...' : 'Nhập ghi chú nếu có...'}
                 placeholderTextColor="#94A3B8"
                 multiline
                 numberOfLines={3}
@@ -980,7 +1109,7 @@ export default function PaymentRequestDetailScreen() {
                     flex: 1,
                     height: 48,
                     borderRadius: 8,
-                    backgroundColor: modalAction.includes('REJECT') ? '#DC2626' : '#F38820',
+                    backgroundColor: (modalAction.includes('REJECT') || modalAction === 'CANCEL') ? '#DC2626' : '#F38820',
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
@@ -1005,6 +1134,13 @@ export default function PaymentRequestDetailScreen() {
           setActionDueDate(apiDate);
           setDatePickerVisible(false);
         }}
+      />
+      <CashVoucherBottomSheet
+        visible={cashVoucherVisible}
+        request={request}
+        initialVoucherInfo={request.cashVoucherInfo}
+        onSave={handleSaveCashVoucher}
+        onClose={() => setCashVoucherVisible(false)}
       />
     </View>
   );
