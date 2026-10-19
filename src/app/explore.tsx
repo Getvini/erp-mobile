@@ -163,6 +163,14 @@ const MODULES = [
     badge: 'Real-time',
   },
   {
+    id: 'chat',
+    title: 'Trò chuyện & Nhắn tin',
+    desc: 'Nhắn tin thời gian thực 1-1 và theo nhóm dự án, cập nhật liên tục qua WebSocket.',
+    icon: 'chatbubbles-outline' as const,
+    color: '#F38820',
+    badge: 'Real-time',
+  },
+  {
     id: 'settings',
     title: 'Cài đặt hệ thống & QC',
     desc: 'Cấu hình bảo mật sinh trắc học, thông báo, AI QC đối chiếu sản phẩm và xóa bộ nhớ cache.',
@@ -329,6 +337,10 @@ export default function ExploreScreen() {
 
       case 'notifications':
         router.push('/notifications' as any);
+        break;
+
+      case 'chat':
+        router.push('/chat' as any);
         break;
 
       case 'settings':

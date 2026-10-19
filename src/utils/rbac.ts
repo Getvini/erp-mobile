@@ -145,6 +145,17 @@ export const isManagementRole = (role?: string): boolean => {
   return role === 'ADMIN' || role === 'BOD';
 };
 
+/**
+ * Quyền quản lý hợp đồng, duyệt proposal, CRUD mốc thanh toán
+ * Khớp chuẩn backend contract.controller.ts: @Roles(BOD, ADMIN, ADMIN_SALE)
+ */
+export const canManageContract = (role?: string): boolean => {
+  if (!role) return false;
+  return ['BOD', 'ADMIN', 'ADMIN_SALE'].includes(role);
+};
+
+export const canApproveProposal = canManageContract;
+
 export const isSalesRole = (role?: string): boolean => {
   return role === 'BD' || role === 'ADMIN_SALE';
 };

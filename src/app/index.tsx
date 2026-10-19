@@ -24,6 +24,7 @@ import { TeamLeadDashboardView } from '@/components/dashboard/views/TeamLeadDash
 import { MemberDashboardView } from '@/components/dashboard/views/MemberDashboardView';
 import { formatVND } from '@/utils/formatters';
 import { useUnreadNotificationCount } from '@/hooks/queries/useNotifications';
+import { useChatStore } from '@/stores/useChatStore';
 import {
   canAccessCustomers,
   isManagementRole,
@@ -116,6 +117,17 @@ export default function HomeScreen() {
   const { data: unreadNotificationCount = 0 } =
     useUnreadNotificationCount(Boolean(user));
 
+  // Chat realtime socket & unread count
+  const chatRooms = useChatStore((s) => s.rooms);
+  const initSocket = useChatStore((s) => s.initSocket);
+  const totalUnreadChats = chatRooms.reduce((sum, r) => sum + (r.unread ? (r.unreadCount || 1) : 0), 0);
+
+  useEffect(() => {
+    if (user?.id) {
+      initSocket(user.id);
+    }
+  }, [user?.id]);
+
   if (isLoading) {
     return (
       <View className="flex-1 justify-center items-center bg-background gap-3">
@@ -162,6 +174,27 @@ export default function HomeScreen() {
         </View>
 
         <View className="flex-row items-center gap-2">
+          {/* Realtime Chat Button */}
+          <TouchableOpacity
+            className="w-[38px] h-[38px] rounded-xl bg-slate-100 items-center justify-center relative min-w-[48px] min-h-[48px]"
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push('/chat' as any);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Mở tin nhắn"
+            activeOpacity={0.7}
+          >
+            <Feather name="message-circle" size={20} color="#475569" />
+            {totalUnreadChats > 0 ? (
+              <View className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 items-center justify-center border-[1.5px] border-white">
+                <Text className="text-[10px] font-bold text-white">
+                  {totalUnreadChats > 99 ? '99+' : totalUnreadChats}
+                </Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+
           <TouchableOpacity
             className="w-[38px] h-[38px] rounded-xl bg-slate-100 items-center justify-center relative min-w-[48px] min-h-[48px]"
             onPress={handleNotificationPress}

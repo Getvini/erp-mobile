@@ -395,6 +395,15 @@ class ApiService {
       method: 'GET',
     });
   }
+
+  async getAccessToken(): Promise<string | undefined> {
+    await this.cookieInitPromise;
+    return this.currentCookies.accessToken || (await privateStorage.getItem(STORAGE_ACCESS_TOKEN_KEY)) || undefined;
+  }
+
+  getBaseOrigin(): string {
+    return this.baseUrl.replace(/\/api\/?$/, '');
+  }
 }
 
 export const apiService = new ApiService();
