@@ -46,7 +46,9 @@ export default function ChatDetailScreen() {
   }, [messagesMap, id]);
 
   const roomTypingList = useMemo(() => {
-    return id ? typingUsers[id] || [] : [];
+    if (!id) return [];
+    const roomTyping = typingUsers[id] || {};
+    return Object.values(roomTyping); // array of username strings
   }, [typingUsers, id]);
 
   useEffect(() => {
@@ -215,6 +217,9 @@ export default function ChatDetailScreen() {
           }
           renderItem={({ item }: { item: ChatMessage }) => {
             const isMe = String(item.senderId) === String(user?.id);
+            const isRecalled = item.isRecalled;
+            const isEdited = item.isEdited;
+            const displayContent = isRecalled ? '⛔ Tin nhắn đã bị thu hồi' : item.content;
 
             return (
               <View
@@ -232,7 +237,7 @@ export default function ChatDetailScreen() {
 
                 <View
                   style={{
-                    backgroundColor: isMe ? BrandColors.primary : '#FFFFFF',
+                    backgroundColor: isMe ? (isRecalled ? '#94A3B8' : BrandColors.primary) : '#FFFFFF',
                     paddingHorizontal: 14,
                     paddingVertical: 10,
                     borderRadius: 16,
@@ -245,17 +250,26 @@ export default function ChatDetailScreen() {
                     shadowOpacity: 0.03,
                     shadowRadius: 2,
                     elevation: 1,
+                    opacity: isRecalled ? 0.6 : 1,
                   }}
                 >
                   <Text
                     style={{
                       fontSize: 14,
                       lineHeight: 20,
-                      color: isMe ? '#FFFFFF' : '#0F172A',
+                      color: isMe ? '#FFFFFF' : (isRecalled ? '#94A3B8' : '#0F172A'),
+                      fontStyle: isRecalled ? 'italic' : 'normal',
                     }}
                   >
-                    {item.content}
+                    {displayContent}
                   </Text>
+
+                  {/* Nhãn "(đã sửa)" — chỉ hiển thị nếu tin nhắn đã sửa và chưa bị thu hồi */}
+                  {isEdited && !isRecalled && (
+                    <Text style={{ fontSize: 10, color: isMe ? '#FFDDB3' : '#94A3B8', marginTop: 2 }}>
+                      (đã sửa)
+                    </Text>
+                  )}
 
                   {/* Attachment items if any */}
                   {item.attachments && item.attachments.length > 0 && (

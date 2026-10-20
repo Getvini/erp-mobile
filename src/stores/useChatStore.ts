@@ -10,7 +10,7 @@ interface ChatStoreState {
   activeRoomId: string | null;
   messages: Record<string, ChatMessage[]>;
   onlineUsers: string[];
-  typingUsers: Record<string, string[]>;
+  typingUsers: Record<string, Record<string, string>>; // roomId -> { [userId]: username }
   loadingRooms: boolean;
   loadingMessages: boolean;
   currentUserId: string | null;
@@ -145,27 +145,64 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       }
     });
 
-    socket.on('user_typing', ({ roomId, username }: { roomId: string; username: string }) => {
-      const { typingUsers } = get();
-      const current = typingUsers[roomId] || [];
-      if (!current.includes(username)) {
-        set({
-          typingUsers: {
-            ...typingUsers,
-            [roomId]: [...current, username],
+    // Tin nhắn bị thu hồi từ client khác (Web/Mobile)
+    socket.on('message_recalled', (data: { messageId: string; roomId: string }) => {
+      set((state) => {
+        const roomMsgs = state.messages[data.roomId] || [];
+        return {
+          messages: {
+            ...state.messages,
+            [data.roomId]: roomMsgs.map((m) =>
+              String(m.id) === String(data.messageId)
+                ? { ...m, content: '⛔ Tin nhắn đã bị thu hồi', isRecalled: true }
+                : m
+            ),
           },
-        });
-      }
+        };
+      });
     });
 
-    socket.on('user_stop_typing', ({ roomId, username }: { roomId: string; username: string }) => {
-      const { typingUsers } = get();
-      const current = typingUsers[roomId] || [];
-      set({
+    // Tin nhắn bị sửa từ client khác (Web/Mobile)
+    socket.on('message_edited', (data: { messageId: string; roomId: string; content: string }) => {
+      set((state) => {
+        const roomMsgs = state.messages[data.roomId] || [];
+        return {
+          messages: {
+            ...state.messages,
+            [data.roomId]: roomMsgs.map((m) =>
+              String(m.id) === String(data.messageId)
+                ? { ...m, content: data.content, isEdited: true }
+                : m
+            ),
+          },
+        };
+      });
+    });
+
+    socket.on('user_typing', ({ roomId, userId, username }: { roomId: string; userId: string; username: string }) => {
+      if (!roomId || !userId) return;
+      set((state) => ({
         typingUsers: {
-          ...typingUsers,
-          [roomId]: current.filter((u) => u !== username),
+          ...state.typingUsers,
+          [roomId]: {
+            ...(state.typingUsers[roomId] || {}),
+            [userId]: username || userId,
+          },
         },
+      }));
+    });
+
+    socket.on('user_stop_typing', ({ roomId, userId }: { roomId: string; userId: string }) => {
+      if (!roomId || !userId) return;
+      set((state) => {
+        const current = { ...(state.typingUsers[roomId] || {}) };
+        delete current[userId];
+        return {
+          typingUsers: {
+            ...state.typingUsers,
+            [roomId]: current,
+          },
+        };
       });
     });
 
@@ -242,42 +279,74 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       isOptimistic: true,
     };
 
-    // Optimistically append
-    const currentMsgs = messages[roomId] || [];
-    set({
+    // Optimistic append ngay lập tức
+    set((state) => ({
       messages: {
-        ...messages,
-        [roomId]: [...currentMsgs, optimisticMsg],
+        ...state.messages,
+        [roomId]: [...(state.messages[roomId] || []), optimisticMsg],
       },
-    });
+    }));
 
-    try {
-      if (socket && socket.connected) {
-        socket.emit('send_message', { roomId, content: trimmed, attachments });
-      } else {
+    // Fallback gọi REST nếu socket không khả dụng hoặc timeout
+    const sendViaRest = async () => {
+      try {
         const res = await chatService.sendMessage(roomId, trimmed, attachments);
         if (res.data) {
-          const updated = (get().messages[roomId] || []).map((m) =>
-            m.id === tempId ? (res.data as any) : m
-          );
           set((state) => ({
             messages: {
               ...state.messages,
-              [roomId]: updated,
+              [roomId]: (state.messages[roomId] || []).map((m) =>
+                m.id === tempId ? res.data! : m
+              ),
             },
           }));
         }
+      } catch {
+        // Đánh dấu lỗi trên tin nhắn optimistic để UI hiển thị trạng thái lỗi
+        set((state) => ({
+          messages: {
+            ...state.messages,
+            [roomId]: (state.messages[roomId] || []).map((m) =>
+              m.id === tempId ? { ...m, isError: true, isOptimistic: false } : m
+            ),
+          },
+        }));
       }
-    } catch {
-      // Revert or mark error
+    };
+
+    if (socket && socket.connected) {
+      // Gửi qua socket với ack timeout 5s; nếu fail tự động fallback sang REST
+      socket.timeout(5000).emit(
+        'send_message',
+        { roomId, content: trimmed, attachments },
+        (err: any, response: { ok: boolean; message?: ChatMessage }) => {
+          if (err || !response?.ok) {
+            sendViaRest();
+            return;
+          }
+          if (response.message) {
+            // Thay thế tin nhắn optimistic bằng server message thực
+            set((state) => ({
+              messages: {
+                ...state.messages,
+                [roomId]: (state.messages[roomId] || []).map((m) =>
+                  m.id === tempId ? response.message! : m
+                ),
+              },
+            }));
+          }
+        }
+      );
+    } else {
+      await sendViaRest();
     }
   },
 
   sendTyping: (roomId: string, isTyping: boolean) => {
     const { socket } = get();
-    if (socket && socket.connected) {
-      socket.emit(isTyping ? 'typing' : 'stop_typing', { roomId });
-    }
+    if (!socket || !socket.connected) return;
+    // Gửi trực tiếp chuỗi roomId (backend nhận cả string lẫn object sau fix)
+    socket.emit(isTyping ? 'typing' : 'stop_typing', roomId);
   },
 
   markAsRead: async (roomId: string) => {

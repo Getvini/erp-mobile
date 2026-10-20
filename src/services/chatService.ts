@@ -32,6 +32,9 @@ export interface ChatMessage {
   }>;
   createdAt: string;
   isOptimistic?: boolean;
+  isError?: boolean;
+  isRecalled?: boolean;
+  isEdited?: boolean;
 }
 
 export interface ChatRoom {
@@ -68,8 +71,8 @@ class ChatService {
     roomId: string,
     content: string,
     attachments: any[] = []
-  ): Promise<{ data?: ChatMessage[]; error?: string }> {
-    return apiService.post<ChatMessage[]>(`/chat-rooms/${roomId}/messages`, {
+  ): Promise<{ data?: ChatMessage; error?: string }> {
+    return apiService.post<ChatMessage>(`/chat-rooms/${roomId}/messages`, {
       content,
       attachments,
     });
