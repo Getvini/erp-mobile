@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   FlatList,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,8 +15,17 @@ import { Feather, MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useChatStore } from '@/stores/useChatStore';
 import { useAuth } from '@/context/AuthContext';
-import { ChatRoom } from '@/services/chatService';
+import { useUsersQuery } from '@/hooks/queries/useUsers';
+import { ChatRoom, chatService } from '@/services/chatService';
+import { UserItem } from '@/services/userService';
 import { BrandColors } from '@/constants/colors';
+import { ChatGroupModal } from '@/components/chat/ChatGroupModal';
+import { formatMessagePreview, formatChatTime } from '@/utils/chatTokenHelper';
+
+type UnifiedChatListItem =
+  | { type: 'header'; id: string; title: string; count: number }
+  | { type: 'room'; id: string; room: ChatRoom }
+  | { type: 'contact'; id: string; user: UserItem };
 
 export default function ChatRoomsScreen() {
   const router = useRouter();
@@ -23,13 +33,19 @@ export default function ChatRoomsScreen() {
   const { user } = useAuth();
 
   const [search, setSearch] = useState('');
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [startingChatUserId, setStartingChatUserId] = useState<string | null>(null);
 
   const rooms = useChatStore((s) => s.rooms);
   const loadingRooms = useChatStore((s) => s.loadingRooms);
   const isConnected = useChatStore((s) => s.isConnected);
+  const onlineUsers = useChatStore((s) => s.onlineUsers);
   const initSocket = useChatStore((s) => s.initSocket);
   const fetchRooms = useChatStore((s) => s.fetchRooms);
   const selectRoom = useChatStore((s) => s.selectRoom);
+
+  // TanStack Query Cache nạp toàn bộ danh bạ nhân sự công ty
+  const { data: allUsers = [] } = useUsersQuery();
 
   useEffect(() => {
     if (user?.id) {
@@ -38,41 +54,139 @@ export default function ChatRoomsScreen() {
     }
   }, [user?.id]);
 
-  const filteredRooms = useMemo(() => {
-    if (!search.trim()) return rooms;
-    const term = search.toLowerCase();
-    return rooms.filter((r) => {
-      const roomName = r.isGroup
+  // Hợp nhất danh sách: Đoạn chat đang hoạt động + Danh bạ nhân sự A-Z
+  const unifiedData = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    // 1. Danh sách phòng chat đang hoạt động (có tin nhắn hoặc được ghim)
+    const activeRooms = rooms.filter((r) => {
+      // Chỉ tính là active nếu có tin nhắn hoặc được ghim (hoặc là phòng nhóm)
+      const hasActivity = Boolean(r.latestMessage || r.isPinned || r.isGroup);
+      if (!hasActivity) return false;
+
+      if (!term) return true;
+      const roomTitle = r.isGroup
         ? r.name
-        : r.participants.find((p) => p.userId !== user?.id)?.user?.fullName || r.name;
-      return roomName?.toLowerCase().includes(term);
+        : r.participants.find((p) => String(p.userId) !== String(user?.id))?.user?.fullName ||
+          r.name;
+      return roomTitle?.toLowerCase().includes(term);
     });
-  }, [rooms, search, user?.id]);
 
-  const getRoomTitle = (room: ChatRoom) => {
-    if (room.isGroup) return room.name || 'Nhóm chat';
-    const other = room.participants.find((p) => p.userId !== user?.id);
-    return other?.user?.fullName || other?.user?.username || room.name || 'Đồng nghiệp';
-  };
-
-  const formatMessageTime = (dateStr?: string) => {
-    if (!dateStr) return '';
-    try {
-      const d = new Date(dateStr);
-      const now = new Date();
-      if (d.toDateString() === now.toDateString()) {
-        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    // Tập hợp ID của các user đã có phòng chat 1-1 active
+    const activeDirectUserIds = new Set<string>();
+    rooms.forEach((r) => {
+      if (!r.isGroup) {
+        const otherP = r.participants.find((p) => String(p.userId) !== String(user?.id));
+        if (otherP?.userId) {
+          activeDirectUserIds.add(String(otherP.userId));
+        }
       }
-      return `${d.getDate()}/${d.getMonth() + 1}`;
-    } catch {
-      return '';
+    });
+
+    // 2. Danh bạ đồng nghiệp mới (chưa có tin nhắn trong active list)
+    const newContacts = allUsers
+      .filter((u: UserItem) => {
+        // Loại trừ chính mình
+        if (String(u.id) === String(user?.id)) return false;
+        // Loại trừ nếu đã có cuộc trò chuyện active
+        if (activeDirectUserIds.has(String(u.id))) return false;
+
+        if (!term) return true;
+        const name = (u.fullName || u.account?.username || '').toLowerCase();
+        return name.includes(term);
+      })
+      .sort((a, b) => (a.fullName || '').localeCompare(b.fullName || '', 'vi'));
+
+    const list: UnifiedChatListItem[] = [];
+
+    if (activeRooms.length > 0) {
+      list.push({
+        type: 'header',
+        id: 'header_active_rooms',
+        title: 'ĐOẠN CHAT GẦN ĐÂY',
+        count: activeRooms.length,
+      });
+      activeRooms.forEach((r) => {
+        list.push({ type: 'room', id: `room_${r.id}`, room: r });
+      });
     }
+
+    if (newContacts.length > 0) {
+      list.push({
+        type: 'header',
+        id: 'header_contacts',
+        title: 'DANH BẠ ĐỒNG NGHIỆP',
+        count: newContacts.length,
+      });
+      newContacts.forEach((u) => {
+        list.push({ type: 'contact', id: `contact_${u.id}`, user: u });
+      });
+    }
+
+    return list;
+  }, [rooms, allUsers, search, user?.id]);
+
+  const getRoomInfo = (room: ChatRoom) => {
+    if (room.isGroup) {
+      return {
+        title: room.name || 'Nhóm chat',
+        avatarUrl: room.avatarUrl,
+        isOnline: false,
+        isGroup: true,
+      };
+    }
+    const otherParticipant = room.participants.find(
+      (p) => String(p.userId || p.user?.id) !== String(user?.id)
+    );
+    const otherUserId = otherParticipant?.userId || otherParticipant?.user?.id;
+    const isOnline = Boolean(otherUserId && onlineUsers.includes(String(otherUserId)));
+
+    return {
+      title:
+        otherParticipant?.user?.fullName ||
+        otherParticipant?.user?.username ||
+        room.name ||
+        'Đồng nghiệp',
+      avatarUrl: otherParticipant?.user?.avatarUrl || room.avatarUrl,
+      isOnline,
+      isGroup: false,
+    };
   };
 
   const handleRoomPress = (room: ChatRoom) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     selectRoom(room.id);
     router.push(`/chat/${room.id}` as any);
+  };
+
+  const handleStartChatWithUser = async (targetUser: UserItem) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+
+    // Kiểm tra xem phòng 1-1 đã tồn tại trong local store chưa
+    const existing = rooms.find(
+      (r) =>
+        !r.isGroup &&
+        r.participants.some((p) => String(p.userId || p.user?.id) === String(targetUser.id))
+    );
+
+    if (existing) {
+      selectRoom(existing.id);
+      router.push(`/chat/${existing.id}` as any);
+      return;
+    }
+
+    // Nếu chưa có, gọi REST API lấy hoặc tạo phòng DM mới
+    try {
+      setStartingChatUserId(targetUser.id);
+      const res = await chatService.getOrCreateDM(targetUser.id);
+      if (res.data?.id) {
+        await fetchRooms();
+        selectRoom(res.data.id);
+        router.push(`/chat/${res.data.id}` as any);
+      }
+    } finally {
+      setStartingChatUserId(null);
+    }
   };
 
   return (
@@ -88,7 +202,14 @@ export default function ChatRoomsScreen() {
           borderBottomColor: '#E2E8F0',
         }}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 12,
+          }}
+        >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <TouchableOpacity
               onPress={() => router.back()}
@@ -117,12 +238,40 @@ export default function ChatRoomsScreen() {
                     backgroundColor: isConnected ? '#10B981' : '#94A3B8',
                   }}
                 />
-                <Text style={{ fontSize: 11, color: isConnected ? '#10B981' : '#94A3B8', fontWeight: '600' }}>
+                <Text
+                  style={{
+                    fontSize: 11,
+                    color: isConnected ? '#10B981' : '#94A3B8',
+                    fontWeight: '600',
+                  }}
+                >
                   {isConnected ? 'Thời gian thực' : 'Đang kết nối...'}
                 </Text>
               </View>
             </View>
           </View>
+
+          {/* Create Group Button */}
+          <TouchableOpacity
+            onPress={() => setShowCreateGroupModal(true)}
+            activeOpacity={0.7}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 4,
+              paddingHorizontal: 12,
+              paddingVertical: 7,
+              borderRadius: 8,
+              backgroundColor: '#FFF7ED',
+              borderWidth: 1,
+              borderColor: '#FFEDD5',
+            }}
+          >
+            <Feather name="plus" size={16} color={BrandColors.primary} />
+            <Text style={{ fontSize: 12, fontWeight: '700', color: BrandColors.primary }}>
+              Tạo nhóm
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Search Bar */}
@@ -140,7 +289,7 @@ export default function ChatRoomsScreen() {
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder="Tìm cuộc trò chuyện..."
+            placeholder="Tìm cuộc trò chuyện hoặc đồng nghiệp..."
             placeholderTextColor="#94A3B8"
             style={{
               flex: 1,
@@ -157,7 +306,7 @@ export default function ChatRoomsScreen() {
         </View>
       </View>
 
-      {/* Room List */}
+      {/* Unified List (Active Chats + Contacts A-Z) */}
       {loadingRooms && rooms.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator size="large" color={BrandColors.primary} />
@@ -167,7 +316,7 @@ export default function ChatRoomsScreen() {
         </View>
       ) : (
         <FlatList
-          data={filteredRooms}
+          data={unifiedData}
           keyExtractor={(item) => item.id}
           refreshControl={
             <RefreshControl
@@ -182,111 +331,300 @@ export default function ChatRoomsScreen() {
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
               <MaterialIcons name="chat-bubble-outline" size={54} color="#CBD5E1" />
               <Text style={{ marginTop: 12, fontSize: 16, fontWeight: '700', color: '#334155' }}>
-                Chưa có cuộc trò chuyện nào
+                Không tìm thấy hội thoại hoặc liên hệ nào
               </Text>
               <Text style={{ marginTop: 4, fontSize: 13, color: '#94A3B8', textAlign: 'center' }}>
-                Tin nhắn trao đổi dự án và công việc sẽ xuất hiện tại đây.
+                Thử tìm với từ khóa khác hoặc tạo nhóm trò chuyện mới.
               </Text>
             </View>
           }
           renderItem={({ item }) => {
-            const title = getRoomTitle(item);
-            const hasUnread = Boolean(item.unread && (item.unreadCount || 0) > 0);
-
-            return (
-              <TouchableOpacity
-                onPress={() => handleRoomPress(item)}
-                activeOpacity={0.7}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  paddingHorizontal: 16,
-                  paddingVertical: 12,
-                  backgroundColor: '#FFFFFF',
-                  borderBottomWidth: 1,
-                  borderBottomColor: '#F1F5F9',
-                }}
-              >
-                {/* Avatar Icon */}
+            // 1. Header phân mục
+            if (item.type === 'header') {
+              return (
                 <View
                   style={{
-                    width: 46,
-                    height: 46,
-                    borderRadius: 23,
-                    backgroundColor: item.isGroup ? '#EFF6FF' : '#FFF7ED',
+                    paddingHorizontal: 16,
+                    paddingTop: 14,
+                    paddingBottom: 6,
+                    flexDirection: 'row',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    borderWidth: 1,
-                    borderColor: item.isGroup ? '#DBEAFE' : '#FFEDD5',
+                    justifyContent: 'space-between',
                   }}
                 >
-                  {item.isGroup ? (
-                    <Feather name="users" size={20} color="#3B82F6" />
-                  ) : (
-                    <Text style={{ fontSize: 17, fontWeight: '800', color: BrandColors.primary }}>
-                      {title.charAt(0).toUpperCase()}
-                    </Text>
-                  )}
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '800',
+                      color: '#94A3B8',
+                      letterSpacing: 0.5,
+                    }}
+                  >
+                    {item.title}
+                  </Text>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#CBD5E1' }}>
+                    {item.count}
+                  </Text>
                 </View>
+              );
+            }
 
-                {/* Content */}
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-                    <Text
-                      numberOfLines={1}
+            // 2. Item phòng chat đang hoạt động
+            if (item.type === 'room') {
+              const { room } = item;
+              const { title, avatarUrl, isOnline, isGroup } = getRoomInfo(room);
+              const hasUnread = Boolean(room.unread && (room.unreadCount || 0) > 0);
+              const preview = formatMessagePreview(room.latestMessage, {
+                isGroup,
+                selfUserId: user?.id,
+                allUsers,
+              });
+
+              return (
+                <TouchableOpacity
+                  onPress={() => handleRoomPress(room)}
+                  activeOpacity={0.7}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    backgroundColor: '#FFFFFF',
+                    borderBottomWidth: 1,
+                    borderBottomColor: '#F8FAFC',
+                  }}
+                >
+                  {/* Avatar Icon + Online Dot */}
+                  <View style={{ position: 'relative' }}>
+                    <View
                       style={{
-                        fontSize: 15,
-                        fontWeight: hasUnread ? '800' : '600',
-                        color: '#0F172A',
-                        flex: 1,
-                        marginRight: 8,
+                        width: 46,
+                        height: 46,
+                        borderRadius: 23,
+                        backgroundColor: isGroup ? '#EFF6FF' : '#FFF7ED',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderWidth: 1,
+                        borderColor: isGroup ? '#DBEAFE' : '#FFEDD5',
+                        overflow: 'hidden',
                       }}
                     >
-                      {title}
-                    </Text>
-                    <Text style={{ fontSize: 11, color: hasUnread ? BrandColors.primary : '#94A3B8', fontWeight: hasUnread ? '700' : '400' }}>
-                      {formatMessageTime(item.latestMessage?.createdAt || item.updatedAt)}
-                    </Text>
-                  </View>
+                      {avatarUrl ? (
+                        <Image
+                          source={{ uri: avatarUrl }}
+                          style={{ width: 46, height: 46, borderRadius: 23 }}
+                          resizeMode="cover"
+                        />
+                      ) : isGroup ? (
+                        <Feather name="users" size={20} color="#3B82F6" />
+                      ) : (
+                        <Text
+                          style={{ fontSize: 17, fontWeight: '800', color: BrandColors.primary }}
+                        >
+                          {title.charAt(0).toUpperCase()}
+                        </Text>
+                      )}
+                    </View>
 
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text
-                      numberOfLines={1}
-                      style={{
-                        fontSize: 13,
-                        color: hasUnread ? '#0F172A' : '#64748B',
-                        fontWeight: hasUnread ? '600' : '400',
-                        flex: 1,
-                        marginRight: 8,
-                      }}
-                    >
-                      {item.latestMessage?.content || (item.latestMessage?.attachments?.length ? '[Tệp đính kèm]' : 'Bắt đầu cuộc trò chuyện')}
-                    </Text>
-
-                    {hasUnread && (
+                    {/* Chấm tròn Online thời gian thực */}
+                    {isOnline && (
                       <View
                         style={{
-                          minWidth: 18,
-                          height: 18,
-                          borderRadius: 9,
-                          backgroundColor: '#EF4444',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          paddingHorizontal: 5,
+                          position: 'absolute',
+                          bottom: 0,
+                          right: 0,
+                          width: 13,
+                          height: 13,
+                          borderRadius: 6.5,
+                          backgroundColor: '#10B981',
+                          borderWidth: 2,
+                          borderColor: '#FFFFFF',
                         }}
-                      >
-                        <Text style={{ fontSize: 10, fontWeight: '800', color: '#FFFFFF' }}>
-                          {item.unreadCount}
-                        </Text>
-                      </View>
+                      />
                     )}
                   </View>
-                </View>
-              </TouchableOpacity>
-            );
+
+                  {/* Content */}
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: 3,
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 5 }}>
+                        {room.isPinned && (
+                          <Feather name="bookmark" size={13} color={BrandColors.primary} />
+                        )}
+                        <Text
+                          numberOfLines={1}
+                          style={{
+                            fontSize: 15,
+                            fontWeight: hasUnread ? '800' : '600',
+                            color: '#0F172A',
+                            flex: 1,
+                          }}
+                        >
+                          {title}
+                        </Text>
+                      </View>
+
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          color: hasUnread ? BrandColors.primary : '#94A3B8',
+                          fontWeight: hasUnread ? '700' : '400',
+                          marginLeft: 6,
+                        }}
+                      >
+                        {formatChatTime(room.latestMessage?.createdAt || room.updatedAt)}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <Text
+                        numberOfLines={1}
+                        style={{
+                          fontSize: 13,
+                          color: hasUnread ? '#0F172A' : '#64748B',
+                          fontWeight: hasUnread ? '600' : '400',
+                          flex: 1,
+                          marginRight: 8,
+                        }}
+                      >
+                        {preview}
+                      </Text>
+
+                      {hasUnread && (
+                        <View
+                          style={{
+                            minWidth: 18,
+                            height: 18,
+                            borderRadius: 9,
+                            backgroundColor: '#EF4444',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            paddingHorizontal: 5,
+                          }}
+                        >
+                          <Text style={{ fontSize: 10, fontWeight: '800', color: '#FFFFFF' }}>
+                            {room.unreadCount}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            }
+
+            // 3. Item nhân sự mới trong danh bạ A-Z
+            if (item.type === 'contact') {
+              const targetUser = item.user;
+              const name = targetUser.fullName || targetUser.account?.username || 'Đồng nghiệp';
+              const isOnline = onlineUsers.includes(String(targetUser.id));
+              const isCreating = startingChatUserId === targetUser.id;
+
+              return (
+                <TouchableOpacity
+                  onPress={() => handleStartChatWithUser(targetUser)}
+                  disabled={isCreating}
+                  activeOpacity={0.7}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 16,
+                    paddingVertical: 10,
+                    backgroundColor: '#FFFFFF',
+                    borderBottomWidth: 1,
+                    borderBottomColor: '#F8FAFC',
+                  }}
+                >
+                  {/* Avatar + Online Dot */}
+                  <View style={{ position: 'relative' }}>
+                    <View
+                      style={{
+                        width: 42,
+                        height: 42,
+                        borderRadius: 21,
+                        backgroundColor: '#F1F5F9',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderWidth: 1,
+                        borderColor: '#E2E8F0',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <Text style={{ fontSize: 16, fontWeight: '700', color: '#475569' }}>
+                        {name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+
+                    {isOnline && (
+                      <View
+                        style={{
+                          position: 'absolute',
+                          bottom: 0,
+                          right: 0,
+                          width: 12,
+                          height: 12,
+                          borderRadius: 6,
+                          backgroundColor: '#10B981',
+                          borderWidth: 2,
+                          borderColor: '#FFFFFF',
+                        }}
+                      />
+                    )}
+                  </View>
+
+                  {/* Info */}
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text
+                      numberOfLines={1}
+                      style={{ fontSize: 14, fontWeight: '600', color: '#1E293B' }}
+                    >
+                      {name}
+                    </Text>
+                    <Text
+                      numberOfLines={1}
+                      style={{ fontSize: 12, color: '#94A3B8', marginTop: 1 }}
+                    >
+                      Chưa có tin nhắn · Bấm để trò chuyện
+                    </Text>
+                  </View>
+
+                  {isCreating ? (
+                    <ActivityIndicator size="small" color={BrandColors.primary} />
+                  ) : (
+                    <Feather name="message-circle" size={17} color="#94A3B8" />
+                  )}
+                </TouchableOpacity>
+              );
+            }
+
+            return null;
           }}
         />
       )}
+
+      {/* Modal Tạo Nhóm */}
+      <ChatGroupModal
+        visible={showCreateGroupModal}
+        onClose={() => setShowCreateGroupModal(false)}
+        onSuccess={(newRoom) => {
+          fetchRooms();
+          selectRoom(newRoom.id);
+          router.push(`/chat/${newRoom.id}` as any);
+        }}
+      />
     </View>
   );
 }

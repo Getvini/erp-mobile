@@ -3,11 +3,13 @@ import { apiService } from './api';
 export enum PaymentRequestType {
   PROJECT = 'PROJECT',
   OTHER_WORK = 'OTHER_WORK',
+  ADVANCE = 'ADVANCE',
 }
 
 export const PAYMENT_REQUEST_TYPE_LABELS: Record<string, string> = {
   PROJECT: 'Theo dự án',
   OTHER_WORK: 'Công việc khác',
+  ADVANCE: 'Tạm ứng',
 };
 
 export enum ApprovalStatus {
@@ -82,6 +84,7 @@ export enum PaymentStatus {
   WAITING = 'WAITING',
   DUE_SOON = 'DUE_SOON',
   OVERDUE = 'OVERDUE',
+  PARTIALLY_PAID = 'PARTIALLY_PAID',
   PAID = 'PAID',
   NOT_APPLICABLE = 'NOT_APPLICABLE',
 }
@@ -90,6 +93,7 @@ export const PAYMENT_STATUS_LABELS: Record<string, string> = {
   WAITING: 'Chờ thanh toán',
   DUE_SOON: 'Sắp hết hạn',
   OVERDUE: 'Hết hạn',
+  PARTIALLY_PAID: 'Đã chi một phần',
   PAID: 'Đã thanh toán',
   NOT_APPLICABLE: 'Không áp dụng',
 };
@@ -116,6 +120,12 @@ export const PAYMENT_STATUS_CONFIG: Record<
     bg: '#FEE2E2',
     border: '#FECACA',
   },
+  PARTIALLY_PAID: {
+    text: 'Đã chi một phần',
+    color: '#D97706',
+    bg: '#FEF3C7',
+    border: '#FDE68A',
+  },
   PAID: {
     text: 'Đã thanh toán',
     color: '#16A34A',
@@ -129,6 +139,82 @@ export const PAYMENT_STATUS_CONFIG: Record<
     border: '#E2E8F0',
   },
 };
+
+export enum PaymentSettlementStatus {
+  NOT_APPLICABLE = 'NOT_APPLICABLE',
+  PENDING = 'PENDING',
+  WAITING_SETTLEMENT = 'WAITING_SETTLEMENT',
+  SETTLEMENT_SUBMITTED = 'SETTLEMENT_SUBMITTED',
+  SETTLED = 'SETTLED',
+}
+
+export const SETTLEMENT_STATUS_LABELS: Record<string, string> = {
+  NOT_APPLICABLE: 'Không áp dụng',
+  PENDING: 'Chờ chi đủ tạm ứng',
+  WAITING_SETTLEMENT: 'Chờ nộp hoàn ứng',
+  SETTLEMENT_SUBMITTED: 'Đã nộp, chờ duyệt hoàn ứng',
+  SETTLED: 'Đã hoàn ứng',
+};
+
+export const SETTLEMENT_STATUS_CONFIG: Record<
+  string,
+  { text: string; color: string; bg: string; border: string }
+> = {
+  NOT_APPLICABLE: {
+    text: 'Không áp dụng',
+    color: '#64748B',
+    bg: '#F1F5F9',
+    border: '#E2E8F0',
+  },
+  PENDING: {
+    text: 'Chờ chi đủ tạm ứng',
+    color: '#64748B',
+    bg: '#F1F5F9',
+    border: '#E2E8F0',
+  },
+  WAITING_SETTLEMENT: {
+    text: 'Chờ nộp hoàn ứng',
+    color: '#EA580C',
+    bg: '#FFEDD5',
+    border: '#FED7AA',
+  },
+  SETTLEMENT_SUBMITTED: {
+    text: 'Chờ duyệt hoàn ứng',
+    color: '#D97706',
+    bg: '#FEF3C7',
+    border: '#FDE68A',
+  },
+  SETTLED: {
+    text: 'Đã hoàn ứng',
+    color: '#16A34A',
+    bg: '#DCFCE7',
+    border: '#BBF7D0',
+  },
+};
+
+export interface PaymentTransactionRecord {
+  id: string;
+  amount: number;
+  paidAt: string;
+  payerId: string;
+  payerName?: string;
+  paymentMethod: string;
+  cashVoucherInfo?: { voucherNo?: string; notes?: string };
+  proofFiles: { id?: string; url: string; name?: string; fileType?: string }[];
+  note?: string;
+}
+
+export interface ServiceBudgetInfo {
+  itemBudget: number | null;
+  itemPaid: number;
+  itemRemaining: number | null;
+  totalServiceBudget: number | null;
+  totalServicePaid: number;
+  totalServiceRemaining: number | null;
+  serviceName?: string;
+  isOverItemBudget: boolean;
+  isOverTotalBudget: boolean;
+}
 
 export interface PaymentRequest {
   id: string;
@@ -166,6 +252,17 @@ export interface PaymentRequest {
   invoiceImages?: { id?: string; url: string; name?: string }[];
   invoicePdfs?: { id?: string; url: string; name?: string }[];
   paymentProofs?: { id?: string; url: string; name?: string; paidAt?: string }[];
+  paidAmount?: number;
+  paymentTransactions?: PaymentTransactionRecord[];
+  settlementStatus?: PaymentSettlementStatus | string;
+  settledAmount?: number | null;
+  settlementDifference?: number | null;
+  settlementDueDate?: string | null;
+  settlementFiles?: { id?: string; url: string; name?: string; docType?: string }[];
+  settlementNote?: string | null;
+  settlementRefundConfirmed?: boolean;
+  overBudgetReason?: string | null;
+  isOverdue?: boolean;
   history?: {
     id?: string;
     action: string;
@@ -181,6 +278,7 @@ export interface PaymentRequestsTotalDebt {
   totalDebt: number;
   projectDebt: number;
   otherWorkDebt: number;
+  advanceDebt?: number;
 }
 
 export interface CreatePaymentRequestPayload {
@@ -200,6 +298,8 @@ export interface CreatePaymentRequestPayload {
   invoiceFiles?: any[];
   invoiceImages?: any[];
   invoicePdfs?: any[];
+  settlementDueDate?: string;
+  overBudgetReason?: string;
 }
 
 export interface UpdatePaymentRequestPayload {
@@ -211,6 +311,7 @@ export interface UpdatePaymentRequestPayload {
   content?: string;
   dueDate?: string;
   projectId?: string;
+  taskId?: string;
   contractId?: string;
   vendorId?: string;
   beneficiaryName?: string;
@@ -219,6 +320,8 @@ export interface UpdatePaymentRequestPayload {
   invoiceFiles?: any[];
   cashVoucherInfo?: any;
   paymentMethod?: string;
+  settlementDueDate?: string;
+  overBudgetReason?: string;
 }
 
 export interface ReviewPaymentRequestPayload {
@@ -246,6 +349,47 @@ export interface PayPaymentRequestPayload {
     fileType?: 'IMAGE' | 'PDF' | string;
   }[];
   note?: string;
+}
+
+export interface RecordPaymentPayload {
+  id: string;
+  amount: number;
+  paymentMethod?: string;
+  cashVoucherInfo?: any;
+  proofFiles?: {
+    url: string;
+    name?: string;
+    fileType?: 'IMAGE' | 'PDF' | string;
+  }[];
+  note?: string;
+}
+
+export interface SubmitSettlementPayload {
+  id: string;
+  actualAmount: number;
+  settlementFiles?: {
+    url: string;
+    name?: string;
+    docType?: string;
+    fileType?: 'IMAGE' | 'PDF' | string;
+  }[];
+  note?: string;
+}
+
+export interface ApproveSettlementPayload {
+  id: string;
+  refundConfirmed?: boolean;
+  additionalPaymentProofFiles?: {
+    url: string;
+    name?: string;
+    fileType?: 'IMAGE' | 'PDF' | string;
+  }[];
+  note?: string;
+}
+
+export interface RejectSettlementPayload {
+  id: string;
+  reason: string;
 }
 
 class PaymentRequestService {
@@ -382,6 +526,62 @@ class PaymentRequestService {
    */
   async uploadPaymentRequestProof({ id, ...file }: { id: string; [key: string]: any }) {
     return apiService.post<any>(`/payment-requests/${id}/payment-proofs`, file);
+  }
+
+  /**
+   * 16. GET /payment-requests/service-budget
+   * Đối soát ngân sách dịch vụ 2 tầng (Hạng mục công việc vs Tổng dự án)
+   */
+  async getServiceBudget(params: { projectId?: string; taskId?: string; excludeRequestId?: string }) {
+    return apiService.get<ServiceBudgetInfo>('/payment-requests/service-budget', params);
+  }
+
+  /**
+   * 17. GET /payment-requests/project-budget-summary/:projectId
+   * Lấy tổng quan ngân sách dự án
+   */
+  async getProjectBudgetSummary(projectId: string) {
+    return apiService.get<any>(`/payment-requests/project-budget-summary/${projectId}`);
+  }
+
+  /**
+   * 18. POST /payment-requests/:id/record-payment
+   * Kế toán giải ngân chi tiền từng đợt (bọc Transaction + Pessimistic Lock)
+   */
+  async recordPayment({ id, ...data }: RecordPaymentPayload) {
+    return apiService.post<PaymentRequest>(`/payment-requests/${id}/record-payment`, data);
+  }
+
+  /**
+   * 19. POST /payment-requests/:id/submit-settlement
+   * Nhân sự nộp chứng từ quyết toán hoàn ứng
+   */
+  async submitSettlement({ id, ...data }: SubmitSettlementPayload) {
+    return apiService.post<PaymentRequest>(`/payment-requests/${id}/submit-settlement`, data);
+  }
+
+  /**
+   * 20. POST /payment-requests/:id/approve-settlement
+   * Kế toán phê duyệt hoàn ứng (xác nhận thu hồi thừa hoặc chi bù)
+   */
+  async approveSettlement({ id, ...data }: ApproveSettlementPayload) {
+    return apiService.post<PaymentRequest>(`/payment-requests/${id}/approve-settlement`, data);
+  }
+
+  /**
+   * 21. POST /payment-requests/:id/reject-settlement
+   * Kế toán từ chối hoàn ứng, yêu cầu làm lại
+   */
+  async rejectSettlement({ id, reason }: RejectSettlementPayload) {
+    return apiService.post<PaymentRequest>(`/payment-requests/${id}/reject-settlement`, { reason });
+  }
+
+  /**
+   * 22. POST /payment-requests/:id/settlement-files
+   * Bổ sung tệp chứng từ quyết toán
+   */
+  async addSettlementFiles({ id, files }: { id: string; files: any[] }) {
+    return apiService.post<any>(`/payment-requests/${id}/settlement-files`, { files });
   }
 }
 

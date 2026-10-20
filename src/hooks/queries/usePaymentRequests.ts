@@ -8,6 +8,11 @@ import {
   ReviewPaymentRequestPayload,
   BodDecidePaymentRequestPayload,
   PayPaymentRequestPayload,
+  RecordPaymentPayload,
+  SubmitSettlementPayload,
+  ApproveSettlementPayload,
+  RejectSettlementPayload,
+  ServiceBudgetInfo,
 } from '@/services/paymentRequestService';
 import { queryKeys } from '@/services/queryKeys';
 
@@ -312,3 +317,161 @@ export function useCancelPaymentRequestMutation() {
     },
   });
 }
+
+/**
+ * Hook to get 2-tier service budget comparison
+ */
+export function useServiceBudgetQuery(params: {
+  projectId?: string;
+  taskId?: string;
+  excludeRequestId?: string;
+}) {
+  return useQuery({
+    queryKey: queryKeys.paymentRequests.serviceBudget(params),
+    queryFn: async (): Promise<ServiceBudgetInfo | null> => {
+      if (!params.projectId) return null;
+      const res = await paymentRequestService.getServiceBudget(params);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data || null;
+    },
+    enabled: Boolean(params.projectId),
+  });
+}
+
+/**
+ * Hook to get project budget summary
+ */
+export function useProjectBudgetSummaryQuery(projectId?: string) {
+  return useQuery({
+    queryKey: queryKeys.paymentRequests.projectBudgetSummary(projectId || ''),
+    queryFn: async () => {
+      if (!projectId) return null;
+      const res = await paymentRequestService.getProjectBudgetSummary(projectId);
+      if (res.error) {
+        throw new Error(res.error);
+      }
+      return res.data || null;
+    },
+    enabled: Boolean(projectId),
+  });
+}
+
+/**
+ * Hook for Accountant installment disbursement (chi tiền từng đợt)
+ */
+export function useRecordPaymentRequestMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: RecordPaymentPayload) => {
+      const res = await paymentRequestService.recordPayment(payload);
+      if (res.error || !res.data) {
+        throw new Error(res.error || 'Không thể ghi nhận đợt giải ngân');
+      }
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.paymentRequests.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.finance.all });
+      if (data?.id) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.paymentRequests.detail(data.id) });
+      }
+    },
+  });
+}
+
+/**
+ * Hook to submit settlement documents (nhân sự nộp hoàn ứng)
+ */
+export function useSubmitSettlementPaymentRequestMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: SubmitSettlementPayload) => {
+      const res = await paymentRequestService.submitSettlement(payload);
+      if (res.error || !res.data) {
+        throw new Error(res.error || 'Không thể nộp chứng từ quyết toán hoàn ứng');
+      }
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.paymentRequests.all });
+      if (data?.id) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.paymentRequests.detail(data.id) });
+      }
+    },
+  });
+}
+
+/**
+ * Hook to approve settlement (Kế toán duyệt hoàn ứng)
+ */
+export function useApproveSettlementPaymentRequestMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: ApproveSettlementPayload) => {
+      const res = await paymentRequestService.approveSettlement(payload);
+      if (res.error || !res.data) {
+        throw new Error(res.error || 'Không thể phê duyệt quyết toán hoàn ứng');
+      }
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.paymentRequests.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.finance.all });
+      if (data?.id) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.paymentRequests.detail(data.id) });
+      }
+    },
+  });
+}
+
+/**
+ * Hook to reject settlement (Kế toán từ chối hoàn ứng)
+ */
+export function useRejectSettlementPaymentRequestMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: RejectSettlementPayload) => {
+      const res = await paymentRequestService.rejectSettlement(payload);
+      if (res.error || !res.data) {
+        throw new Error(res.error || 'Không thể từ chối quyết toán');
+      }
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.paymentRequests.all });
+      if (data?.id) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.paymentRequests.detail(data.id) });
+      }
+    },
+  });
+}
+
+/**
+ * Hook to add additional settlement files
+ */
+export function useAddSettlementFilesPaymentRequestMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: { id: string; files: any[] }) => {
+      const res = await paymentRequestService.addSettlementFiles(payload);
+      if (res.error || !res.data) {
+        throw new Error(res.error || 'Không thể bổ sung chứng từ quyết toán');
+      }
+      return res.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.paymentRequests.all });
+      if (variables?.id) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.paymentRequests.detail(variables.id) });
+      }
+    },
+  });
+}
+

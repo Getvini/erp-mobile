@@ -21,6 +21,7 @@ export interface FilterValues {
   type: string;
   approvalStatus: string;
   paymentStatus: string;
+  settlementStatus?: string;
   dateField: string;
   fromDate: string;
   toDate: string;
@@ -42,6 +43,7 @@ const TYPE_OPTIONS = [
   { value: 'ALL', label: 'Tất cả các loại' },
   { value: 'PROJECT', label: 'Theo dự án' },
   { value: 'OTHER_WORK', label: 'Công việc khác' },
+  { value: 'ADVANCE', label: 'Tạm ứng (ADVANCE)' },
 ];
 
 const DATE_FIELD_OPTIONS = [
@@ -76,8 +78,17 @@ const PAYMENT_OPTIONS = [
   { value: 'WAITING', label: PAYMENT_STATUS_LABELS.WAITING },
   { value: 'DUE_SOON', label: PAYMENT_STATUS_LABELS.DUE_SOON },
   { value: 'OVERDUE', label: PAYMENT_STATUS_LABELS.OVERDUE },
+  { value: 'PARTIALLY_PAID', label: PAYMENT_STATUS_LABELS.PARTIALLY_PAID },
   { value: 'PAID', label: PAYMENT_STATUS_LABELS.PAID },
   { value: 'NOT_APPLICABLE', label: PAYMENT_STATUS_LABELS.NOT_APPLICABLE },
+];
+
+const SETTLEMENT_OPTIONS = [
+  { value: 'ALL', label: 'Tất cả trạng thái hoàn ứng' },
+  { value: 'PENDING', label: 'Chờ chi đủ tạm ứng' },
+  { value: 'WAITING_SETTLEMENT', label: 'Chờ nộp hoàn ứng' },
+  { value: 'SETTLEMENT_SUBMITTED', label: 'Đã nộp, chờ duyệt' },
+  { value: 'SETTLED', label: 'Đã hoàn ứng' },
 ];
 
 export const PaymentRequestFilterModal: React.FC<PaymentRequestFilterModalProps> = ({
@@ -92,6 +103,7 @@ export const PaymentRequestFilterModal: React.FC<PaymentRequestFilterModalProps>
   const [selectedType, setSelectedType] = useState(initialFilters.type || 'ALL');
   const [selectedApproval, setSelectedApproval] = useState(initialFilters.approvalStatus || 'ALL');
   const [selectedPayment, setSelectedPayment] = useState(initialFilters.paymentStatus || 'ALL');
+  const [selectedSettlement, setSelectedSettlement] = useState(initialFilters.settlementStatus || 'ALL');
   const [dateField, setDateField] = useState(initialFilters.dateField || 'dueDate');
   const [fromDate, setFromDate] = useState(initialFilters.fromDate || '');
   const [toDate, setToDate] = useState(initialFilters.toDate || '');
@@ -106,6 +118,7 @@ export const PaymentRequestFilterModal: React.FC<PaymentRequestFilterModalProps>
       setSelectedType(initialFilters.type || 'ALL');
       setSelectedApproval(initialFilters.approvalStatus || 'ALL');
       setSelectedPayment(initialFilters.paymentStatus || 'ALL');
+      setSelectedSettlement(initialFilters.settlementStatus || 'ALL');
       setDateField(initialFilters.dateField || 'dueDate');
       setFromDate(initialFilters.fromDate || '');
       setToDate(initialFilters.toDate || '');
@@ -121,6 +134,7 @@ export const PaymentRequestFilterModal: React.FC<PaymentRequestFilterModalProps>
     setSelectedType('ALL');
     setSelectedApproval('ALL');
     setSelectedPayment('ALL');
+    setSelectedSettlement('ALL');
     setDateField('dueDate');
     setFromDate('');
     setToDate('');
@@ -136,6 +150,7 @@ export const PaymentRequestFilterModal: React.FC<PaymentRequestFilterModalProps>
       type: selectedType,
       approvalStatus: selectedApproval,
       paymentStatus: selectedPayment,
+      settlementStatus: selectedSettlement,
       dateField,
       fromDate: DATE_RE.test(fromDate.trim()) ? fromDate.trim() : '',
       toDate: DATE_RE.test(toDate.trim()) ? toDate.trim() : '',
@@ -324,6 +339,44 @@ export const PaymentRequestFilterModal: React.FC<PaymentRequestFilterModalProps>
                 })}
               </View>
             </View>
+
+            {/* 3.1 Trạng thái quyết toán hoàn ứng (Hiển thị khi chọn Tạm ứng hoặc Tất cả) */}
+            {(selectedType === 'ALL' || selectedType === 'ADVANCE') && (
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#7E22CE', marginBottom: 8 }}>
+                  Trạng Thái Quyết Toán Hoàn Ứng (Tạm Ứng)
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {SETTLEMENT_OPTIONS.map((opt) => {
+                    const active = selectedSettlement === opt.value;
+                    return (
+                      <TouchableOpacity
+                        key={opt.value}
+                        onPress={() => setSelectedSettlement(opt.value)}
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 8,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: active ? '#9333EA' : '#E2E8F0',
+                          backgroundColor: active ? '#FAF5FF' : '#FFFFFF',
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            fontWeight: active ? '700' : '500',
+                            color: active ? '#7E22CE' : '#475569',
+                          }}
+                        >
+                          {opt.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
 
             <View style={{ marginBottom: 16 }}>
               <Text style={{ fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 8 }}>

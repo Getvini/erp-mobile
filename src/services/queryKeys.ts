@@ -156,6 +156,8 @@ export const queryKeys = {
     details: () => [...queryKeys.paymentRequests.all, 'detail'] as const,
     detail: (id: string) => [...queryKeys.paymentRequests.details(), id] as const,
     totalDebt: (params?: Record<string, any>) => [...queryKeys.paymentRequests.all, 'total-debt', params || {}] as const,
+    serviceBudget: (params?: Record<string, any>) => [...queryKeys.paymentRequests.all, 'service-budget', params || {}] as const,
+    projectBudgetSummary: (projectId: string) => [...queryKeys.paymentRequests.all, 'project-budget-summary', projectId] as const,
   },
 
   // Debts / Công nợ hợp đồng & đối soát

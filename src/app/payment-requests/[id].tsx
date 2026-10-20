@@ -24,11 +24,14 @@ import {
   useCancelPaymentRequestMutation,
   useSupplementPaymentRequestMutation,
   useUpdatePaymentRequestMutation,
+  useServiceBudgetQuery,
 } from '@/hooks/queries/usePaymentRequests';
 import {
   APPROVAL_STATUS_CONFIG,
   PAYMENT_STATUS_CONFIG,
   PAYMENT_REQUEST_TYPE_LABELS,
+  SETTLEMENT_STATUS_LABELS,
+  SETTLEMENT_STATUS_CONFIG,
   paymentRequestService,
 } from '@/services/paymentRequestService';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -41,6 +44,10 @@ import {
 import { InvoiceUploadPicker, UploadedFileItem } from '@/components/payment-requests/InvoiceUploadPicker';
 import { DatePickerModal } from '@/components/common/DatePickerModal';
 import { CashVoucherBottomSheet, CashVoucherInfo } from '@/components/payment-requests/CashVoucherBottomSheet';
+import { ServiceBudgetBox } from '@/components/payment-requests/ServiceBudgetBox';
+import { PaymentDisbursementBottomSheet } from '@/components/payment-requests/PaymentDisbursementBottomSheet';
+import { PaymentSettlementBottomSheet } from '@/components/payment-requests/PaymentSettlementBottomSheet';
+import { PaymentSettlementReviewBottomSheet } from '@/components/payment-requests/PaymentSettlementReviewBottomSheet';
 
 export default function PaymentRequestDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -70,6 +77,17 @@ export default function PaymentRequestDetailScreen() {
   const [cashVoucherVisible, setCashVoucherVisible] = useState(false);
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+
+  // 3 Bottom Sheets cho Payment Production Suite
+  const [showDisbursementModal, setShowDisbursementModal] = useState(false);
+  const [showSettlementModal, setShowSettlementModal] = useState(false);
+  const [showSettlementReviewModal, setShowSettlementReviewModal] = useState(false);
+
+  const { data: budgetInfo, isLoading: loadingBudget } = useServiceBudgetQuery({
+    projectId: request?.projectId || undefined,
+    taskId: request?.task?.id || (request as any)?.taskId || undefined,
+    excludeRequestId: request?.id,
+  });
 
   const handleSaveCashVoucher = async (info: CashVoucherInfo) => {
     if (!request) return;
@@ -318,11 +336,27 @@ export default function PaymentRequestDetailScreen() {
     ...(request.invoiceFiles || []),
   ];
 
+  const isAdvance = request.type === 'ADVANCE';
+  const remainingToDisburse = Math.max(0, request.amount - (request.paidAmount || 0));
+  const canDisburse = isApproved && remainingToDisburse > 0 && isAccountant;
+  const canSubmitSettlement =
+    isAdvance &&
+    (request.paidAmount || 0) > 0 &&
+    isOwner &&
+    (!request.settlementStatus || ['WAITING_SETTLEMENT', 'PENDING'].includes(request.settlementStatus));
+  const canReviewSettlement =
+    isAdvance &&
+    request.settlementStatus === 'SETTLEMENT_SUBMITTED' &&
+    (isAccountant || isBOD);
+
   const hasAnyAction =
     ((isDraft || needsMoreDocs) && isOwner) ||
     (isPendingReview && isReviewer) ||
     (isPendingBOD && isBOD) ||
-    (isApproved && !isPaid && isAccountant);
+    (isApproved && !isPaid && isAccountant) ||
+    canDisburse ||
+    canSubmitSettlement ||
+    canReviewSettlement;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
@@ -419,9 +453,26 @@ export default function PaymentRequestDetailScreen() {
             alignItems: 'center',
           }}
         >
-          <Text style={{ fontSize: 12, fontWeight: '600', color: '#64748B', textTransform: 'uppercase' }}>
-            Số tiền đề xuất chi
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#64748B', textTransform: 'uppercase' }}>
+              Số tiền đề xuất chi
+            </Text>
+            {isAdvance && (
+              <View
+                style={{
+                  paddingHorizontal: 8,
+                  paddingVertical: 2,
+                  borderRadius: 10,
+                  backgroundColor: '#FAF5FF',
+                  borderWidth: 1,
+                  borderColor: '#E9D5FF',
+                }}
+              >
+                <Text style={{ fontSize: 10, fontWeight: '700', color: '#9333EA' }}>TẠM ỨNG</Text>
+              </View>
+            )}
+          </View>
+
           <Text style={{ fontSize: 28, fontWeight: '800', color: '#F38820', marginTop: 4 }}>
             {formatVND(request.amount)}
           </Text>
@@ -445,6 +496,45 @@ export default function PaymentRequestDetailScreen() {
               {paymentCfg.text}
             </Text>
           </View>
+
+          {/* Tiến độ giải ngân chi tiền từng đợt */}
+          {(request.paidAmount || 0) > 0 && (
+            <View
+              style={{
+                width: '100%',
+                marginTop: 12,
+                paddingTop: 12,
+                borderTopWidth: 1,
+                borderTopColor: '#F1F5F9',
+              }}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                <Text style={{ fontSize: 12, color: '#64748B' }}>
+                  Đã chi: <Text style={{ fontWeight: '700', color: '#059669' }}>{formatVND(request.paidAmount || 0)}</Text>
+                </Text>
+                <Text style={{ fontSize: 12, color: '#64748B' }}>
+                  Còn lại: <Text style={{ fontWeight: '700', color: '#F38820' }}>{formatVND(remainingToDisburse)}</Text>
+                </Text>
+              </View>
+              {/* Thanh tiến độ */}
+              <View
+                style={{
+                  height: 6,
+                  borderRadius: 3,
+                  backgroundColor: '#E2E8F0',
+                  overflow: 'hidden',
+                }}
+              >
+                <View
+                  style={{
+                    height: '100%',
+                    width: `${Math.min(100, Math.round(((request.paidAmount || 0) / request.amount) * 100))}%`,
+                    backgroundColor: '#10B981',
+                  }}
+                />
+              </View>
+            </View>
+          )}
         </View>
 
         {/* General Info Card */}
@@ -527,6 +617,249 @@ export default function PaymentRequestDetailScreen() {
             </View>
           ) : null}
         </View>
+
+        {/* Hộp Đối Soát Ngân Sách 2 Tầng (ServiceBudgetBox) */}
+        {Boolean(request.projectId) && (
+          <View style={{ marginBottom: 14 }}>
+            <ServiceBudgetBox
+              budgetInfo={budgetInfo}
+              isLoading={loadingBudget}
+              amount={request.amount}
+              overBudgetReason={request.overBudgetReason || undefined}
+              readOnly={true}
+            />
+          </View>
+        )}
+
+        {/* Card Hồ Sơ Quyết Toán Hoàn Ứng (Khi là tạm ứng) */}
+        {isAdvance && (
+          <View
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: 14,
+              padding: 16,
+              marginBottom: 14,
+              borderWidth: 1,
+              borderColor: '#E9D5FF',
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <MaterialIcons name="fact-check" size={20} color="#9333EA" />
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#581C87' }}>
+                  Quyết Toán Hoàn Ứng
+                </Text>
+              </View>
+              {request.settlementStatus && (
+                <View
+                  style={{
+                    paddingHorizontal: 8,
+                    paddingVertical: 3,
+                    borderRadius: 6,
+                    backgroundColor: SETTLEMENT_STATUS_CONFIG[request.settlementStatus]?.bg || '#F1F5F9',
+                    borderWidth: 1,
+                    borderColor: SETTLEMENT_STATUS_CONFIG[request.settlementStatus]?.border || '#E2E8F0',
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '700',
+                      color: SETTLEMENT_STATUS_CONFIG[request.settlementStatus]?.color || '#475569',
+                    }}
+                  >
+                    {SETTLEMENT_STATUS_LABELS[request.settlementStatus] || request.settlementStatus}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Hạn hoàn ứng */}
+            {request.settlementDueDate && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                <Text style={{ fontSize: 12, color: '#64748B' }}>Hạn hoàn ứng:</Text>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F172A' }}>
+                  {formatDateToDDMMYYYY(request.settlementDueDate)}
+                </Text>
+                {request.isOverdue && (
+                  <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#DC2626' }}>QUÁ HẠN</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Chi tiết tiền hoàn ứng nếu đã nộp */}
+            {request.settledAmount != null && (
+              <View
+                style={{
+                  backgroundColor: '#FAF5FF',
+                  borderRadius: 10,
+                  padding: 10,
+                  gap: 6,
+                  marginBottom: 10,
+                }}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 12, color: '#6B21A8' }}>Số tiền thực chi nộp:</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#581C87' }}>
+                    {formatVND(request.settledAmount)}
+                  </Text>
+                </View>
+
+                {request.settlementDifference != null && (
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#6B21A8' }}>
+                      {request.settlementDifference < 0 ? 'Thừa tiền nộp hoàn quỹ:' : 'Chi vượt cty chi bù:'}
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: '800',
+                        color: request.settlementDifference < 0 ? '#D97706' : '#2563EB',
+                      }}
+                    >
+                      {formatVND(Math.abs(request.settlementDifference))}
+                    </Text>
+                  </View>
+                )}
+
+                {request.settlementDifference != null && request.settlementDifference < 0 && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                    <Feather
+                      name={request.settlementRefundConfirmed ? 'check-circle' : 'alert-circle'}
+                      size={13}
+                      color={request.settlementRefundConfirmed ? '#16A34A' : '#D97706'}
+                    />
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: request.settlementRefundConfirmed ? '#16A34A' : '#D97706',
+                        fontWeight: '600',
+                      }}
+                    >
+                      {request.settlementRefundConfirmed ? 'Kế toán đã xác nhận thu hồi tiền thừa' : 'Chưa xác nhận thu hồi tiền thừa'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Ghi chú nộp hoàn ứng */}
+            {Boolean(request.settlementNote) && (
+              <View style={{ marginBottom: 10 }}>
+                <Text style={{ fontSize: 11, color: '#6B21A8', marginBottom: 2 }}>Ghi chú hoàn ứng:</Text>
+                <Text style={{ fontSize: 12, color: '#334155' }}>{request.settlementNote}</Text>
+              </View>
+            )}
+
+            {/* Danh sách file chứng từ hoàn ứng */}
+            {request.settlementFiles && request.settlementFiles.length > 0 && (
+              <View style={{ gap: 6 }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#6B21A8' }}>
+                  Chứng từ hoàn ứng ({request.settlementFiles.length}):
+                </Text>
+                {request.settlementFiles.map((file, idx) => (
+                  <TouchableOpacity
+                    key={file.id || file.url || idx}
+                    onPress={() => file.url && Linking.openURL(file.url)}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      padding: 8,
+                      borderRadius: 6,
+                      backgroundColor: '#FFFFFF',
+                      borderWidth: 1,
+                      borderColor: '#E9D5FF',
+                      gap: 6,
+                    }}
+                  >
+                    <Feather name="paperclip" size={14} color="#9333EA" />
+                    <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: '#581C87' }}>
+                      {file.name || `Chứng từ hoàn ứng ${idx + 1}`}
+                    </Text>
+                    <Feather name="external-link" size={12} color="#9333EA" />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Card Lịch Sử Các Đợt Giải Ngân (Payment Transactions) */}
+        {request.paymentTransactions && request.paymentTransactions.length > 0 && (
+          <View
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: 14,
+              padding: 16,
+              marginBottom: 14,
+              borderWidth: 1,
+              borderColor: '#E2E8F0',
+            }}
+          >
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E293B', marginBottom: 10 }}>
+              Lịch Sử Giải Ngân ({request.paymentTransactions.length} đợt)
+            </Text>
+
+            <View style={{ gap: 10 }}>
+              {request.paymentTransactions.map((tx, idx) => (
+                <View
+                  key={tx.id || idx}
+                  style={{
+                    padding: 10,
+                    borderRadius: 8,
+                    backgroundColor: '#F8FAFC',
+                    borderWidth: 1,
+                    borderColor: '#E2E8F0',
+                    gap: 4,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#334155' }}>
+                      Đợt #{idx + 1} • {tx.paymentMethod === 'TRANSFER' ? 'Chuyển khoản' : 'Tiền mặt'}
+                    </Text>
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: '#059669' }}>
+                      {formatVND(tx.amount)}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 11, color: '#64748B' }}>
+                    Ngày chi: {formatDateToDDMMYYYY(tx.paidAt)} {tx.payerName ? `• Bởi: ${tx.payerName}` : ''}
+                  </Text>
+                  {tx.note && (
+                    <Text style={{ fontSize: 12, color: '#0F172A', marginTop: 2 }}>
+                      Ghi chú: {tx.note}
+                    </Text>
+                  )}
+                  {tx.proofFiles && tx.proofFiles.length > 0 && (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                      {tx.proofFiles.map((pf, pIdx) => (
+                        <TouchableOpacity
+                          key={pf.id || pf.url || pIdx}
+                          onPress={() => pf.url && Linking.openURL(pf.url)}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 4,
+                            paddingHorizontal: 8,
+                            paddingVertical: 3,
+                            borderRadius: 4,
+                            backgroundColor: '#E0F2FE',
+                          }}
+                        >
+                          <Feather name="file-text" size={12} color="#0284C7" />
+                          <Text numberOfLines={1} style={{ fontSize: 11, color: '#0369A1' }}>
+                            {pf.name || `Chứng từ ${pIdx + 1}`}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         {(request.paidAt || (request.paymentProofs?.length || 0) > 0) && (
           <View
@@ -934,10 +1267,10 @@ export default function PaymentRequestDetailScreen() {
             </>
           )}
 
-          {/* Accountant Payment Action */}
-          {isApproved && !isPaid && isAccountant && (
+          {/* Accountant Payment & Installment Disbursement Action */}
+          {canDisburse && (
             <TouchableOpacity
-              onPress={() => openActionModal('PAY')}
+              onPress={() => setShowDisbursementModal(true)}
               style={{
                 flex: 1,
                 height: 48,
@@ -945,10 +1278,57 @@ export default function PaymentRequestDetailScreen() {
                 backgroundColor: '#F38820',
                 alignItems: 'center',
                 justifyContent: 'center',
+                flexDirection: 'row',
+                gap: 6,
               }}
             >
-              <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>
-                Xác Nhận Chi Tiền
+              <Feather name="credit-card" size={16} color="#FFFFFF" />
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFF' }}>
+                {(request.paidAmount || 0) > 0 ? 'Chi tiếp đợt mới' : 'Ghi nhận chi tiền'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Owner Submit Settlement Action (Khi là tạm ứng đã nhận tiền) */}
+          {canSubmitSettlement && (
+            <TouchableOpacity
+              onPress={() => setShowSettlementModal(true)}
+              style={{
+                flex: 1,
+                height: 48,
+                borderRadius: 10,
+                backgroundColor: '#9333EA',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'row',
+                gap: 6,
+              }}
+            >
+              <MaterialIcons name="fact-check" size={18} color="#FFFFFF" />
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFF' }}>
+                Nộp Quyết Toán
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Reviewer / Accountant / BOD Approve Settlement Action */}
+          {canReviewSettlement && (
+            <TouchableOpacity
+              onPress={() => setShowSettlementReviewModal(true)}
+              style={{
+                flex: 1,
+                height: 48,
+                borderRadius: 10,
+                backgroundColor: '#16A34A',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'row',
+                gap: 6,
+              }}
+            >
+              <Feather name="check-square" size={16} color="#FFFFFF" />
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFF' }}>
+                Duyệt Quyết Toán
               </Text>
             </TouchableOpacity>
           )}
@@ -1141,6 +1521,28 @@ export default function PaymentRequestDetailScreen() {
         initialVoucherInfo={request.cashVoucherInfo}
         onSave={handleSaveCashVoucher}
         onClose={() => setCashVoucherVisible(false)}
+      />
+
+      {/* 3 Bottom Sheets cho Payment Production Suite */}
+      <PaymentDisbursementBottomSheet
+        visible={showDisbursementModal}
+        paymentRequest={request}
+        onClose={() => setShowDisbursementModal(false)}
+        onSuccess={() => refetch()}
+      />
+
+      <PaymentSettlementBottomSheet
+        visible={showSettlementModal}
+        paymentRequest={request}
+        onClose={() => setShowSettlementModal(false)}
+        onSuccess={() => refetch()}
+      />
+
+      <PaymentSettlementReviewBottomSheet
+        visible={showSettlementReviewModal}
+        paymentRequest={request}
+        onClose={() => setShowSettlementReviewModal(false)}
+        onSuccess={() => refetch()}
       />
     </View>
   );

@@ -111,9 +111,9 @@ export const PaymentRequestCard: React.FC<PaymentRequestCardProps> = React.memo(
         </View>
       </View>
 
-      {/* Project or Contract info if any */}
+          {/* Project or Contract info if any */}
       {item.project?.name ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 }}>
           <Feather name="folder" size={13} color="#94A3B8" />
           <Text numberOfLines={1} style={{ fontSize: 12, color: '#64748B', flex: 1 }}>
             Dự án: <Text style={{ fontWeight: '600', color: '#334155' }}>{item.project.name}</Text>
@@ -123,7 +123,7 @@ export const PaymentRequestCard: React.FC<PaymentRequestCardProps> = React.memo(
 
       {/* Beneficiary name if any */}
       {item.beneficiaryName ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 }}>
           <MaterialIcons name="account-balance" size={13} color="#94A3B8" />
           <Text numberOfLines={1} style={{ fontSize: 12, color: '#64748B', flex: 1 }}>
             Thụ hưởng: <Text style={{ fontWeight: '600', color: '#334155' }}>{item.beneficiaryName}</Text>
@@ -131,6 +131,27 @@ export const PaymentRequestCard: React.FC<PaymentRequestCardProps> = React.memo(
           </Text>
         </View>
       ) : null}
+
+      {/* Tiến độ giải ngân chi từng đợt nếu có */}
+      {Boolean(item.paidAmount && item.paidAmount > 0 && item.paidAmount < item.amount) && (
+        <View style={{ marginBottom: 8, backgroundColor: '#FFFBEB', padding: 6, borderRadius: 6, borderWidth: 1, borderColor: '#FDE68A' }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
+            <Text style={{ fontSize: 10, color: '#92400E', fontWeight: '600' }}>Tiến độ giải ngân</Text>
+            <Text style={{ fontSize: 10, color: '#B45309', fontWeight: '700' }}>
+              {formatVND(item.paidAmount || 0)} / {formatVND(item.amount)}
+            </Text>
+          </View>
+          <View style={{ height: 4, backgroundColor: '#FEF3C7', borderRadius: 2, overflow: 'hidden' }}>
+            <View
+              style={{
+                height: 4,
+                backgroundColor: '#D97706',
+                width: `${Math.min(100, Math.round(((item.paidAmount || 0) / item.amount) * 100))}%`,
+              }}
+            />
+          </View>
+        </View>
+      )}
 
       {/* Footer Info: Requester, Date, and Badges */}
       <View
@@ -141,6 +162,8 @@ export const PaymentRequestCard: React.FC<PaymentRequestCardProps> = React.memo(
           paddingTop: 8,
           borderTopWidth: 1,
           borderTopColor: '#F8FAFC',
+          flexWrap: 'wrap',
+          gap: 6,
         }}
       >
         {/* Requester & Date */}
@@ -149,14 +172,19 @@ export const PaymentRequestCard: React.FC<PaymentRequestCardProps> = React.memo(
           <Text style={{ fontSize: 11, color: '#64748B' }}>
             {item.requestedBy?.fullName || 'Người dùng'} • {formatDateToDDMMYYYY(item.createdAt)}
           </Text>
+          {item.isOverdue && (
+            <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, borderWidth: 1, borderColor: '#FECACA' }}>
+              <Text style={{ fontSize: 9, fontWeight: '800', color: '#DC2626' }}>QUÁ HẠN</Text>
+            </View>
+          )}
         </View>
 
-        {/* Dual Status Badges (Approval & Payment) */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        {/* Dual Status Badges (Approval, Payment & Settlement) */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
           {/* Approval Status Badge */}
           <View
             style={{
-              paddingHorizontal: 8,
+              paddingHorizontal: 7,
               paddingVertical: 2,
               borderRadius: 6,
               backgroundColor: approvalCfg.bg,
@@ -164,7 +192,7 @@ export const PaymentRequestCard: React.FC<PaymentRequestCardProps> = React.memo(
               borderColor: approvalCfg.border,
             }}
           >
-            <Text style={{ fontSize: 11, fontWeight: '700', color: approvalCfg.color }}>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: approvalCfg.color }}>
               {approvalCfg.text}
             </Text>
           </View>
@@ -173,7 +201,7 @@ export const PaymentRequestCard: React.FC<PaymentRequestCardProps> = React.memo(
           {item.approvalStatus === 'APPROVED' && item.paymentStatus !== 'NOT_APPLICABLE' && (
             <View
               style={{
-                paddingHorizontal: 8,
+                paddingHorizontal: 7,
                 paddingVertical: 2,
                 borderRadius: 6,
                 backgroundColor: paymentCfg.bg,
@@ -181,8 +209,38 @@ export const PaymentRequestCard: React.FC<PaymentRequestCardProps> = React.memo(
                 borderColor: paymentCfg.border,
               }}
             >
-              <Text style={{ fontSize: 11, fontWeight: '700', color: paymentCfg.color }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: paymentCfg.color }}>
                 {paymentCfg.text}
+              </Text>
+            </View>
+          )}
+
+          {/* Settlement Status Badge if ADVANCE */}
+          {item.type === 'ADVANCE' && item.settlementStatus && item.settlementStatus !== 'NOT_APPLICABLE' && (
+            <View
+              style={{
+                paddingHorizontal: 7,
+                paddingVertical: 2,
+                borderRadius: 6,
+                backgroundColor: item.settlementStatus === 'SETTLED' ? '#DCFCE7' : '#F3E8FF',
+                borderWidth: 1,
+                borderColor: item.settlementStatus === 'SETTLED' ? '#BBF7D0' : '#E9D5FF',
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 10,
+                  fontWeight: '700',
+                  color: item.settlementStatus === 'SETTLED' ? '#15803D' : '#7E22CE',
+                }}
+              >
+                {item.settlementStatus === 'SETTLED'
+                  ? 'Đã hoàn ứng'
+                  : item.settlementStatus === 'SETTLEMENT_SUBMITTED'
+                  ? 'Chờ duyệt H.Ứ'
+                  : item.settlementStatus === 'WAITING_SETTLEMENT'
+                  ? 'Chờ nộp H.Ứ'
+                  : 'Tạm ứng'}
               </Text>
             </View>
           )}

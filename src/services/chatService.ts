@@ -35,6 +35,9 @@ export interface ChatMessage {
   isError?: boolean;
   isRecalled?: boolean;
   isEdited?: boolean;
+  isSystem?: boolean;
+  systemMetadata?: any;
+  isPinned?: boolean;
 }
 
 export interface ChatRoom {
@@ -46,6 +49,7 @@ export interface ChatRoom {
   latestMessage?: ChatMessage;
   unread?: boolean;
   unreadCount?: number;
+  isPinned?: boolean;
   createdAt?: string;
   updatedAt: string;
 }
@@ -98,6 +102,29 @@ class ChatService {
 
   async markRoomAsRead(roomId: string): Promise<{ success?: boolean; error?: string }> {
     return apiService.post<{ success: boolean }>(`/chat-rooms/${roomId}/read`, {});
+  }
+
+  async addParticipants(
+    roomId: string,
+    userIds: string[]
+  ): Promise<{ data?: ChatRoom; error?: string }> {
+    return apiService.post<ChatRoom>(`/chat-rooms/${roomId}/participants`, { userIds });
+  }
+
+  async removeParticipant(
+    roomId: string,
+    userId: string
+  ): Promise<{ success?: boolean; error?: string }> {
+    return apiService.delete<{ success: boolean }>(`/chat-rooms/${roomId}/participants/${userId}`);
+  }
+
+  async uploadChatAttachment(
+    formData: FormData
+  ): Promise<{ data?: { url: string; name?: string; type?: string }; error?: string }> {
+    return apiService.postForm<{ url: string; name?: string; type?: string }>(
+      '/chat-rooms/upload',
+      formData
+    );
   }
 }
 
