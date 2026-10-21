@@ -216,9 +216,15 @@ export default function VendorDetailScreen() {
           <Text className="text-sm font-bold text-slate-900" numberOfLines={2}>
             {job.job?.name || 'Hạng mục chưa đặt tên'}
           </Text>
-          <Text className="mt-1 text-sm font-extrabold text-orange-600">
-            {formatVND(job.price ?? 0, 'VNĐ')}
-          </Text>
+          {canManage ? (
+            <Text className="mt-1 text-sm font-extrabold text-orange-600">
+              {formatVND(job.price ?? 0, 'VNĐ')}
+            </Text>
+          ) : (
+            <Text className="mt-1 text-xs italic text-slate-400">
+              Đơn giá: ****** (Chỉ quản trị)
+            </Text>
+          )}
           {job.note ? (
             <Text className="mt-1 text-xs leading-[18px] text-slate-500" numberOfLines={3}>
               {job.note}

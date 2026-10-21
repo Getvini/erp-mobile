@@ -47,7 +47,7 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
 
   const user = useAuthStore((state) => state.user);
   const userRole = (user?.role || '').toUpperCase();
-  const canApprove = ['ADMIN', 'DIRECTOR', 'BOD'].includes(userRole);
+  const canApprove = ['ADMIN', 'BOD'].includes(userRole);
 
   const { data: quotation, isLoading } = useQuotationDetailQuery(
     visible && quotationId ? quotationId : ''

@@ -31,11 +31,13 @@ import {
 } from '@/hooks/queries/useDashboard';
 import {
   FinanceDocument,
+  MonthlyReconciliation,
   PaymentDashboardParams,
   PaymentDashboardRow,
 } from '@/services/paymentDashboardService';
 import { uploadToCloudinary, PickedFile } from '@/services/cloudinaryService';
 import { DocumentPreviewModal } from '@/components/common/DocumentPreviewModal';
+import { MonthCashflowDetailModal } from './MonthCashflowDetailModal';
 
 export type FinanceView = 'OVERVIEW' | 'ACCEPTANCE' | 'VAT';
 
@@ -61,34 +63,132 @@ const STATUS_TABS = [
   { key: 'UNCONFIRMED', label: 'Chưa xác nhận' },
 ] as const;
 
-const MetricCard = memo(({ label, value, tone = '#0F172A' }: { label: string; value: string; tone?: string }) => (
-  <View className="min-w-[162px] flex-1 rounded-2xl border border-slate-200 bg-white p-4">
-    <Text className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{label}</Text>
-    <Text className="mt-2 text-lg font-extrabold" style={{ color: tone }}>{value}</Text>
+const MetricCard = memo(({
+  label,
+  value,
+  tone = '#0F172A',
+  icon,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+  icon?: keyof typeof Feather.glyphMap;
+}) => (
+  <View className="min-w-[162px] flex-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <View className="flex-row items-center justify-between">
+      <Text className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">{label}</Text>
+      {icon && (
+        <View className="h-7 w-7 items-center justify-center rounded-lg bg-orange-50">
+          <Feather name={icon} size={15} color="#F38820" />
+        </View>
+      )}
+    </View>
+    <Text className="mt-2 text-lg font-black" style={{ color: tone }}>{value}</Text>
   </View>
 ));
 MetricCard.displayName = 'MetricCard';
 
-const MonthCard = memo(({ item }: { item: any }) => {
-  const rate = item.planned > 0 ? Math.min(100, (item.paid / item.planned) * 100) : item.paid > 0 ? 100 : 0;
+const MonthCard = memo(({
+  item,
+  isSelected,
+  onPress,
+}: {
+  item: MonthlyReconciliation;
+  isSelected?: boolean;
+  onPress: (item: MonthlyReconciliation) => void;
+}) => {
+  const planned = Number(item.planned || 0);
+  const paid = Number(item.paid || item.cashPaid || 0);
+  const unpaid = Number(item.unpaid || Math.max(0, planned - paid));
+  const rate = planned > 0 ? Math.min(100, (paid / planned) * 100) : paid > 0 ? 100 : 0;
+  const overdue = Number(item.breakdown?.overdue || 0);
+  const prepaid = Number(item.breakdown?.prepaid || 0);
+
+  const getStatus = () => {
+    if (planned > 0 && paid > 0 && unpaid <= 0) {
+      return { label: 'Đã thu đủ', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' };
+    }
+    if (planned > 0 && paid > 0 && unpaid > 0) {
+      return { label: 'Thu 1 phần', bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' };
+    }
+    if (paid <= 0 && unpaid > 0) {
+      return { label: 'Chưa thu', bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200' };
+    }
+    if (planned <= 0 && paid > 0 && overdue > 0 && prepaid <= 0) {
+      return { label: 'Thu nợ cũ', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' };
+    }
+    if (planned <= 0 && paid > 0) {
+      return { label: 'Thu trước', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' };
+    }
+    return { label: 'Không phát sinh', bg: 'bg-slate-100', text: 'text-slate-500', border: 'border-slate-200' };
+  };
+
+  const status = getStatus();
+
   return (
-    <View className="mr-3 w-52 rounded-2xl border border-slate-200 bg-white p-3.5">
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={() => {
+        if (Platform.OS !== 'web') {
+          Haptics.selectionAsync();
+        }
+        onPress(item);
+      }}
+      className={`mr-3 w-60 rounded-2xl border bg-white p-4 shadow-sm ${
+        isSelected
+          ? 'border-primary shadow-md'
+          : 'border-slate-200'
+      }`}
+    >
       <View className="flex-row items-center justify-between">
-        <Text className="font-extrabold text-slate-900">Tháng {item.month}</Text>
-        <Text className="text-xs font-bold text-emerald-600">{formatNumber(rate.toFixed(1))}%</Text>
+        <View className="flex-row items-center gap-2">
+          <Text className="text-base font-extrabold text-slate-900">Tháng {item.month}</Text>
+          <View className={`rounded-md border px-1.5 py-0.5 ${status.bg} ${status.border}`}>
+            <Text className={`text-[10px] font-bold ${status.text}`}>{status.label}</Text>
+          </View>
+        </View>
+        <Text className="text-xs font-black text-primary">{formatNumber(rate.toFixed(1))}%</Text>
       </View>
-      <View className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+
+      <View className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
         <View className="h-full rounded-full bg-primary" style={{ width: `${rate}%` }} />
       </View>
-      <Text className="mt-2 text-xs text-slate-500">Kế hoạch: {formatVND(item.planned)}</Text>
-      <Text className="mt-1 text-xs font-bold text-emerald-700">Đã thu: {formatVND(item.paid)}</Text>
-      <Text className="mt-1 text-xs font-bold text-orange-600">Còn lại: {formatVND(item.unpaid)}</Text>
-      <View className="mt-2 flex-row flex-wrap gap-1">
-        <Text className="rounded-md bg-emerald-50 px-1.5 py-1 text-[10px] text-emerald-700">Đúng kỳ {formatVND(item.breakdown?.onTime || 0)}</Text>
-        <Text className="rounded-md bg-amber-50 px-1.5 py-1 text-[10px] text-amber-700">Nợ cũ {formatVND(item.breakdown?.overdue || 0)}</Text>
-        <Text className="rounded-md bg-blue-50 px-1.5 py-1 text-[10px] text-blue-700">Thu trước {formatVND(item.breakdown?.prepaid || 0)}</Text>
+
+      <View className="mt-3">
+        <View className="flex-row justify-between py-0.5">
+          <Text className="text-xs text-slate-500">Kế hoạch:</Text>
+          <Text className="text-xs font-bold text-slate-700">{formatVND(planned)}</Text>
+        </View>
+        <View className="flex-row justify-between py-0.5">
+          <Text className="text-xs text-slate-500">Đã thu:</Text>
+          <Text className="text-xs font-bold text-emerald-700">{formatVND(paid)}</Text>
+        </View>
+        <View className="flex-row justify-between py-0.5">
+          <Text className="text-xs text-slate-500">Còn lại:</Text>
+          <Text className="text-xs font-bold text-orange-600">{formatVND(unpaid)}</Text>
+        </View>
       </View>
-    </View>
+
+      {/* Phân bổ chips */}
+      <View className="mt-3 flex-row flex-wrap gap-1 border-t border-slate-100 pt-2.5">
+        <Text className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+          Đúng kỳ {formatVND(item.breakdown?.onTime || 0)}
+        </Text>
+        <Text className="rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+          Nợ cũ {formatVND(item.breakdown?.overdue || 0)}
+        </Text>
+        <Text className="rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+          Thu trước {formatVND(item.breakdown?.prepaid || 0)}
+        </Text>
+      </View>
+
+      <View className="mt-3 flex-row items-center justify-end">
+        <View className="flex-row items-center gap-1 rounded-lg bg-orange-50 px-2.5 py-1">
+          <Text className="text-[11px] font-bold text-primary">Đối soát dòng tiền</Text>
+          <Feather name="chevron-right" size={13} color="#F38820" />
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 });
 MonthCard.displayName = 'MonthCard';
@@ -355,6 +455,8 @@ export function FinanceDocumentsScreen({ initialView }: { initialView: FinanceVi
   const [page, setPage] = useState(1);
   const [advanced, setAdvanced] = useState<Record<FilterKey, string>>({ customerId: '', salesOwnerId: '', projectManagerId: '' });
   const [filterVisible, setFilterVisible] = useState(false);
+  const [activeCashflowMonth, setActiveCashflowMonth] = useState<MonthlyReconciliation | null>(null);
+  const [quarterFilter, setQuarterFilter] = useState<'ALL' | 1 | 2 | 3 | 4>('ALL');
   const [uploadTarget, setUploadTarget] = useState<{ row: PaymentDashboardRow; type: 'acceptance' | 'invoice' } | null>(null);
   const [preview, setPreview] = useState<FinanceDocument | null>(null);
 
@@ -373,6 +475,14 @@ export function FinanceDocumentsScreen({ initialView }: { initialView: FinanceVi
   const rows = data?.rows || [];
   const summary = data?.summary || {};
   const options = data?.filterOptions || {};
+
+  const monthlyData = useMemo(() => {
+    const allMonths = data?.monthly || [];
+    if (quarterFilter === 'ALL') return allMonths;
+    const startMonth = (quarterFilter - 1) * 3 + 1;
+    const endMonth = quarterFilter * 3;
+    return allMonths.filter((m) => m.month >= startMonth && m.month <= endMonth);
+  }, [data?.monthly, quarterFilter]);
 
   const setView = (view: FinanceView) => router.replace(VIEW_ROUTES[view] as any);
   const resetPage = () => setPage(1);
@@ -422,9 +532,70 @@ export function FinanceDocumentsScreen({ initialView }: { initialView: FinanceVi
         <FlatList horizontal showsHorizontalScrollIndicator={false} className="mt-3" data={[null, ...Array.from({ length: 12 }, (_, i) => i + 1)]} keyExtractor={(item) => String(item ?? 'all')} renderItem={({ item }) => <TouchableOpacity onPress={() => { setMonth(item); resetPage(); }} className={`mr-2 min-h-11 justify-center rounded-xl border px-3 ${month === item ? 'border-orange-300 bg-orange-50' : 'border-slate-200 bg-white'}`}><Text className={`text-xs font-bold ${month === item ? 'text-orange-700' : 'text-slate-600'}`}>{item ? `Tháng ${item}` : 'Cả năm'}</Text></TouchableOpacity>} />
         <TextInput value={search} onChangeText={(value) => { setSearch(value); resetPage(); }} placeholder="Tìm mã HĐ, dự án, khách hàng..." className="mt-3 h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900" />
         <FlatList horizontal showsHorizontalScrollIndicator={false} className="mt-3" data={STATUS_TABS} keyExtractor={(item) => item.key} renderItem={({ item }) => <TouchableOpacity onPress={() => { setStatus(item.key); resetPage(); }} className={`mr-2 min-h-11 justify-center rounded-xl px-3 ${status === item.key ? 'bg-slate-900' : 'bg-white'}`}><Text className={`text-xs font-bold ${status === item.key ? 'text-white' : 'text-slate-600'}`}>{item.label}</Text></TouchableOpacity>} />
-        <View className="mt-4 flex-row flex-wrap gap-3"><MetricCard label="Tổng giá trị HĐ" value={formatVND(summary.totalContractValue)} /><MetricCard label="Đã thanh toán" value={formatVND(summary.totalPaid)} tone="#059669" /><MetricCard label="Chưa thanh toán" value={formatVND(summary.totalUnpaid)} tone="#EA580C" /><MetricCard label="Tiến độ thực thu" value={`${formatNumber(Number(summary.collectionRate || 0).toFixed(1))}%`} tone="#F38820" /></View>
-        {initialView === 'OVERVIEW' && <View className="mt-5"><Text className="mb-3 text-base font-extrabold text-slate-900">Đối soát dòng tiền 12 tháng</Text><FlatList horizontal data={data?.monthly || []} keyExtractor={(item) => String(item.month)} renderItem={({ item }) => <MonthCard item={item} />} showsHorizontalScrollIndicator={false} /></View>}
-        <View className="mt-5 mb-3 flex-row items-center justify-between"><Text className="text-base font-extrabold text-slate-900">{initialView === 'OVERVIEW' ? 'Hợp đồng theo dõi' : initialView === 'ACCEPTANCE' ? 'Biên bản nghiệm thu' : 'Hóa đơn VAT'}</Text><Text className="text-xs text-slate-500">{data?.meta?.total || 0} hợp đồng</Text></View>
+        <View className="mt-4 flex-row flex-wrap gap-3">
+          <MetricCard label="Tổng giá trị HĐ" value={formatVND(summary.totalContractValue)} icon="briefcase" />
+          <MetricCard label="Đã thanh toán" value={formatVND(summary.totalPaid)} tone="#059669" icon="check-circle" />
+          <MetricCard label="Chưa thanh toán" value={formatVND(summary.totalUnpaid)} tone="#EA580C" icon="clock" />
+          <MetricCard label="Tiến độ thực thu" value={`${formatNumber(Number(summary.collectionRate || 0).toFixed(1))}%`} tone="#F38820" icon="trending-up" />
+        </View>
+
+        {initialView === 'OVERVIEW' && (
+          <View className="mt-5">
+            <View className="mb-2 flex-row items-center justify-between">
+              <View>
+                <Text className="text-base font-extrabold text-slate-900">
+                  Dòng tiền 12 tháng
+                </Text>
+                <Text className="text-xs text-slate-500">
+                  Chạm từng tháng để xem đối soát thực thu chi tiết
+                </Text>
+              </View>
+            </View>
+
+            {/* Quý Filter Chips */}
+            <View className="mb-3 flex-row gap-1.5">
+              {(['ALL', 1, 2, 3, 4] as const).map((q) => (
+                <TouchableOpacity
+                  key={String(q)}
+                  onPress={() => setQuarterFilter(q)}
+                  className={`rounded-xl px-3 py-1.5 border ${
+                    quarterFilter === q
+                      ? 'bg-slate-900 border-slate-900'
+                      : 'bg-white border-slate-200'
+                  }`}
+                >
+                  <Text
+                    className={`text-xs font-bold ${
+                      quarterFilter === q ? 'text-white' : 'text-slate-600'
+                    }`}
+                  >
+                    {q === 'ALL' ? 'Cả năm' : `Quý ${q}`}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <FlatList
+              horizontal
+              data={monthlyData}
+              keyExtractor={(item) => String(item.month)}
+              renderItem={({ item }) => (
+                <MonthCard
+                  item={item}
+                  isSelected={activeCashflowMonth?.month === item.month}
+                  onPress={(m) => setActiveCashflowMonth(m)}
+                />
+              )}
+              showsHorizontalScrollIndicator={false}
+            />
+          </View>
+        )}
+        <View className="mt-5 mb-3 flex-row items-center justify-between">
+          <Text className="text-base font-extrabold text-slate-900">
+            {initialView === 'OVERVIEW' ? 'Hợp đồng theo dõi' : initialView === 'ACCEPTANCE' ? 'Biên bản nghiệm thu' : 'Hóa đơn VAT'}
+          </Text>
+          <Text className="text-xs text-slate-500">{data?.meta?.total || 0} hợp đồng</Text>
+        </View>
       </View>
     </View>
   );
@@ -469,6 +640,12 @@ export function FinanceDocumentsScreen({ initialView }: { initialView: FinanceVi
       />
       <DocumentUploadSheet row={uploadTarget?.row || null} type={uploadTarget?.type || 'acceptance'} onClose={() => setUploadTarget(null)} />
       <DocumentPreviewModal visible={!!preview} url={preview?.fileUrl || ''} fileName={preview?.name} onClose={() => setPreview(null)} />
+      <MonthCashflowDetailModal
+        visible={!!activeCashflowMonth}
+        monthData={activeCashflowMonth}
+        year={year}
+        onClose={() => setActiveCashflowMonth(null)}
+      />
     </SafeAreaView>
   );
 }

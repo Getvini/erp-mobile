@@ -91,7 +91,7 @@ export const canDeleteCustomers = (role?: string): boolean => {
  */
 export const canAccessContracts = (role?: string): boolean => {
   if (!role) return false;
-  return ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE'].includes(role);
+  return ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE', 'PM'].includes(role.toUpperCase());
 };
 
 /**
@@ -135,14 +135,16 @@ export const canSendAcceptance = (role?: string): boolean => {
  */
 export const canProcessAcceptance = (role?: string): boolean => {
   if (!role) return false;
-  return ['BOD', 'ADMIN', 'ADMIN_SALE', 'PM'].includes(role);
+  return ['BOD', 'ADMIN', 'ADMIN_SALE'].includes(role.toUpperCase());
 };
 
 /**
  * Role check helpers
  */
 export const isManagementRole = (role?: string): boolean => {
-  return role === 'ADMIN' || role === 'BOD';
+  if (!role) return false;
+  const upper = role.toUpperCase();
+  return upper === 'ADMIN' || upper === 'BOD';
 };
 
 /**
@@ -154,7 +156,7 @@ export const canManageContract = (role?: string): boolean => {
   return ['BOD', 'ADMIN', 'ADMIN_SALE'].includes(role);
 };
 
-export const canApproveProposal = canManageContract;
+export const canApproveProposal = isManagementRole;
 
 export const isSalesRole = (role?: string): boolean => {
   return role === 'BD' || role === 'ADMIN_SALE';
@@ -172,14 +174,17 @@ export const isStaffRole = (role?: string): boolean => {
 // PHASE P2 — Danh mục & Đối tác ngoài
 // ============================================================================
 
-/** Vendors — Sidebar.jsx: roles ['ADMIN','BOD']; Vendor.Route.ts không roleMiddleware nên UI phải tự chặn. */
+/** Vendors — routes.config.js VENDOR_MANAGERS: roles ['ADMIN','BOD','PM'] */
 export const canAccessVendors = (role?: string): boolean => {
   if (!role) return false;
-  return ['ADMIN', 'BOD'].includes(role);
+  return ['ADMIN', 'BOD', 'PM'].includes(role.toUpperCase());
 };
 
-/** Tạo/sửa/xóa nhà cung cấp — cùng nhóm quyền truy cập module. */
-export const canManageVendors = canAccessVendors;
+/** Tạo/sửa/xóa nhà cung cấp — chỉ dành cho Quản trị viên (ADMIN, BOD). */
+export const canManageVendors = (role?: string): boolean => {
+  if (!role) return false;
+  return ['ADMIN', 'BOD'].includes(role.toUpperCase());
+};
 
 /** Referral Partners — Sidebar.jsx: roles ['ADMIN','BOD','BD','ADMIN_SALE']. */
 export const canAccessReferralPartners = (role?: string): boolean => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Modal,
   View,
@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as Haptic from 'expo-haptics';
-import { useCreateCustomerMutation } from '@/hooks/queries/useCustomers';
+import { useCreateCustomerMutation, useCustomersQuery } from '@/hooks/queries/useCustomers';
 import { BrandColors } from '@/constants/colors';
 import { fetchTaxInfo } from '@/utils/tax';
 import { EMAIL_REGEX, IDENTIFIER_REGEX, PHONE_REGEX, TAX_ID_REGEX } from '@/utils/validators';
@@ -26,6 +26,10 @@ interface CreateCustomerModalProps {
 
 export default function CreateCustomerModal({ visible, onClose, onSuccess }: CreateCustomerModalProps) {
   const createCustomerMutation = useCreateCustomerMutation();
+  const { data: customersData } = useCustomersQuery();
+  const existingCustomers = useMemo(() => {
+    return Array.isArray(customersData) ? customersData : (customersData as any)?.customers || [];
+  }, [customersData]);
 
   const [form, setForm] = useState({
     name: '',
@@ -39,13 +43,24 @@ export default function CreateCustomerModal({ visible, onClose, onSuccess }: Cre
   const [isFetchingTax, setIsFetchingTax] = useState(false);
   const [taxError, setTaxError] = useState<string | null>(null);
 
-  // Tự động kiểm tra MST và điền tên doanh nghiệp & địa chỉ
+  // Tự động kiểm tra trùng MST và điền tên doanh nghiệp & địa chỉ (CM-04)
   useEffect(() => {
     const cleanTaxId = form.taxId?.replace(/[\s-]/g, '');
     if (!cleanTaxId) {
+      setTaxError(null);
       return;
     }
 
+    // 1. Kiểm tra trùng mã số thuế trong danh sách khách hàng hiện có
+    const isDuplicate = existingCustomers.some(
+      (c: any) => c.taxId && c.taxId.replace(/[\s-]/g, '') === cleanTaxId
+    );
+    if (isDuplicate) {
+      setTaxError('Mã số thuế này đã tồn tại trên hệ thống!');
+      return;
+    }
+
+    // 2. Tra cứu online nếu hợp lệ 10 hoặc 13 số
     if (visible && (cleanTaxId.length === 10 || cleanTaxId.length === 13)) {
       const timer = setTimeout(async () => {
         setIsFetchingTax(true);
@@ -72,7 +87,7 @@ export default function CreateCustomerModal({ visible, onClose, onSuccess }: Cre
 
       return () => clearTimeout(timer);
     }
-  }, [form.taxId, visible]);
+  }, [form.taxId, visible, existingCustomers]);
 
   const handleChange = (key: keyof typeof form, val: string) => {
     if (key === 'taxId') setTaxError(null);
@@ -82,6 +97,11 @@ export default function CreateCustomerModal({ visible, onClose, onSuccess }: Cre
   const handleSubmit = async () => {
     if (!form.name.trim()) {
       Alert.alert('Lỗi nhập liệu', 'Vui lòng nhập tên công ty / đối tác.');
+      return;
+    }
+
+    if (taxError && taxError.includes('đã tồn tại')) {
+      Alert.alert('Lỗi nhập liệu', 'Mã số thuế này đã tồn tại trên hệ thống. Vui lòng kiểm tra lại.');
       return;
     }
 

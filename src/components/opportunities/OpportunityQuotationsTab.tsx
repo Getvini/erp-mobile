@@ -32,7 +32,7 @@ export const OpportunityQuotationsTab: React.FC<OpportunityQuotationsTabProps> =
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const userRole = (user?.role || '').toUpperCase();
-  const canCreateQuotationRole = ['ADMIN', 'DIRECTOR', 'SALE', 'MANAGER'].includes(userRole);
+  const canCreateQuotationRole = ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE'].includes(userRole);
 
   const {
     data: quotations = [],

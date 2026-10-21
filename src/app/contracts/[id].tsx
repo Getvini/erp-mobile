@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
-import { canManageContract } from '@/utils/rbac';
+import { isManagementRole } from '@/utils/rbac';
 import { BrandColors } from '@/constants/colors';
 import * as DocumentPicker from 'expo-document-picker';
 import { uploadToCloudinary, PickedFile } from '@/services/cloudinaryService';
@@ -74,7 +74,7 @@ export default function ContractDetailScreen() {
   const contractId = String(params.id || '');
   const router = useRouter();
   const { user } = useAuth();
-  const isAdminOrBod = canManageContract(user?.role);
+  const isAdminOrBod = isManagementRole(user?.role);
 
   // TanStack Query for contract detail
   const {
@@ -394,7 +394,8 @@ export default function ContractDetailScreen() {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        if (!asset.name.toLowerCase().endsWith('.pdf')) {
+        const isPdf = asset.name.toLowerCase().endsWith('.pdf') || asset.mimeType === 'application/pdf';
+        if (!isPdf) {
           Alert.alert('Định dạng không hợp lệ', 'Chỉ chấp nhận file .pdf cho hợp đồng đã ký');
           return;
         }
@@ -804,7 +805,10 @@ export default function ContractDetailScreen() {
               contractId={contract.id}
               contractCode={contract.contractCode}
               sellingPrice={sellingPrice}
-              isReadOnly={isLocked}
+              isReadOnly={
+                ['COMPLETED', 'CANCELLED'].includes(contract.status as string) ||
+                (project ? ['COMPLETED', 'CANCELLED'].includes(project.status as string) : false)
+              }
               onRefresh={handleRefresh}
             />
           </View>
