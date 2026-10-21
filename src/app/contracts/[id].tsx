@@ -798,6 +798,7 @@ export default function ContractDetailScreen() {
               progressPercent={progressPercent}
               packagesList={packagesList}
               standaloneList={standaloneList}
+              isAdminOrBod={isAdminOrBod}
             />
 
             {/* 5. PAYMENT MILESTONES TRACKER */}
@@ -805,6 +806,7 @@ export default function ContractDetailScreen() {
               contractId={contract.id}
               contractCode={contract.contractCode}
               sellingPrice={sellingPrice}
+              contractStatus={contract.status}
               isReadOnly={
                 ['COMPLETED', 'CANCELLED'].includes(contract.status as string) ||
                 (project ? ['COMPLETED', 'CANCELLED'].includes(project.status as string) : false)

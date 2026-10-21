@@ -1,10 +1,10 @@
 import React from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { StatCard } from '../StatCard';
-import { ReviewQueueWidget } from '../ReviewQueueWidget';
-import { HotProjectsWidget } from '../HotProjectsWidget';
-import { RevenueCashflowMiniChart } from '../RevenueCashflowMiniChart';
+import { StatCard } from '@/components/dashboard/StatCard';
+import { ReviewQueueWidget } from '@/components/dashboard/ReviewQueueWidget';
+import { HotProjectsWidget } from '@/components/dashboard/HotProjectsWidget';
+import { RevenueCashflowMiniChart } from '@/components/dashboard/RevenueCashflowMiniChart';
 import { AdminMetrics, TaskItem } from '@/services/dashboardService';
 import { BrandColors } from '@/constants/colors';
 import { formatVND } from '@/utils/formatters';

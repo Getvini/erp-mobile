@@ -33,6 +33,7 @@ interface ContractServicesSectionProps {
   progressPercent: number;
   packagesList: PackageItem[];
   standaloneList: StandaloneServiceItem[];
+  isAdminOrBod?: boolean;
 }
 
 export const ContractServicesSection: React.FC<ContractServicesSectionProps> = ({
@@ -43,6 +44,7 @@ export const ContractServicesSection: React.FC<ContractServicesSectionProps> = (
   progressPercent,
   packagesList,
   standaloneList,
+  isAdminOrBod = false,
 }) => {
   return (
     <View className="gap-[12px]">
@@ -66,13 +68,15 @@ export const ContractServicesSection: React.FC<ContractServicesSectionProps> = (
             <Text className="text-[18px] font-black text-white">{formatVNDFull(sellingPrice)}</Text>
           </View>
 
-          {/* 2. TỔNG VỐN */}
-          <View className="bg-slate-50 rounded-[12px] p-[12px] border border-slate-200">
-            <Text className="text-[10px] font-bold text-slate-500 tracking-[0.5px]">TỔNG VỐN</Text>
-            <Text style={{ color: '#059669' }} className="text-[16px] font-extrabold mt-[2px]">
-              {formatVNDFull(costPrice)}
-            </Text>
-          </View>
+          {/* 2. TỔNG VỐN (Chỉ hiển thị cho Quản trị viên ADMIN/BOD) */}
+          {isAdminOrBod && (
+            <View className="bg-slate-50 rounded-[12px] p-[12px] border border-slate-200">
+              <Text className="text-[10px] font-bold text-slate-500 tracking-[0.5px]">TỔNG VỐN</Text>
+              <Text style={{ color: '#059669' }} className="text-[16px] font-extrabold mt-[2px]">
+                {formatVNDFull(costPrice)}
+              </Text>
+            </View>
+          )}
 
           {/* 3. ĐÃ THANH TOÁN THỰC TẾ */}
           <View className="bg-slate-50 rounded-[12px] p-[12px] border border-slate-200">

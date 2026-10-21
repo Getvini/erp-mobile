@@ -29,6 +29,7 @@ export interface MilestoneTrackerTabProps {
   contractId: string;
   contractCode?: string;
   sellingPrice?: number;
+  contractStatus?: string;
   isReadOnly?: boolean;
   onRefresh?: () => void;
 }
@@ -37,6 +38,7 @@ export const MilestoneTrackerTab: React.FC<MilestoneTrackerTabProps> = ({
   contractId,
   contractCode,
   sellingPrice = 0,
+  contractStatus,
   isReadOnly = false,
   onRefresh,
 }) => {
@@ -369,6 +371,7 @@ export const MilestoneTrackerTab: React.FC<MilestoneTrackerTabProps> = ({
         contractId={contractId}
         contractCode={contractCode}
         sellingPrice={sellingPrice}
+        contractStatus={contractStatus}
         isReadOnly={!canManage}
         onSuccess={handleModalSuccess}
       />

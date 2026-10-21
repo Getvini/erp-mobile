@@ -26,6 +26,7 @@ import {
   parseNumberInput,
   formatDateToDDMMYYYY,
 } from '@/utils/formatters';
+import { canModifyMilestone, canAddMilestone } from '@/utils/milestoneSecurity';
 
 export interface MilestoneModalProps {
   visible: boolean;
@@ -33,6 +34,7 @@ export interface MilestoneModalProps {
   contractId: string;
   contractCode?: string;
   sellingPrice?: number;
+  contractStatus?: string;
   isReadOnly?: boolean;
   onSuccess?: () => void;
 }
@@ -55,6 +57,7 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
   contractId,
   contractCode,
   sellingPrice = 0,
+  contractStatus,
   isReadOnly = false,
   onSuccess,
 }) => {
@@ -81,7 +84,10 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
         amount: Number(m.amount) || 0,
         dueDate: m.dueDate ? m.dueDate.split('T')[0] : '',
         isLocked:
-          m.status === 'PAID' ||
+          !canModifyMilestone({
+            status: m.status,
+            debtStatus: (m as any).debt?.status,
+          }) ||
           m.status === 'COMPLETED' ||
           (Array.isArray((m as any).payments) && (m as any).payments.length > 0) ||
           Number((m as any).paidAmount || 0) > 0,
@@ -125,6 +131,13 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
 
   // Thao tác dòng
   const handleAddRow = () => {
+    if (!canAddMilestone(contractStatus)) {
+      Alert.alert(
+        'Không thể thêm đợt',
+        'Hợp đồng đã hoàn tất hoặc đã hủy, không thể thêm đợt thanh toán mới theo quy định kế toán.'
+      );
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     const remainingPercent = Math.max(0, 100 - totalPercentage);
     const initialAmount = calculateAmountFromPercent(remainingPercent);
@@ -869,27 +882,29 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
                   gap: 12,
                 }}
               >
-                {/* Add Row Button */}
-                <TouchableOpacity
-                  onPress={handleAddRow}
-                  style={{
-                    flex: 1,
-                    height: 48,
-                    borderRadius: 10,
-                    borderWidth: 1,
-                    borderColor: '#FDCB9E',
-                    backgroundColor: '#FFF7ED',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexDirection: 'row',
-                    gap: 6,
-                  }}
-                >
-                  <Feather name="plus" size={18} color="#F38820" />
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#F38820' }}>
-                    Thêm đợt
-                  </Text>
-                </TouchableOpacity>
+                {/* Add Row Button (Ẩn khi hợp đồng đã hoàn tất/hủy) */}
+                {canAddMilestone(contractStatus) && (
+                  <TouchableOpacity
+                    onPress={handleAddRow}
+                    style={{
+                      flex: 1,
+                      height: 48,
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: '#FDCB9E',
+                      backgroundColor: '#FFF7ED',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexDirection: 'row',
+                      gap: 6,
+                    }}
+                  >
+                    <Feather name="plus" size={18} color="#F38820" />
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#F38820' }}>
+                      Thêm đợt
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
                 {/* Save Button */}
                 <TouchableOpacity

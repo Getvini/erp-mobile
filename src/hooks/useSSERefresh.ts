@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { sseEventBus } from '../services/sseEventBus';
+import { sseEventBus } from '@/services/sseEventBus';
 
 type EventNameOrTag = string;
 

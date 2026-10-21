@@ -1,9 +1,9 @@
 import React from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { StatCard } from '../StatCard';
-import { TodayTasksWidget } from '../TodayTasksWidget';
-import { HotProjectsWidget } from '../HotProjectsWidget';
+import { StatCard } from '@/components/dashboard/StatCard';
+import { TodayTasksWidget } from '@/components/dashboard/TodayTasksWidget';
+import { HotProjectsWidget } from '@/components/dashboard/HotProjectsWidget';
 import { MemberMetrics, TaskItem } from '@/services/dashboardService';
 import { BrandColors } from '@/constants/colors';
 

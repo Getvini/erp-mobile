@@ -42,6 +42,7 @@ import {
   formatDateToDDMMYYYY,
   formatDateToYYYYMMDD,
 } from '@/utils/formatters';
+import { validateDebtPayment } from '@/utils/debtPaymentValidation';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { usePermission } from '@/hooks/usePermission';
 
@@ -138,16 +139,9 @@ export const DebtDetailsModal: React.FC<DebtDetailsModalProps> = ({
     if (!debt) return;
     const rawAmount = parseNumberInput(paymentAmountInput);
 
-    if (rawAmount <= 0) {
-      Alert.alert('Lỗi nhập liệu', 'Vui lòng nhập số tiền thanh toán lớn hơn 0.');
-      return;
-    }
-
-    if (rawAmount > remaining) {
-      Alert.alert(
-        'Vượt quá số nợ',
-        `Số tiền thanh toán (${formatVND(rawAmount)}) không được vượt quá số tiền còn lại (${formatVND(remaining)}).`
-      );
+    const validation = validateDebtPayment(rawAmount, remaining);
+    if (!validation.isValid) {
+      Alert.alert('Lỗi nhập liệu', validation.errorMessage || 'Số tiền thanh toán không hợp lệ.');
       return;
     }
 

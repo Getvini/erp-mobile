@@ -1,8 +1,8 @@
 import React from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { StatCard } from '../StatCard';
-import { HotProjectsWidget } from '../HotProjectsWidget';
+import { StatCard } from '@/components/dashboard/StatCard';
+import { HotProjectsWidget } from '@/components/dashboard/HotProjectsWidget';
 import { BrandColors } from '@/constants/colors';
 import { formatVND } from '@/utils/formatters';
 import { SalesMetrics } from '@/services/dashboardService';

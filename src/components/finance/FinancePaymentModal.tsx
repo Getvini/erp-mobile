@@ -23,6 +23,7 @@ import {
   parseNumberInput,
   formatVND,
 } from '@/utils/formatters';
+import { validateDebtPayment } from '@/utils/debtPaymentValidation';
 
 export const FinancePaymentModal: React.FC = () => {
   const [proofSubmissionType, setProofSubmissionType] = useState<'file' | 'link'>('file');
@@ -81,8 +82,15 @@ export const FinancePaymentModal: React.FC = () => {
     const debtId = selectedMilestone.debt?.id || selectedMilestone.id;
     const amountNum = parseNumberInput(paymentAmount);
 
-    if (isNaN(amountNum) || amountNum <= 0) {
-      Alert.alert('Lỗi nhập liệu', 'Vui lòng nhập số tiền thanh toán hợp lệ.');
+    const remainingDebt = Math.max(
+      0,
+      (selectedMilestone.amount || 0) - (selectedMilestone.paidAmount || 0)
+    );
+    const maxPayable = remainingDebt > 0 ? remainingDebt : Number(selectedMilestone.amount || 0);
+
+    const validation = validateDebtPayment(amountNum, maxPayable);
+    if (!validation.isValid) {
+      Alert.alert('Lỗi nhập liệu', validation.errorMessage || 'Vui lòng nhập số tiền thanh toán hợp lệ.');
       return;
     }
 

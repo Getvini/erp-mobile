@@ -1,4 +1,4 @@
-import { readMoneyToWords } from '../numberToWordsVi';
+import { readMoneyToWords } from '@/utils/numberToWordsVi';
 
 describe('numberToWordsVi helper', () => {
   it('should return "Không đồng" for 0 or invalid input', () => {

@@ -426,7 +426,27 @@ const FinanceRowCard = memo(({ row, view, multiColumn, onUpload, onPreview }: {
             <View key={doc.id} className="mb-2 min-h-12 flex-row items-center rounded-xl border border-slate-200 bg-slate-50 px-3">
               <Feather name="file-text" size={17} color={view === 'ACCEPTANCE' ? '#10B981' : '#F38820'} />
               <TouchableOpacity onPress={() => onPreview(doc)} className="ml-2 flex-1 py-3"><Text numberOfLines={1} className="text-xs font-bold text-slate-700">{doc.name}</Text><Text className="mt-0.5 text-[10px] text-slate-400">{formatDateToDDMMYYYY(doc.createdAt, 'Chưa rõ ngày')}</Text></TouchableOpacity>
-              <TouchableOpacity onPress={() => Linking.openURL(doc.fileUrl)} className="h-11 w-11 items-center justify-center"><Feather name="download" size={17} color="#64748B" /></TouchableOpacity>
+              <TouchableOpacity
+                onPress={async () => {
+                  if (!doc.fileUrl) {
+                    Alert.alert('Thông báo', 'Tệp chưa có liên kết tải về.');
+                    return;
+                  }
+                  try {
+                    const supported = await Linking.canOpenURL(doc.fileUrl);
+                    if (supported) {
+                      await Linking.openURL(doc.fileUrl);
+                    } else {
+                      Alert.alert('Lỗi', 'Không thể mở liên kết tài liệu này.');
+                    }
+                  } catch {
+                    Alert.alert('Lỗi', 'Có lỗi xảy ra khi tải tài liệu.');
+                  }
+                }}
+                className="h-11 w-11 items-center justify-center"
+              >
+                <Feather name="download" size={17} color="#64748B" />
+              </TouchableOpacity>
             </View>
           ))}
         </View>

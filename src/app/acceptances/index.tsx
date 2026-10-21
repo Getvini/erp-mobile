@@ -20,6 +20,7 @@ import { BrandColors } from '@/constants/colors';
 import BottomNavBar from '@/components/BottomNavBar';
 import AcceptanceReviewModal from '@/components/projects/AcceptanceReviewModal';
 import { useAcceptancesQuery } from '@/hooks/queries/useAcceptances';
+import { formatDateToDDMMYYYY, formatVND } from '@/utils/formatters';
 
 type StatusFilter = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'PROCESSED' | 'CANCELLED';
 
@@ -120,7 +121,16 @@ export default function AcceptancesScreen() {
           <View className="flex-row items-center gap-1.5">
             <Feather name="clock" size={13} color="#64748B" />
             <Text className="text-xs text-[#475569]">
-              Ngày tạo: {new Date(item.createdAt).toLocaleDateString('vi-VN')}
+              Ngày tạo: {formatDateToDDMMYYYY(item.createdAt)}
+            </Text>
+          </View>
+        )}
+
+        {item.amount !== undefined && item.amount !== null && item.amount > 0 && (
+          <View className="flex-row items-center gap-1.5">
+            <Feather name="dollar-sign" size={13} color="#F38820" />
+            <Text className="text-xs text-[#475569]">
+              Giá trị nghiệm thu: <Text className="font-bold text-[#F38820]">{formatVND(item.amount)}</Text>
             </Text>
           </View>
         )}

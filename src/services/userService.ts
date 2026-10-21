@@ -1,30 +1,6 @@
 import { apiService } from './api';
 import { USER_ROLE } from './teamService';
-import type { WorkloadInfo } from '../utils/workload';
-
-/**
- * SERVICE — DANH BẠ NHÂN SỰ (Users) — Phase P3
- *
- * Đối chiếu backend thật: `ERP/src/modules/user/`
- *  - GET    /users                     → mảng thô (KHÔNG có { data, meta }); query CHỈ hỗ trợ `role`, `month`, `year`
- *  - GET    /users/:id                 → object cùng shape (KHÔNG có `workload`)
- *  - POST   /users                     → tạo User + Account
- *  - PUT    /users/:id                 → sửa User + Account (đổi role cũng dùng endpoint NÀY)
- *  - PATCH  /users/:id/labor-contracts → ghi đè mảng hợp đồng lao động
- *  - DELETE /users/:id                 → xóa
- *
- * ⚠️ KHÔNG tồn tại `PATCH /users/:id/role` (404) nên không được implement.
- * ⚠️ Tìm kiếm / lọc theo team / phân trang phải xử lý CLIENT-SIDE vì backend không hỗ trợ.
- * ⚠️ Entity `Users` chỉ có fullName / phoneNumber / isLocked / laborContract.
- *    Thông tin đăng nhập nằm ở `Accounts`: username, email, role, isActive, vinicoin...
- *    KHÔNG có address / dob / citizenId / CCCD / bankAccount và KHÔNG có enum USER_STATUS.
- *    Trạng thái chỉ gồm 2 cờ boolean: `user.isLocked` và `account.isActive`.
- * ⚠️ Backend `getAll/getOne` lọc cứng `isLocked: false` ⇒ user bị khóa không bao giờ trả về.
- */
-
-// ============================================================================
-// ENUM + NHÃN (9 role — khớp Account.entity.ts `UserRole`)
-// ============================================================================
+import type { WorkloadInfo } from '@/utils/workload';
 
 /**
  * Bảng nhãn role dùng chung. `teamService.USER_ROLE` đã có map tương đương và

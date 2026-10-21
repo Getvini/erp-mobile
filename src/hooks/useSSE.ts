@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus, Platform } from 'react-native';
 import EventSource from 'react-native-sse';
-import { useAuth } from '../context/AuthContext';
-import { apiService } from '../services/api';
-import { sseEventBus } from '../services/sseEventBus';
-import { EVENT_TO_TAGS_MAP, getEntityTagForEvent, isProjectLifecycleEvent, isTeamMemberEvent } from '../constants/events';
+import { useAuth } from '@/context/AuthContext';
+import { apiService } from '@/services/api';
+import { sseEventBus } from '@/services/sseEventBus';
+import { EVENT_TO_TAGS_MAP, getEntityTagForEvent, isProjectLifecycleEvent, isTeamMemberEvent } from '@/constants/events';
 
 const DEFAULT_API_URL =
   process.env.EXPO_PUBLIC_API_URL ||
