@@ -15,6 +15,7 @@ export const canDecideTaskOutcome = (
   project: any = task?.project,
 ): boolean => {
   if (!task || !currentUserId) return false;
+  if (project?.status === 'ON_HOLD' || Boolean(project?.isOnHold)) return false;
 
   const assignerId = task.assignerId || task.assigner?.id;
   const performerIds = [

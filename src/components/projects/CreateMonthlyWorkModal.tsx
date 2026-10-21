@@ -20,6 +20,7 @@ import {
 import { useAvailableServicesQuery } from '@/hooks/queries/useOpportunities';
 import { useServicePackagesQuery } from '@/hooks/queries/useServicePackages';
 import { formatNumber } from '@/utils/formatters';
+import { validateMonthlyWorkAddendum } from '@/utils/monthlyWorkValidation';
 import { BrandColors } from '@/constants/colors';
 
 const STANDALONE = 'STANDALONE';
@@ -313,8 +314,9 @@ export default function CreateMonthlyWorkModal({
   };
 
   const handleSubmit = async () => {
-    if (items.length === 0) {
-      Alert.alert('Thông báo', 'Vui lòng chọn ít nhất một dịch vụ');
+    const validation = validateMonthlyWorkAddendum({ monthKey, name, items });
+    if (!validation.isValid) {
+      Alert.alert('Thông báo', validation.errorMessage || 'Vui lòng kiểm tra lại thông tin kế hoạch.');
       return;
     }
 

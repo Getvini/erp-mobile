@@ -56,9 +56,32 @@ export const SUBTASK_DONE_STATUSES: string[] = ['INTERNAL_COMPLETED', 'COMPLETED
 export const canStartTask = (status: string, isAssignee: boolean = false): boolean =>
   STARTABLE.includes(String(status || '')) && Boolean(isAssignee);
 
+/** Có thể bắt đầu task kèm kiểm tra trạng thái dự án (chặn khi ON_HOLD, COMPLETED, CANCELLED) */
+export const canStartTaskWithProject = (
+  status: string,
+  isAssignee: boolean = false,
+  projectStatus?: string,
+): boolean => {
+  if (['ON_HOLD', 'COMPLETED', 'CANCELLED'].includes(projectStatus || '')) {
+    return false;
+  }
+  return canStartTask(status, isAssignee);
+};
+
 /** Có thể gửi kết quả để duyệt */
 export const canSubmitResult = (status: string): boolean =>
   SUBMITTABLE.includes(String(status || ''));
+
+/** Có thể gửi kết quả để duyệt kèm kiểm tra trạng thái dự án (chặn khi ON_HOLD, COMPLETED, CANCELLED) */
+export const canSubmitResultWithProject = (
+  status: string,
+  projectStatus?: string,
+): boolean => {
+  if (['ON_HOLD', 'COMPLETED', 'CANCELLED'].includes(projectStatus || '')) {
+    return false;
+  }
+  return canSubmitResult(status);
+};
 
 /** Có thể yêu cầu làm lại */
 export const canRework = (status: string): boolean => REWORKABLE.includes(String(status || ''));

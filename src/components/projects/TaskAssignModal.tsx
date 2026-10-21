@@ -42,6 +42,7 @@ import * as Haptics from 'expo-haptics';
 import AssigneeSelectorModal from './AssigneeSelectorModal';
 import VendorSelectorModal from './VendorSelectorModal';
 import { VendorType, VENDOR_TYPE_LABELS } from '@/services/vendorService';
+import { validateTaskAssignment } from '@/utils/taskAssignValidation';
 
 const ITEM_HEIGHT = 38;
 const VISIBLE_ITEMS = 3;
@@ -823,12 +824,13 @@ export default function TaskAssignModal({
         return;
       }
     } else {
-      if (performerType === 'INTERNAL' && !selectedAssigneeId) {
-        Alert.alert('Cảnh báo', 'Vui lòng chọn nhân sự thực hiện trong đội dự án.');
-        return;
-      }
-      if (performerType === 'VENDOR' && !selectedVendorId) {
-        Alert.alert('Cảnh báo', 'Vui lòng chọn đối tác Vendor thực hiện.');
+      const validation = validateTaskAssignment({
+        assigneeId: performerType === 'INTERNAL' ? selectedAssigneeId : undefined,
+        vendorId: performerType === 'VENDOR' ? selectedVendorId : undefined,
+        deadline: dueDate,
+      });
+      if (!validation.isValid) {
+        Alert.alert('Cảnh báo', validation.errorMessage || 'Vui lòng chọn đầy đủ thông tin phân công.');
         return;
       }
     }

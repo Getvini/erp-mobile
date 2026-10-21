@@ -17,6 +17,7 @@ import {
 } from '@/hooks/queries/useProjects';
 import { BrandColors } from '@/constants/colors';
 import { formatVND, formatNumber } from '@/utils/formatters';
+import { validateProjectClose } from '@/utils/projectCloseValidation';
 
 interface CloseProjectModalProps {
   visible: boolean;
@@ -64,8 +65,9 @@ export default function CloseProjectModal({
 
   const handleSubmit = async () => {
     const trimmed = reason.trim();
-    if (isDirect && !trimmed) {
-      Alert.alert('Cảnh báo', 'Vui lòng nhập lý do đóng dự án');
+    const validation = validateProjectClose({ isDirect, reason: trimmed });
+    if (!validation.isValid) {
+      Alert.alert('Cảnh báo', validation.errorMessage || 'Vui lòng nhập lý do đóng dự án hợp lệ.');
       return;
     }
 

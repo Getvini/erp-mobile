@@ -17,6 +17,7 @@ import {
   useRequestPauseProjectMutation,
 } from '@/hooks/queries/useProjects';
 import { PAUSE_DURATION_DAYS } from '@/utils/projectPause';
+import { validateProjectPause } from '@/utils/projectPauseValidation';
 
 interface PauseProjectModalProps {
   visible: boolean;
@@ -54,8 +55,9 @@ export default function PauseProjectModal({
 
   const handleSubmit = async () => {
     const trimmed = reason.trim();
-    if (!trimmed) {
-      Alert.alert('Cảnh báo', 'Vui lòng nhập lý do tạm dừng');
+    const validation = validateProjectPause(trimmed);
+    if (!validation.isValid) {
+      Alert.alert('Cảnh báo', validation.errorMessage || 'Vui lòng nhập lý do tạm dừng hợp lệ.');
       return;
     }
 
