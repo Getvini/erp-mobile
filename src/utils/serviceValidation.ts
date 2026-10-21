@@ -9,9 +9,9 @@ export interface ServiceFormData {
   code?: string;
   description?: string;
   unit: string;
-  isAI: boolean;
-  isBudget: boolean;
-  jobConfigs: ServiceJobConfigInput[];
+  isAI?: boolean;
+  isBudget?: boolean;
+  jobConfigs?: ServiceJobConfigInput[];
 }
 
 /**

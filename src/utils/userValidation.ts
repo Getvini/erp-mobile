@@ -10,7 +10,7 @@ export const VIETNAMESE_NAME_REGEX = /^[a-zA-ZÀ-ỹ0-9\s]+$/;
 export const USER_PHONE_REGEX = /^\+?[0-9]{10,15}$/;
 
 export interface UserFormData {
-  username: string;
+  username?: string;
   password?: string;
   fullName: string;
   email?: string;
