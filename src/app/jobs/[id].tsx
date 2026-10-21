@@ -12,7 +12,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import JobFormModal from '@/components/jobs/JobFormModal';
+import EditJobCriteriaModal from '@/components/jobs/EditJobCriteriaModal';
 import { BrandColors } from '@/constants/colors';
+import { usePermission } from '@/hooks/usePermission';
 import {
   useDeleteJobMutation,
   useJobCriteriasQuery,
@@ -32,13 +34,6 @@ import { canAccessJobs, canManageJobs, isManagementRole } from '@/utils/rbac';
 
 const DEFAULT_CATEGORY_COLOR = { color: '#475569', bg: '#F1F5F9', border: '#E2E8F0' };
 
-/**
- * Chi tiết HẠNG MỤC CÔNG VIỆC — `/jobs/[id]`.
- * Gồm: thông tin hạng mục, tiêu chí đánh giá (tick chọn cho nghiệm thu QC),
- * dịch vụ đang dùng (`serviceJobs[].service`) và nhà cung cấp (`vendorJobs[]`).
- *
- * ⚠️ Sửa/Xóa chỉ cho ADMIN/BOD (chuẩn Web `JobDetailPage.jsx:37`).
- */
 export default function JobDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
@@ -46,12 +41,15 @@ export default function JobDetailScreen() {
 
   const user = useAuthStore((state) => state.user);
   const isAuthLoading = useAuthStore((state) => state.isLoading);
+  const { canConfigureQc } = usePermission();
 
   const [isEditVisible, setIsEditVisible] = useState(false);
+  const [isEditCriteriaVisible, setIsEditCriteriaVisible] = useState(false);
   const [passedCriteriaIds, setPassedCriteriaIds] = useState<string[]>([]);
 
   const hasAccess = canAccessJobs(user?.role);
   const canWrite = canManageJobs(user?.role) && isManagementRole(user?.role);
+
 
   const {
     data: job,
@@ -289,10 +287,23 @@ export default function JobDetailScreen() {
               <Feather name="clipboard" size={16} color={BrandColors.primary} />
               <Text className="text-sm font-bold text-[#0F172A]">Tiêu chí đánh giá</Text>
             </View>
-            <Text className="text-[11px] font-semibold text-[#64748B]">
-              Đã chọn {passedCriteriaIds.length}/{criteriaList.length}
-            </Text>
+            <View className="flex-row items-center gap-2.5">
+              <Text className="text-[11px] font-semibold text-[#64748B]">
+                {passedCriteriaIds.length}/{criteriaList.length}
+              </Text>
+              {canConfigureQc ? (
+                <TouchableOpacity
+                  className="flex-row items-center gap-1 bg-[#FFF4EA] border border-[#FDCB9E] px-2.5 py-1 rounded-lg"
+                  onPress={() => setIsEditCriteriaVisible(true)}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="edit-2" size={12} color={BrandColors.primary} />
+                  <Text className="text-xs font-bold text-primary">Cấu hình QC</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
+
 
           <View className="p-4 gap-2">
             {criteriaList.length === 0 ? (
@@ -501,6 +512,14 @@ export default function JobDetailScreen() {
         onClose={() => setIsEditVisible(false)}
         onSuccess={() => refetch()}
       />
+
+      <EditJobCriteriaModal
+        visible={isEditCriteriaVisible}
+        job={job as Job}
+        onClose={() => setIsEditCriteriaVisible(false)}
+        onSuccess={() => refetch()}
+      />
     </SafeAreaView>
+
   );
 }

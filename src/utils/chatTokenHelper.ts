@@ -1,59 +1,25 @@
-/**
- * Helper phân tích Tokenized Chat Messages & System Messages
- * Chuẩn Enterprise đồng bộ 100% giữa Web (erp-UI) và Mobile (erp-mobile)
- */
-
-export interface ChatTokenTextSegment {
-  type: 'text';
-  content: string;
+export interface ChatTokenPart {
+  type: 'text' | 'task' | 'user' | 'all' | 'legacy-task';
+  id?: string;
+  display?: string;
+  code?: string;
+  content?: string;
 }
 
-export interface ChatTokenTaskSegment {
-  type: 'task';
-  id: string;
-  display: string;
-}
+export type ChatTokenSegment = ChatTokenPart;
 
-export interface ChatTokenUserSegment {
-  type: 'user';
-  id: string;
-  display: string;
-}
+export const buildTaskToken = (taskId: string, displayCode: string): string => `#{${taskId}:${displayCode}}`;
 
-export interface ChatTokenAllSegment {
-  type: 'all';
-  id: string;
-  display: string;
-}
+export const buildUserToken = (userId: string, displayName: string): string => `@{${userId}:${displayName}}`;
 
-export interface ChatTokenLegacyTaskSegment {
-  type: 'legacy-task';
-  code: string;
-}
+export const buildAllToken = (displayName = 'Tất cả mọi người'): string => `@{all:${displayName}}`;
 
-export type ChatTokenSegment =
-  | ChatTokenTextSegment
-  | ChatTokenTaskSegment
-  | ChatTokenUserSegment
-  | ChatTokenAllSegment
-  | ChatTokenLegacyTaskSegment;
-
-export const buildTaskToken = (taskId: string, displayCode: string): string =>
-  `#{${taskId}:${displayCode}}`;
-
-export const buildUserToken = (userId: string, displayName: string): string =>
-  `@{${userId}:${displayName}}`;
-
-export const buildAllToken = (displayName = 'Tất cả mọi người'): string =>
-  `@{all:${displayName}}`;
-
-export const parseChatTokens = (content?: string | null): ChatTokenSegment[] => {
+export const parseChatTokens = (content?: string | null): ChatTokenPart[] => {
   if (!content || typeof content !== 'string') return [];
 
-  const tokenRegex =
-    /(@\{([A-Za-z0-9_-]+):([^}]+)\})|(#{([A-Za-z0-9_-]+):([^}]+)})|(@\{([A-Za-z0-9_-]+)\})/g;
+  const tokenRegex = /(@\{([A-Za-z0-9_-]+):([^}]+)\})|(#{([A-Za-z0-9_-]+):([^}]+)})|(@\{([A-Za-z0-9_-]+)\})/g;
 
-  const parts: ChatTokenSegment[] = [];
+  const parts: ChatTokenPart[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -111,7 +77,7 @@ export const stripChatTokens = (content?: string | null): string => {
       if (seg.type === 'user') return `@${seg.display}`;
       if (seg.type === 'task') return `#${seg.display}`;
       if (seg.type === 'legacy-task') return `#${seg.code}`;
-      return seg.content;
+      return seg.content || '';
     })
     .join('');
 };
@@ -124,10 +90,7 @@ export const formatSystemMessage = (message: any, selfUserId?: string | null): s
   const isActorMe = selfUserId && String(actorId) === String(selfUserId);
   const actorName = isActorMe
     ? 'Bạn'
-    : meta.actorName ||
-      message.sender?.fullName ||
-      message.sender?.username ||
-      'Ai đó';
+    : meta.actorName || message.sender?.fullName || message.sender?.username || 'Ai đó';
 
   switch (action) {
     case 'CREATE_GROUP':
@@ -145,8 +108,7 @@ export const formatSystemMessage = (message: any, selfUserId?: string | null): s
         return name;
       });
 
-      const targetsText =
-        formattedTargets.length > 0 ? formattedTargets.join(', ') : 'thành viên mới';
+      const targetsText = formattedTargets.length > 0 ? formattedTargets.join(', ') : 'thành viên mới';
       return `${actorName} đã thêm ${targetsText} vào nhóm.`;
     }
 
@@ -188,15 +150,9 @@ export const formatSystemMessage = (message: any, selfUserId?: string | null): s
   }
 };
 
-export interface FormatMessagePreviewOptions {
-  isGroup?: boolean;
-  selfUserId?: string | null;
-  allUsers?: { id: string; fullName?: string; username?: string }[];
-}
-
 export const formatMessagePreview = (
   message: any,
-  options: FormatMessagePreviewOptions = {}
+  options: { isGroup?: boolean; selfUserId?: string | null; allUsers?: any[] } = {}
 ): string => {
   if (!message) return 'Chưa có tin nhắn';
 
@@ -215,9 +171,11 @@ export const formatMessagePreview = (
       const first = attachments[0];
       const isImg =
         first.type === 'image' ||
+        first.type?.includes('image') ||
         /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(first.url || '');
       const isAudio =
         first.type === 'audio' ||
+        first.type?.includes('audio') ||
         /\.(webm|mp3|wav|ogg|m4a)($|\?)/i.test(first.url || '');
       if (isImg) previewText = '[Hình ảnh]';
       else if (isAudio) previewText = '[Tin nhắn thoại]';
@@ -245,22 +203,18 @@ export const formatMessagePreview = (
   return previewText;
 };
 
-export const parseSafeChatDate = (dateStr?: any): Date | null => {
+export const parseSafeChatDate = (dateStr: any): Date | null => {
   if (!dateStr) return null;
   if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
   let str = String(dateStr).trim();
-  // Nếu chuỗi có định dạng ISO không có timezone indicator (Z hoặc offset +/-hh:mm), chuẩn hóa thêm 'Z' để Date hiểu là UTC
-  if (
-    /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/.test(str) &&
-    !/[Zz]|[+-]\d{2}:?\d{2}$/.test(str)
-  ) {
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/.test(str) && !/[Zz]|[+-]\d{2}:?\d{2}$/.test(str)) {
     str = str.replace(' ', 'T') + 'Z';
   }
   const d = new Date(str);
   return isNaN(d.getTime()) ? null : d;
 };
 
-export const formatChatTime = (dateStr?: any): string => {
+export const formatChatTime = (dateStr: any): string => {
   try {
     const d = parseSafeChatDate(dateStr);
     if (!d) return '';

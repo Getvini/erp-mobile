@@ -264,7 +264,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   sendMessage: async (roomId: string, content: string, attachments: any[] = []) => {
-    const { socket, currentUserId, messages } = get();
+    const { socket, currentUserId } = get();
     const trimmed = content.trim();
     if (!trimmed && attachments.length === 0) return;
 

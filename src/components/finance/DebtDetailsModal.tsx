@@ -43,6 +43,7 @@ import {
   formatDateToYYYYMMDD,
 } from '@/utils/formatters';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { usePermission } from '@/hooks/usePermission';
 
 export interface DebtDetailsModalProps {
   visible: boolean;
@@ -63,7 +64,7 @@ export const DebtDetailsModal: React.FC<DebtDetailsModalProps> = ({
 
   const user = useAuthStore((state) => state.user);
   const userRole = (user?.role || '').toUpperCase();
-  const isAdminOrBod = ['ADMIN', 'DIRECTOR', 'BOD'].includes(userRole);
+  const { canUnlockDebt: isAdminOrBod } = usePermission();
   const canManagePayment = ['ADMIN', 'DIRECTOR', 'ACCOUNTANT', 'MANAGER'].includes(userRole);
 
   // Fetch updated debt detail
