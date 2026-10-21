@@ -17,6 +17,7 @@ import { useCreateCustomerMutation, useCustomersQuery } from '@/hooks/queries/us
 import { BrandColors } from '@/constants/colors';
 import { fetchTaxInfo } from '@/utils/tax';
 import { EMAIL_REGEX, IDENTIFIER_REGEX, PHONE_REGEX, TAX_ID_REGEX } from '@/utils/validators';
+import { validateCustomerForm } from '@/utils/customerValidation';
 
 interface CreateCustomerModalProps {
   visible: boolean;
@@ -95,33 +96,19 @@ export default function CreateCustomerModal({ visible, onClose, onSuccess }: Cre
   };
 
   const handleSubmit = async () => {
-    if (!form.name.trim()) {
-      Alert.alert('Lỗi nhập liệu', 'Vui lòng nhập tên công ty / đối tác.');
+    const validation = validateCustomerForm(form, existingCustomers, false);
+    if (!validation.isValid) {
+      const firstError = Object.values(validation.errors)[0];
+      Alert.alert('Lỗi nhập liệu', firstError);
       return;
     }
 
-    if (taxError && taxError.includes('đã tồn tại')) {
-      Alert.alert('Lỗi nhập liệu', 'Mã số thuế này đã tồn tại trên hệ thống. Vui lòng kiểm tra lại.');
-      return;
-    }
-
-    const phone = form.phoneNumber.trim().replace(/\s+/g, '');
-    if (phone && !PHONE_REGEX.test(phone)) {
-      Alert.alert('Lỗi nhập liệu', 'Số điện thoại phải đúng định dạng Việt Nam, ví dụ 0912345678 hoặc +84912345678.');
-      return;
-    }
-    if (form.email.trim() && !EMAIL_REGEX.test(form.email.trim())) {
-      Alert.alert('Lỗi nhập liệu', 'Email liên hệ không đúng định dạng.');
-      return;
-    }
-    if (form.taxId.trim() && !TAX_ID_REGEX.test(form.taxId.trim())) {
-      Alert.alert('Lỗi nhập liệu', 'Mã số thuế phải gồm 10 số hoặc dạng 0101234567-001.');
-      return;
-    }
     if (form.code.trim() && !IDENTIFIER_REGEX.test(form.code.trim())) {
       Alert.alert('Lỗi nhập liệu', 'Mã đối tác phải gồm 3-30 ký tự in hoa, số, dấu gạch ngang hoặc gạch dưới.');
       return;
     }
+
+    const phone = form.phoneNumber.trim().replace(/\s+/g, '');
 
     try {
       Haptic.impactAsync(Haptic.ImpactFeedbackStyle.Medium);

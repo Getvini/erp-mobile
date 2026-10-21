@@ -18,6 +18,7 @@ import { CustomerItem } from '@/services/customerService';
 import { BrandColors } from '@/constants/colors';
 import { fetchTaxInfo } from '@/utils/tax';
 import { EMAIL_REGEX, PHONE_REGEX, TAX_ID_REGEX } from '@/utils/validators';
+import { validateCustomerForm } from '@/utils/customerValidation';
 
 interface EditCustomerModalProps {
   visible: boolean;
@@ -104,39 +105,14 @@ export default function EditCustomerModal({
       return;
     }
 
-    if (!form.name.trim()) {
-      Alert.alert('Lỗi nhập liệu', 'Tên khách hàng là bắt buộc.');
-      return;
-    }
-
-    if (!form.phoneNumber.trim()) {
-      Alert.alert('Lỗi nhập liệu', 'Số điện thoại là bắt buộc.');
-      return;
-    }
-
-    if (!form.email.trim()) {
-      Alert.alert('Lỗi nhập liệu', 'Email là bắt buộc.');
-      return;
-    }
-
-    if (!form.address.trim()) {
-      Alert.alert('Lỗi nhập liệu', 'Địa chỉ là bắt buộc.');
+    const validation = validateCustomerForm(form, [], true, customer.id);
+    if (!validation.isValid) {
+      const firstError = Object.values(validation.errors)[0];
+      Alert.alert('Lỗi nhập liệu', firstError);
       return;
     }
 
     const phone = form.phoneNumber.trim().replace(/\s+/g, '');
-    if (!PHONE_REGEX.test(phone)) {
-      Alert.alert('Lỗi nhập liệu', 'Số điện thoại phải đúng định dạng Việt Nam, ví dụ 0912345678 hoặc +84912345678.');
-      return;
-    }
-    if (!EMAIL_REGEX.test(form.email.trim())) {
-      Alert.alert('Lỗi nhập liệu', 'Email liên hệ không đúng định dạng.');
-      return;
-    }
-    if (form.taxId.trim() && !TAX_ID_REGEX.test(form.taxId.trim())) {
-      Alert.alert('Lỗi nhập liệu', 'Mã số thuế phải gồm 10 số hoặc dạng 0101234567-001.');
-      return;
-    }
 
     try {
       Haptic.impactAsync(Haptic.ImpactFeedbackStyle.Medium);

@@ -196,20 +196,41 @@ export default function ReferralPartnerDetailScreen() {
     return customers.map((value) => ({ type: 'customer', id: value.id, value }));
   }, [activeTab, contracts, customers, opportunities]);
 
-  const handleCall = useCallback((phone?: string | null) => {
+  const handleCall = useCallback(async (phone?: string | null) => {
     if (!phone) {
       Alert.alert('Thông báo', 'Đối tác này chưa cập nhật số điện thoại.');
       return;
     }
-    Linking.openURL(`tel:${phone}`);
+    const cleanPhone = phone.replace(/[^0-9+]/g, '');
+    const url = `tel:${cleanPhone}`;
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Thông báo', `Thiết bị không hỗ trợ gọi điện trực tiếp: ${phone}`);
+      }
+    } catch {
+      Alert.alert('Lỗi', `Không thể thực hiện cuộc gọi đến ${phone}`);
+    }
   }, []);
 
-  const handleEmail = useCallback((email?: string | null) => {
+  const handleEmail = useCallback(async (email?: string | null) => {
     if (!email) {
       Alert.alert('Thông báo', 'Đối tác này chưa cập nhật email liên hệ.');
       return;
     }
-    Linking.openURL(`mailto:${email}`);
+    const url = `mailto:${email.trim()}`;
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Thông báo', `Thiết bị không hỗ trợ ứng dụng gửi email: ${email}`);
+      }
+    } catch {
+      Alert.alert('Lỗi', `Không thể gửi email đến ${email}`);
+    }
   }, []);
 
   const confirmDelete = useCallback(() => {

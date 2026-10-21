@@ -9,22 +9,42 @@ interface ContactActionGroupProps {
 }
 
 export function ContactActionGroup({ phone, email }: ContactActionGroupProps) {
-  const handleCall = () => {
+  const handleCall = async () => {
     if (!phone) {
       Alert.alert('Thông báo', 'Chưa có số điện thoại liên hệ.');
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Linking.openURL(`tel:${phone.replace(/[^0-9+]/g, '')}`);
+    const url = `tel:${phone.replace(/[^0-9+]/g, '')}`;
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Thông báo', `Thiết bị không hỗ trợ gọi điện trực tiếp: ${phone}`);
+      }
+    } catch {
+      Alert.alert('Lỗi', `Không thể thực hiện cuộc gọi đến ${phone}`);
+    }
   };
 
-  const handleEmail = () => {
+  const handleEmail = async () => {
     if (!email) {
       Alert.alert('Thông báo', 'Chưa có địa chỉ email liên hệ.');
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Linking.openURL(`mailto:${email}`);
+    const url = `mailto:${email.trim()}`;
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Thông báo', `Thiết bị không hỗ trợ ứng dụng gửi email: ${email}`);
+      }
+    } catch {
+      Alert.alert('Lỗi', `Không thể gửi email đến ${email}`);
+    }
   };
 
   return (

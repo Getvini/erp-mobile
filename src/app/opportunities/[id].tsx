@@ -64,6 +64,11 @@ import {
 } from '@/hooks/queries/useQuotations';
 import { useCreateContractMutation } from '@/hooks/queries/useContracts';
 import { useUpdateCustomerMutation } from '@/hooks/queries/useCustomers';
+import {
+  getIncompleteAiJobs,
+  canCreateQuotationFromOpportunity,
+} from '@/utils/opportunityAiJobValidation';
+import { validateQuotationRejection } from '@/utils/quotationRejectionValidation';
 
 // Dictionary mapping for Region, Field and Priority
 const REGION_LABELS: Record<string, string> = {
@@ -164,6 +169,11 @@ export default function OpportunityDetailScreen() {
   const [isCustomerModalVisible, setIsCustomerModalVisible] = useState(false);
   const [isRejectModalVisible, setIsRejectModalVisible] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+
+  // Quote Reject Modal State
+  const [isRejectQuoteModalVisible, setIsRejectQuoteModalVisible] = useState(false);
+  const [rejectQuoteId, setRejectQuoteId] = useState<string | null>(null);
+  const [rejectQuoteReason, setRejectQuoteReason] = useState('');
 
   // Document Preview Modal State
   const [previewUrl, setPreviewUrl] = useState('');
@@ -402,23 +412,51 @@ export default function OpportunityDetailScreen() {
     ]);
   };
 
-  // BOD Reject Quotation Action
-  const handleRejectQuotation = async (quoteId: string) => {
-    Alert.alert('Từ chối báo giá', 'Bạn có chắc chắn muốn từ chối bản báo giá này?', [
-      { text: 'Hủy', style: 'cancel' },
-      {
-        text: 'Từ chối',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await rejectQuotationMutation.mutateAsync({ id: quoteId, reason: 'BOD yêu cầu chỉnh sửa' });
-            Alert.alert('Đã từ chối', 'Bản báo giá đã bị từ chối.');
-          } catch {
-            Alert.alert('Lỗi', 'Không thể từ chối báo giá.');
-          }
-        },
-      },
-    ]);
+  // BOD Reject Quotation Action - Mở modal nhập lý do (Web Parity)
+  const handleRejectQuotation = (quoteId: string) => {
+    setRejectQuoteId(quoteId);
+    setRejectQuoteReason('');
+    setIsRejectQuoteModalVisible(true);
+  };
+
+  const handleConfirmRejectQuotation = async () => {
+    if (!rejectQuoteId) return;
+    const validation = validateQuotationRejection(rejectQuoteReason);
+    if (!validation.isValid) {
+      Alert.alert('Thiếu thông tin', validation.error);
+      return;
+    }
+
+    try {
+      await rejectQuotationMutation.mutateAsync({
+        id: rejectQuoteId,
+        reason: validation.sanitizedReason,
+      });
+      setIsRejectQuoteModalVisible(false);
+      setRejectQuoteId(null);
+      setRejectQuoteReason('');
+      Alert.alert('Đã từ chối', 'Bản báo giá đã bị từ chối.');
+    } catch (err: any) {
+      Alert.alert('Lỗi', err?.message || 'Không thể từ chối báo giá.');
+    }
+  };
+
+  const handleCreateQuotation = () => {
+    if (!opportunity) return;
+    const incompleteJobs = getIncompleteAiJobs(opportunity.services);
+    if (incompleteJobs.length > 0) {
+      const jobNames = [...new Set(incompleteJobs.map((j) => j.name || 'Hạng mục AI'))].join(', ');
+      Alert.alert(
+        'Cần cập nhật giá vốn',
+        `Vui lòng điền đầy đủ giá vốn job AI trước khi tạo báo giá: ${jobNames}`
+      );
+      return;
+    }
+
+    router.push({
+      pathname: '/opportunities/quotations/create',
+      params: { opportunityId: opportunity.id },
+    } as any);
   };
 
   const handleCloneOpportunity = () => {
@@ -520,13 +558,11 @@ export default function OpportunityDetailScreen() {
     opportunity.status === 'CONTRACT_CREATED' ||
     quotations.some((q) => q.status === 'APPROVED' || q.status === 'QUOTE_APPROVED');
 
-  const canCreateQuotation =
-    !hasApprovedQuotation &&
-    hasCustomer &&
-    (opportunity.status === 'QUOTATION_DRAFTING' ||
-      opportunity.status === 'PENDING_QUOTE_APPROVAL' ||
-      (opportunity.status === 'OPP_APPROVED' &&
-        (user?.role === 'ADMIN' || (opportunity.createdBy as any)?.id === user?.id)));
+  const canCreateQuotation = canCreateQuotationFromOpportunity(
+    opportunity,
+    user,
+    quotations
+  );
 
   const canViewQuotations = hasCustomer && quotations.length > 0;
   const canCreateContract = opportunity.status === 'QUOTE_APPROVED';
@@ -1215,6 +1251,57 @@ export default function OpportunityDetailScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* MODAL TỪ CHỐI BÁO GIÁ (BẮT BUỘC LÝ DO) */}
+      <Modal
+        visible={isRejectQuoteModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsRejectQuoteModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          className="flex-1 justify-end bg-black/60"
+        >
+          <View className="rounded-t-[28px] bg-white px-5 pt-3 pb-6">
+            <View className="h-1 w-11 self-center rounded-full bg-slate-300 mb-4" />
+            <Text className="text-lg font-extrabold text-slate-900">Từ chối bản báo giá</Text>
+            <Text className="text-sm text-slate-500 mt-1 mb-4">
+              Vui lòng nhập lý do từ chối để bộ phận phụ trách điều chỉnh lại báo giá.
+            </Text>
+            <TextInput
+              value={rejectQuoteReason}
+              onChangeText={setRejectQuoteReason}
+              placeholder="Nhập lý do từ chối báo giá..."
+              placeholderTextColor="#94A3B8"
+              multiline
+              autoFocus
+              className="min-h-[112px] rounded-2xl border border-slate-300 bg-slate-50 p-3 text-sm text-slate-900"
+              style={{ textAlignVertical: 'top' }}
+              accessibilityLabel="Lý do từ chối báo giá"
+            />
+            <View className="flex-row gap-3 mt-4">
+              <TouchableOpacity
+                className="h-12 flex-1 items-center justify-center rounded-xl border border-slate-300 bg-white"
+                onPress={() => {
+                  setIsRejectQuoteModalVisible(false);
+                  setRejectQuoteId(null);
+                  setRejectQuoteReason('');
+                }}
+              >
+                <Text className="font-bold text-slate-600">Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="h-12 flex-[1.4] flex-row items-center justify-center gap-2 rounded-xl bg-red-600"
+                onPress={handleConfirmRejectQuotation}
+              >
+                <Feather name="x-circle" size={18} color="#FFFFFF" />
+                <Text className="font-extrabold text-white">Xác nhận từ chối</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       {/* 12. STICKY BOTTOM BAR */}
       <OpportunityBottomActionBar
         stage={(opportunity as any)?.stage || opportunity?.status}
@@ -1223,11 +1310,7 @@ export default function OpportunityDetailScreen() {
         onApprove={handleApproveOpportunity}
         onReject={() => setIsRejectModalVisible(true)}
         onResubmit={canResubmit ? handleResubmitOpportunity : undefined}
-        onCreateQuotation={
-          (opportunity as any)?.stage === 'QUALIFIED' || (opportunity as any)?.stage === 'PROPOSAL' || opportunity?.status === 'QUALIFIED' || opportunity?.status === 'PROPOSAL'
-            ? () => router.push(`/opportunities/${id}/quotations/create`)
-            : undefined
-        }
+        onCreateQuotation={canCreateQuotation ? handleCreateQuotation : undefined}
       />
     </SafeAreaView>
   );

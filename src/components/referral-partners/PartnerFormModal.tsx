@@ -26,6 +26,7 @@ import {
 } from '@/services/referralPartnerService';
 import { BrandColors } from '@/constants/colors';
 import { EMAIL_REGEX } from '@/utils/validators';
+import { fetchTaxInfo } from '@/utils/tax';
 
 /** Backend: ERP/src/modules/vendor/validations/Partner.Validation.ts */
 const PARTNER_PHONE_REGEX = /^\+?[0-9]{10,15}$/;
@@ -92,6 +93,31 @@ export default function PartnerFormModal({
         : EMPTY_FORM,
     );
   }, [partner, translateY]);
+
+  // Tự động kiểm tra MST và điền tên doanh nghiệp & địa chỉ (Web Parity)
+  React.useEffect(() => {
+    if (form.type !== 'BUSINESS') return;
+    const cleanTaxId = form.taxId.replace(/[\s-]/g, '');
+    if (cleanTaxId.length !== 10 && cleanTaxId.length !== 13) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const info = await fetchTaxInfo(cleanTaxId);
+        if (info && info.name) {
+          setForm((prev) => ({
+            ...prev,
+            name: info.name || prev.name,
+            address: info.address || prev.address,
+          }));
+          Haptic.notificationAsync(Haptic.NotificationFeedbackType.Success);
+        }
+      } catch {
+        // Bỏ qua lỗi tra cứu
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [form.taxId, form.type]);
 
   const panResponder = useMemo(
     () =>
