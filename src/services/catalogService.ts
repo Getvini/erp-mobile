@@ -39,6 +39,7 @@ export interface ServiceItem {
   costPrice?: number | string | null;
   overheadCost?: number | string | null;
   isAI?: boolean;
+  isBudget?: boolean;
   serviceJobs?: ServiceJobItem[];
   createdAt?: string;
   updatedAt?: string;
@@ -70,6 +71,7 @@ export interface ServiceCreatePayload {
   description?: string;
   unit?: string;
   isAI?: boolean;
+  isBudget?: boolean;
   jobIds: string[];
   outputJobIds: string[];
 }
@@ -81,6 +83,7 @@ export interface ServiceBasicInfoPayload {
   description?: string;
   unit?: string;
   isAI?: boolean;
+  isBudget?: boolean;
 }
 
 /** Nhánh PATCH cấu hình hạng mục (full-replace toàn bộ serviceJobs). */

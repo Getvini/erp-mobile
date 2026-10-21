@@ -84,6 +84,7 @@ export interface UserItem {
   id: string;
   fullName: string;
   phoneNumber?: string | null;
+  birthday?: string | null;
   isLocked?: boolean;
   laborContract?: LaborContractFile[] | null;
   accounts?: UserAccountInfo[];
@@ -106,6 +107,7 @@ export interface CreateUserPayload {
   role?: string;
   phoneNumber?: string;
   email?: string;
+  birthday?: string | null;
   isLocked?: boolean;
 }
 
@@ -115,6 +117,7 @@ export interface UpdateUserPayload {
   email?: string;
   phoneNumber?: string;
   role?: string;
+  birthday?: string | null;
   isActive?: boolean;
   isLocked?: boolean;
 }

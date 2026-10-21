@@ -39,6 +39,7 @@ import { DatePickerModal } from '@/components/common/DatePickerModal';
 import { DocumentCard } from '@/components/common/DocumentCard';
 import { formatDateToDDMMYYYY, formatDateToYYYYMMDD } from '@/utils/formatters';
 import { USER_ROLE_OPTIONS } from '@/services/userService';
+import { validateAnnouncementForm } from '@/utils/announcementValidation';
 
 const ATTACHMENT_FOLDER = 'GETVINI/ERP/announcements';
 const MEDIA_FOLDER = 'GETVINI/ERP/announcements/media';
@@ -277,21 +278,7 @@ const AnnouncementFormSheet: React.FC<AnnouncementFormSheetProps> = ({
   };
 
   const validate = (): string | null => {
-    if (!form.title.trim()) return 'Vui lòng nhập tiêu đề thông báo.';
-    if (!form.content.trim()) return 'Vui lòng nhập nội dung thông báo.';
-    if (form.scopeType === 'ROLE' && form.targetRoles.length === 0) {
-      return 'Vui lòng chọn ít nhất một vai trò nhận thông báo.';
-    }
-    if (form.scopeType === 'TEAM' && form.targetTeamIds.length === 0) {
-      return 'Vui lòng chọn ít nhất một đội dự án nhận thông báo.';
-    }
-    if (form.scopeType === 'USER' && form.targetUserIds.length === 0) {
-      return 'Vui lòng chọn ít nhất một người nhận thông báo.';
-    }
-    if (form.eventStartAt && form.eventEndAt && form.eventEndAt < form.eventStartAt) {
-      return 'Ngày kết thúc không được trước ngày bắt đầu.';
-    }
-    return null;
+    return validateAnnouncementForm(form);
   };
 
   const handleSubmit = async (status: 'DRAFT' | 'SENT') => {

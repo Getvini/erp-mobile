@@ -25,10 +25,9 @@ import {
   UserItem,
 } from '@/services/userService';
 import { BrandColors } from '@/constants/colors';
-import { EMAIL_REGEX } from '@/utils/validators';
-
-/** Backend không có enum trạng thái — chỉ ràng buộc định dạng SĐT quốc tế/nội địa. */
-const USER_PHONE_REGEX = /^\+?[0-9]{10,15}$/;
+import { validateUserForm } from '@/utils/userValidation';
+import { DatePickerModal } from '@/components/common/DatePickerModal';
+import { formatDateToDDMMYYYY } from '@/utils/formatters';
 
 interface UserFormModalProps {
   visible: boolean;
@@ -45,6 +44,7 @@ interface UserFormState {
   email: string;
   phoneNumber: string;
   role: string;
+  birthday: string;
   isActive: boolean;
   isLocked: boolean;
 }
@@ -56,6 +56,7 @@ const EMPTY_FORM: UserFormState = {
   email: '',
   phoneNumber: '',
   role: DEFAULT_USER_ROLE,
+  birthday: '',
   isActive: true,
   isLocked: false,
 };
@@ -74,6 +75,7 @@ const buildFormState = (user?: UserItem | null): UserFormState => {
     email: account?.email || '',
     phoneNumber: user.phoneNumber || '',
     role: account?.role || DEFAULT_USER_ROLE,
+    birthday: user.birthday ? String(user.birthday).slice(0, 10) : '',
     isActive: account?.isActive !== false,
     isLocked: Boolean(user.isLocked),
   };
@@ -94,31 +96,14 @@ const UserFormSheet: React.FC<UserFormSheetProps> = ({ user, onClose, onSuccess 
 
   const [form, setForm] = useState<UserFormState>(() => buildFormState(user));
   const [showPassword, setShowPassword] = useState(false);
+  const [isBirthdayPickerOpen, setIsBirthdayPickerOpen] = useState(false);
 
   const setField = <K extends keyof UserFormState>(key: K, value: UserFormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const validate = (): string | null => {
-    if (!isEditMode) {
-      if (!form.username.trim()) return 'Vui lòng nhập tên đăng nhập.';
-      if (!form.password.trim()) return 'Vui lòng nhập mật khẩu.';
-    }
-    if (!form.fullName.trim()) return 'Vui lòng nhập họ tên nhân sự.';
-    if (!form.role) return 'Vui lòng chọn vai trò.';
-
-    const email = form.email.trim();
-    if (email && !EMAIL_REGEX.test(email)) return 'Email không đúng định dạng.';
-
-    const phone = form.phoneNumber.trim().replace(/\s+/g, '');
-    if (phone && !USER_PHONE_REGEX.test(phone)) {
-      return 'Số điện thoại phải gồm 10-15 chữ số, có thể bắt đầu bằng dấu +.';
-    }
-    return null;
-  };
-
   const handleSubmit = async () => {
-    const validationError = validate();
+    const validationError = validateUserForm(form, isEditMode);
     if (validationError) {
       Alert.alert('Lỗi nhập liệu', validationError);
       return;
@@ -126,6 +111,7 @@ const UserFormSheet: React.FC<UserFormSheetProps> = ({ user, onClose, onSuccess 
 
     const email = form.email.trim();
     const phone = form.phoneNumber.trim().replace(/\s+/g, '');
+    const birthday = form.birthday ? form.birthday.trim() : null;
 
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -137,6 +123,7 @@ const UserFormSheet: React.FC<UserFormSheetProps> = ({ user, onClose, onSuccess 
           email: email || undefined,
           phoneNumber: phone || undefined,
           role: form.role,
+          birthday,
           isActive: form.isActive,
           isLocked: form.isLocked,
         });
@@ -148,6 +135,7 @@ const UserFormSheet: React.FC<UserFormSheetProps> = ({ user, onClose, onSuccess 
           role: form.role || DEFAULT_USER_ROLE,
           email: email || undefined,
           phoneNumber: phone || undefined,
+          birthday,
           isLocked: form.isLocked,
         });
       }
@@ -304,6 +292,31 @@ const UserFormSheet: React.FC<UserFormSheetProps> = ({ user, onClose, onSuccess 
           </View>
 
           <View>
+            <Text className="mb-1.5 text-xs font-bold text-slate-700">Ngày sinh</Text>
+            <TouchableOpacity
+              testID="userFormBirthdayButton"
+              className="min-h-[48px] flex-row items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3"
+              onPress={() => setIsBirthdayPickerOpen(true)}
+              activeOpacity={0.8}
+            >
+              <Text className={`text-sm ${form.birthday ? 'font-semibold text-slate-900' : 'text-slate-400'}`}>
+                {form.birthday ? formatDateToDDMMYYYY(form.birthday) : 'Chọn ngày sinh (DD-MM-YYYY)'}
+              </Text>
+              <View className="flex-row items-center gap-2">
+                {form.birthday ? (
+                  <TouchableOpacity
+                    onPress={() => setField('birthday', '')}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Feather name="x-circle" size={16} color="#94A3B8" />
+                  </TouchableOpacity>
+                ) : null}
+                <Feather name="calendar" size={18} color="#64748B" />
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          <View>
             <Text className="mb-1.5 text-xs font-bold text-slate-700">
               Vai trò <Text className="text-red-500">*</Text>
             </Text>
@@ -401,6 +414,17 @@ const UserFormSheet: React.FC<UserFormSheetProps> = ({ user, onClose, onSuccess 
           </TouchableOpacity>
         </View>
       </View>
+
+      <DatePickerModal
+        visible={isBirthdayPickerOpen}
+        title="Chọn ngày sinh"
+        initialDate={form.birthday || undefined}
+        onConfirm={(_, yyyymmdd) => {
+          setField('birthday', yyyymmdd);
+          setIsBirthdayPickerOpen(false);
+        }}
+        onClose={() => setIsBirthdayPickerOpen(false)}
+      />
     </KeyboardAvoidingView>
   );
 };

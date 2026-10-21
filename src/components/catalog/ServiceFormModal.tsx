@@ -23,6 +23,7 @@ import { useJobsQuery } from '@/hooks/queries/useJobs';
 import { BrandColors } from '@/constants/colors';
 import { SERVICE_UNIT_SUGGESTIONS } from '@/utils/catalogPricing';
 import { formatNumberInput, parseNumberInput, formatVND } from '@/utils/formatters';
+import { validateServiceForm } from '@/utils/serviceValidation';
 
 interface ServiceFormModalProps {
   visible: boolean;
@@ -59,6 +60,7 @@ export default function ServiceFormModal({
   const [description, setDescription] = useState(service?.description ?? '');
   const [unit, setUnit] = useState(service?.unit ?? '');
   const [isAI, setIsAI] = useState(Boolean(service?.isAI));
+  const [isBudget, setIsBudget] = useState(Boolean(service?.isBudget));
   const [jobConfigs, setJobConfigs] = useState<JobConfigRow[]>(() =>
     (service?.serviceJobs ?? []).map((serviceJob) => ({
       jobId: serviceJob.jobId,
@@ -188,20 +190,29 @@ export default function ServiceFormModal({
     const trimmedName = name.trim();
     const trimmedCode = code.trim();
 
-    if (!trimmedName) {
-      Alert.alert('Lỗi nhập liệu', 'Vui lòng nhập tên dịch vụ.');
-      return;
-    }
-    if (!trimmedCode) {
-      Alert.alert('Lỗi nhập liệu', 'Vui lòng nhập mã dịch vụ.');
-      return;
-    }
-
     const normalizedConfigs: ServiceJobConfig[] = jobConfigs.map((config) => ({
       jobId: config.jobId,
       quantity: toNumberOrOne(config.quantityText),
       isOutput: config.isOutput,
     }));
+
+    const validationError = validateServiceForm(
+      {
+        name: trimmedName,
+        code: trimmedCode,
+        description: description.trim(),
+        unit: unit.trim(),
+        isAI,
+        isBudget,
+        jobConfigs: normalizedConfigs,
+      },
+      isEditMode,
+    );
+
+    if (validationError) {
+      Alert.alert('Lỗi nhập liệu', validationError);
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -211,7 +222,8 @@ export default function ServiceFormModal({
           trimmedCode !== (service.code ?? '') ||
           description.trim() !== (service.description ?? '') ||
           unit.trim() !== (service.unit ?? '') ||
-          isAI !== Boolean(service.isAI);
+          isAI !== Boolean(service.isAI) ||
+          isBudget !== Boolean(service.isBudget);
 
         const jobsChanged =
           JSON.stringify(normalizedConfigs) !== JSON.stringify(originalJobConfigs);
@@ -229,6 +241,7 @@ export default function ServiceFormModal({
             description: description.trim(),
             unit: unit.trim(),
             isAI,
+            isBudget,
           });
         }
 
@@ -245,6 +258,7 @@ export default function ServiceFormModal({
           description: description.trim() || undefined,
           unit: unit.trim() || undefined,
           isAI,
+          isBudget,
           jobIds: normalizedConfigs.map((config) => config.jobId),
           outputJobIds: normalizedConfigs
             .filter((config) => config.isOutput)
@@ -430,6 +444,31 @@ export default function ServiceFormModal({
               <Text className="text-sm font-semibold text-slate-700">
                 Đây là dịch vụ AI
               </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              testID="serviceIsBudgetCheckbox"
+              className="min-h-[48px] flex-row items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5"
+              onPress={() => setIsBudget((prev) => !prev)}
+              activeOpacity={0.8}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: isBudget }}
+            >
+              <View
+                className={`h-6 w-6 items-center justify-center rounded-lg border-2 ${
+                  isBudget ? 'border-primary bg-primary' : 'border-slate-300 bg-white'
+                }`}
+              >
+                {isBudget ? <Feather name="check" size={14} color="#FFFFFF" /> : null}
+              </View>
+              <View className="flex-1">
+                <Text className="text-sm font-semibold text-slate-700">
+                  Cho phép nhập ngân sách (isBudget)
+                </Text>
+                <Text className="text-[11px] text-slate-400">
+                  Cho phép tạo yêu cầu chi phí/ngân sách quảng cáo cho dịch vụ này
+                </Text>
+              </View>
             </TouchableOpacity>
 
             {/* Bộ chọn hạng mục */}
