@@ -62,22 +62,25 @@ export default function HomeScreen() {
     isLoading: isDashboardLoading,
     isRefetching: isDashboardRefetching,
     refetch: refetchDashboard,
-  } = useDashboardQuery({
-    month: selectedDate.month ?? undefined,
-    year: selectedDate.year ?? undefined,
-  });
+  } = useDashboardQuery(
+    {
+      month: selectedDate.month ?? undefined,
+      year: selectedDate.year ?? undefined,
+    },
+    isAuthenticated
+  );
 
   const {
     data: todayTasks = [],
     refetch: refetchMyTasks,
     isRefetching: isMyTasksRefetching,
-  } = useMyTasksQuery();
+  } = useMyTasksQuery(isAuthenticated);
 
   const {
     data: reviewTasks = [],
     refetch: refetchReviewTasks,
     isRefetching: isReviewRefetching,
-  } = useAwaitingReviewTasksQuery(isLeadOrAdmin);
+  } = useAwaitingReviewTasksQuery(isAuthenticated && isLeadOrAdmin);
 
   const isRefetching = isDashboardRefetching || isMyTasksRefetching || isReviewRefetching;
 

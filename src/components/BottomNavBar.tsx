@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { BrandColors } from '@/constants/colors';
 import { useAuth } from '@/context/AuthContext';
 import { canAccessCustomers } from '@/utils/rbac';
@@ -32,6 +33,7 @@ function BottomNavBarComponent() {
   const isProfile = pathname === '/profile' || pathname === '/profile/index' || pathname === '/profile/';
 
   const navigateTo = (route: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (!isAuthenticated && route !== '/(auth)/login') {
       router.push('/(auth)/login');
       return;

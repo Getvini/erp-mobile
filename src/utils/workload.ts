@@ -43,3 +43,15 @@ export const getWorkloadDisplayPercent = (workload?: WorkloadInfo | null): numbe
 
 export const formatWorkloadLabel = (workload?: WorkloadInfo | null): string =>
   `${getWorkloadPercent(workload)}%`;
+
+/**
+ * Phải khớp WorkloadNormService.DAYS_PER_MONTH ở backend:
+ * 22.000 Vinicoin/tháng = 800 Vinicoin/ngày (22.000 / 800 = 27.5).
+ */
+export const WORKLOAD_DAYS_PER_MONTH = 27.5;
+export const DEFAULT_MONTHLY_NORM = 22000;
+
+export const getDailyNorm = (monthlyNorm: number | string | undefined | null): number => {
+  const norm = Number(monthlyNorm || 0);
+  return norm > 0 ? norm / WORKLOAD_DAYS_PER_MONTH : 0;
+};

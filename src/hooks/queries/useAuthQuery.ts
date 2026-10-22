@@ -66,6 +66,14 @@ export function useLoginMutation() {
         await privateStorage.removeItem(STORAGE_REMEMBER_KEY);
       }
 
+      // Tự động đồng bộ thông tin sinh trắc học nếu thiết bị đã kích hoạt
+      try {
+        const isBio = await authService.isBiometricEnabled();
+        if (isBio) {
+          await authService.saveBiometricCredentials(credentials.username, credentials.password);
+        }
+      } catch {}
+
       // Fetch full profile via getMe right after login to populate full fields
       let fullUser: UserProfile = res.data.user;
       try {

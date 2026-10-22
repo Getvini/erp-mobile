@@ -21,7 +21,7 @@ export type { DashboardParams };
 /**
  * Custom TanStack Query Hook lấy tổng hợp dữ liệu Bảng điều khiển kinh doanh & vận hành
  */
-export function useDashboardQuery(params: DashboardParams = {}) {
+export function useDashboardQuery(params: DashboardParams = {}, enabled = true) {
   return useQuery<DashboardResponse>({
     queryKey: queryKeys.dashboard.summary(params),
     queryFn: async () => {
@@ -31,6 +31,7 @@ export function useDashboardQuery(params: DashboardParams = {}) {
       }
       return res.data || {};
     },
+    enabled,
     staleTime: 1000 * 60 * 3, // 3 minutes
   });
 }
@@ -118,7 +119,7 @@ export function useCreateVatInvoiceMutation() {
 /**
  * Hook lấy danh sách công việc cá nhân của người dùng hiện tại
  */
-export function useMyTasksQuery() {
+export function useMyTasksQuery(enabled = true) {
   return useQuery<unknown, Error, TaskItem[]>({
     queryKey: queryKeys.tasks.list({ type: 'my-tasks' }),
     queryFn: async () => {
@@ -128,6 +129,7 @@ export function useMyTasksQuery() {
       }
       return res.data || [];
     },
+    enabled,
     select: normalizeTaskListResponse,
     staleTime: 1000 * 60 * 3,
   });

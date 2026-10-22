@@ -167,7 +167,7 @@ export default function ReferralPartnersScreen() {
       </View>
 
       {/* 4 trạng thái: Loading / Error / Empty / Success */}
-      {isLoading && !isFetching ? (
+      {isLoading ? (
         <View className="flex-1 gap-3 px-4 pt-4">
           {[0, 1, 2].map((item) => (
             <View key={item} className="h-36 rounded-2xl bg-slate-200" />

@@ -267,7 +267,7 @@ export default function CustomersScreen() {
       </View>
 
       {/* Content List */}
-      {isLoading && !isFetching ? (
+      {isLoading ? (
         <View className="flex-1 px-4 pt-4 gap-3">
           {[0, 1, 2].map((item) => (
             <View key={item} className="h-36 rounded-2xl bg-slate-200" />

@@ -370,7 +370,7 @@ export const PaymentRecordModal: React.FC<PaymentRecordModalProps> = ({
                     <View key={p.id} style={styles.historyItem}>
                       <View style={styles.historyLeft}>
                         <View style={styles.historyDot} />
-                        <View style={{ flex: 1 }}>
+                        <View className="flex-1">
                           <Text style={styles.historyAmount}>{formatVND(p.amount)}</Text>
                           <Text style={styles.historyDate}>
                             {formatDateToDDMMYYYY(p.paymentDate)}

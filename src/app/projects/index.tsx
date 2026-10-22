@@ -224,7 +224,7 @@ export default function ProjectsScreen() {
       </View>
 
       {/* Content List */}
-      {isLoading && !isFetching ? (
+      {isLoading ? (
         <View className="flex-1 justify-center items-center gap-2.5">
           <ActivityIndicator size="large" color="#F38820" />
           <Text className="text-xs text-slate-400">Đang tải dữ liệu dự án Getvini...</Text>

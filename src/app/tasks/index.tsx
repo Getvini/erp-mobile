@@ -354,7 +354,7 @@ export default function TasksScreen() {
       )}
 
       {/* Task List */}
-      {isLoading && !isFetching ? (
+      {isLoading ? (
         <View className="flex-1 items-center justify-center gap-2.5">
           <ActivityIndicator size="large" color={BrandColors.primary} />
           <Text className="text-[13px] text-slate-400">Đang tải danh sách công việc...</Text>

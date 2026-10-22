@@ -156,7 +156,7 @@ export default function TeamsScreen() {
       </View>
 
       {/* 4 trạng thái: Loading / Error / Empty / Success */}
-      {isLoading && !isFetching ? (
+      {isLoading ? (
         <View className="flex-1 px-4 pt-4 gap-3">
           {[0, 1, 2].map((item) => (
             <View key={item} className="h-32 rounded-2xl bg-slate-200" />

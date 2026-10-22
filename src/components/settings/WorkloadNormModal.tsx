@@ -24,6 +24,7 @@ import {
 import { formatNumber } from '@/utils/formatters';
 import { STAFF_ROLES, USER_ROLE_COLORS } from '@/utils/rbac';
 import { USER_ROLE } from '@/services/teamService';
+import { getDailyNorm, WORKLOAD_DAYS_PER_MONTH } from '@/utils/workload';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -179,7 +180,7 @@ export const WorkloadNormModal: React.FC<WorkloadNormModalProps> = ({ visible, o
           <View style={styles.infoBanner}>
             <Feather name="info" size={16} color="#3B82F6" style={{ marginTop: 2 }} />
             <Text style={styles.infoText}>
-              Định mức ngày = Định mức tháng / 30 ngày. Tỷ lệ % tải của nhân viên được tính từ Vinicoin công việc chia cho định mức ngày.
+              Định mức ngày = Định mức tháng / {WORKLOAD_DAYS_PER_MONTH} ngày (chuẩn 22.000 Vinicoin/tháng = 800 Vinicoin/ngày). Tỷ lệ % tải của nhân viên được tính từ Vinicoin công việc chia cho định mức ngày.
             </Text>
           </View>
 
@@ -247,7 +248,7 @@ export const WorkloadNormModal: React.FC<WorkloadNormModalProps> = ({ visible, o
               {displayedRoles.map((role) => {
                 const row = serverNorms.find((item) => item.role === role);
                 const monthlyVal = Number(norms[role] || 0);
-                const dailyVal = monthlyVal > 0 ? monthlyVal / 30 : 0;
+                const dailyVal = getDailyNorm(monthlyVal > 0 ? monthlyVal : row?.monthlyNorm);
                 const isCustomized = row?.isCustomized ?? false;
                 const colorConfig = USER_ROLE_COLORS[role] || {
                   bg: '#F8FAFC',
@@ -314,7 +315,7 @@ export const WorkloadNormModal: React.FC<WorkloadNormModalProps> = ({ visible, o
                         <Text style={styles.inputLabel}>Định mức ngày</Text>
                         <View style={styles.dailyNormBox}>
                           <Text style={styles.dailyNormValue}>
-                            {formatNumber(dailyVal)}
+                            {formatNumber(Math.round(dailyVal * 100) / 100)}
                           </Text>
                           <Text style={styles.dailyNormUnit}>Vinicoin/ngày</Text>
                         </View>

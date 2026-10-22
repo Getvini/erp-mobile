@@ -305,69 +305,35 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.65)' }}
+        className="flex-1 bg-slate-900/65"
       >
-        <View
-          style={{
-            flex: 1,
-            justifyContent: 'flex-end',
-            paddingTop: isLandscape ? 16 : 40,
-          }}
-        >
+        <View className={`flex-1 justify-end ${isLandscape ? 'pt-4' : 'pt-10'}`}>
           {/* Backdrop Dismiss touch area */}
           <TouchableOpacity
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+            className="absolute inset-0"
             activeOpacity={1}
             onPress={onClose}
           />
 
           {/* Draggable Bottom Sheet Container */}
           <View
-            style={{
-              backgroundColor: '#FFFFFF',
-              borderTopLeftRadius: 20,
-              borderTopRightRadius: 20,
-              maxHeight: isLandscape ? '94%' : '88%',
-              minHeight: '50%',
-              paddingBottom: Math.max(insets.bottom, 16),
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: -4 },
-              shadowOpacity: 0.15,
-              shadowRadius: 12,
-              elevation: 20,
-            }}
+            className={`bg-white rounded-t-[20px] min-h-[50%] shadow-2xl ${isLandscape ? 'max-h-[94%]' : 'max-h-[88%]'}`}
+            style={{ paddingBottom: Math.max(insets.bottom, 16) }}
           >
             {/* Drag Handle Bar */}
-            <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 6 }}>
-              <View
-                style={{
-                  width: 44,
-                  height: 5,
-                  borderRadius: 3,
-                  backgroundColor: '#CBD5E1',
-                }}
-              />
+            <View className="items-center pt-2.5 pb-1.5">
+              <View className="w-11 h-1.5 rounded-full bg-slate-300" />
             </View>
 
             {/* Header */}
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                paddingHorizontal: 20,
-                paddingBottom: 12,
-                borderBottomWidth: 1,
-                borderBottomColor: '#F1F5F9',
-              }}
-            >
-              <View style={{ flex: 1, marginRight: 12 }}>
-                <Text style={{ fontSize: 18, fontWeight: '700', color: '#0F172A' }}>
+            <View className="flex-row items-center justify-between px-5 pb-3 border-b border-slate-100">
+              <View className="flex-1 mr-3">
+                <Text className="text-lg font-bold text-slate-900">
                   Kế Hoạch Đợt Thanh Toán
                 </Text>
                 {contractCode ? (
-                  <Text style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>
-                    Hợp đồng: <Text style={{ fontWeight: '600', color: '#F38820' }}>{contractCode}</Text>
+                  <Text className="text-[13px] text-slate-500 mt-0.5">
+                    Hợp đồng: <Text className="font-semibold text-primary">{contractCode}</Text>
                   </Text>
                 ) : null}
               </View>
@@ -375,14 +341,7 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
               <TouchableOpacity
                 onPress={onClose}
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  backgroundColor: '#F1F5F9',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+                className="w-9 h-9 rounded-full bg-slate-100 items-center justify-center"
               >
                 <Feather name="x" size={18} color="#64748B" />
               </TouchableOpacity>
@@ -390,50 +349,28 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
 
             {/* Summary Metrics Bar */}
             <View
-              style={{
-                flexDirection: isLandscape ? 'row' : 'column',
-                backgroundColor: '#F8FAFC',
-                paddingHorizontal: 20,
-                paddingVertical: 12,
-                borderBottomWidth: 1,
-                borderBottomColor: '#E2E8F0',
-                gap: 8,
-              }}
+              className={`bg-slate-50 px-5 py-3 border-b border-slate-200 gap-2 ${isLandscape ? 'flex-row' : 'flex-col'}`}
             >
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', flex: 1 }}>
-                <Text style={{ fontSize: 13, color: '#64748B' }}>
-                  Giá trị HĐ: <Text style={{ fontWeight: '700', color: '#0F172A' }}>{formatVND(price)}</Text>
+              <View className="flex-row justify-between flex-1">
+                <Text className="text-[13px] text-slate-500">
+                  Giá trị HĐ: <Text className="font-bold text-slate-900">{formatVND(price)}</Text>
                 </Text>
-                <Text style={{ fontSize: 13, color: '#64748B' }}>
+                <Text className="text-[13px] text-slate-500">
                   Tổng đã chia:{' '}
-                  <Text
-                    style={{
-                      fontWeight: '700',
-                      color: isAmountBalanced ? '#16A34A' : '#EA580C',
-                    }}
-                  >
+                  <Text className={`font-bold ${isAmountBalanced ? 'text-emerald-600' : 'text-primary'}`}>
                     {formatVND(totalAmount)}
                   </Text>
                 </Text>
               </View>
 
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={{ fontSize: 13, color: '#64748B' }}>Tiến độ tỷ lệ:</Text>
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center gap-1.5">
+                  <Text className="text-[13px] text-slate-500">Tiến độ tỷ lệ:</Text>
                   <View
-                    style={{
-                      paddingHorizontal: 8,
-                      paddingVertical: 2,
-                      borderRadius: 12,
-                      backgroundColor: isPercentBalanced ? '#DCFCE7' : '#FEF3C7',
-                    }}
+                    className={`px-2 py-0.5 rounded-full ${isPercentBalanced ? 'bg-emerald-100' : 'bg-amber-100'}`}
                   >
                     <Text
-                      style={{
-                        fontSize: 12,
-                        fontWeight: '700',
-                        color: isPercentBalanced ? '#16A34A' : '#D97706',
-                      }}
+                      className={`text-xs font-bold ${isPercentBalanced ? 'text-emerald-600' : 'text-amber-600'}`}
                     >
                       {totalPercentage}% / 100%
                     </Text>
@@ -441,7 +378,7 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
                 </View>
 
                 {totalPercentage !== 100 ? (
-                  <Text style={{ fontSize: 12, color: totalPercentage > 100 ? '#DC2626' : '#D97706' }}>
+                  <Text className={`text-xs font-semibold ${totalPercentage > 100 ? 'text-red-600' : 'text-amber-600'}`}>
                     {totalPercentage > 100
                       ? `Thừa +${(totalPercentage - 100).toFixed(1)}%`
                       : `Còn thiếu ${(100 - totalPercentage).toFixed(1)}%`}
@@ -452,43 +389,32 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
 
             {/* Content Body: Loading or Milestones List */}
             {isFetching ? (
-              <View style={{ padding: 40, alignItems: 'center', justifyContent: 'center' }}>
+              <View className="p-10 items-center justify-center">
                 <ActivityIndicator size="large" color="#F38820" />
-                <Text style={{ marginTop: 12, fontSize: 14, color: '#64748B' }}>
+                <Text className="mt-3 text-sm text-slate-500">
                   Đang tải đợt thanh toán...
                 </Text>
               </View>
             ) : (
               <ScrollView
-                style={{ flex: 1, paddingHorizontal: 16 }}
+                className="flex-1 px-4"
                 contentContainerStyle={{ paddingVertical: 12 }}
                 showsVerticalScrollIndicator
                 keyboardShouldPersistTaps="handled"
               >
                 {milestones.length === 0 ? (
-                  <View style={{ alignItems: 'center', paddingVertical: 32 }}>
+                  <View className="items-center py-8">
                     <MaterialCommunityIcons name="calendar-clock" size={48} color="#CBD5E1" />
-                    <Text style={{ marginTop: 8, fontSize: 14, color: '#94A3B8' }}>
+                    <Text className="mt-2 text-sm text-slate-400">
                       Chưa có đợt thanh toán nào được thiết lập
                     </Text>
                     {!isReadOnly && (
                       <TouchableOpacity
                         onPress={handleAddRow}
-                        style={{
-                          marginTop: 12,
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 6,
-                          paddingHorizontal: 14,
-                          paddingVertical: 8,
-                          borderRadius: 8,
-                          backgroundColor: '#FFF7ED',
-                          borderWidth: 1,
-                          borderColor: '#FDCB9E',
-                        }}
+                        className="mt-3 flex-row items-center gap-1.5 px-3.5 py-2 rounded-lg bg-orange-50 border border-orange-200"
                       >
                         <Feather name="plus" size={16} color="#F38820" />
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: '#F38820' }}>
+                        <Text className="text-[13px] font-semibold text-primary">
                           Thêm đợt đầu tiên
                         </Text>
                       </TouchableOpacity>
@@ -498,31 +424,22 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
                   /* ============================================================== */
                   /* LANDSCAPE MODE: EXPANDED TABLE VIEW NHIỀU CỘT                   */
                   /* ============================================================== */
-                  <View style={{ borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, overflow: 'hidden' }}>
+                  <View className="border border-slate-200 rounded-lg overflow-hidden">
                     {/* Table Header */}
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        backgroundColor: '#F8FAFC',
-                        paddingVertical: 10,
-                        paddingHorizontal: 12,
-                        borderBottomWidth: 1,
-                        borderBottomColor: '#E2E8F0',
-                      }}
-                    >
-                      <Text style={{ width: 44, fontWeight: '700', fontSize: 12, color: '#475569' }}>STT</Text>
-                      <Text style={{ flex: 2, fontWeight: '700', fontSize: 12, color: '#475569' }}>Tên đợt</Text>
-                      <Text style={{ width: 85, fontWeight: '700', fontSize: 12, color: '#475569', textAlign: 'center' }}>
+                    <View className="flex-row bg-slate-50 py-2.5 px-3 border-b border-slate-200">
+                      <Text className="w-11 font-bold text-xs text-slate-600">STT</Text>
+                      <Text className="flex-2 font-bold text-xs text-slate-600">Tên đợt</Text>
+                      <Text className="w-[85px] font-bold text-xs text-slate-600 text-center">
                         Tỷ lệ (%)
                       </Text>
-                      <Text style={{ flex: 2, fontWeight: '700', fontSize: 12, color: '#475569', textAlign: 'right' }}>
+                      <Text className="flex-2 font-bold text-xs text-slate-600 text-right">
                         Số tiền (VNĐ)
                       </Text>
-                      <Text style={{ flex: 1.5, fontWeight: '700', fontSize: 12, color: '#475569', textAlign: 'center' }}>
+                      <Text className="flex-[1.5] font-bold text-xs text-slate-600 text-center">
                         Hạn thanh toán
                       </Text>
                       {!isReadOnly && (
-                        <Text style={{ width: 44, fontWeight: '700', fontSize: 12, color: '#475569', textAlign: 'center' }}>
+                        <Text className="w-11 font-bold text-xs text-slate-600 text-center">
                           Xóa
                         </Text>
                       )}
@@ -532,17 +449,9 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
                     {milestones.map((item, index) => (
                       <View
                         key={item._tempId}
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          paddingVertical: 8,
-                          paddingHorizontal: 12,
-                          borderBottomWidth: index === milestones.length - 1 ? 0 : 1,
-                          borderBottomColor: '#F1F5F9',
-                          backgroundColor: index % 2 === 0 ? '#FFFFFF' : '#F8FAFC',
-                        }}
+                        className={`flex-row items-center py-2 px-3 ${index === milestones.length - 1 ? '' : 'border-b border-slate-100'} ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}
                       >
-                        <Text style={{ width: 44, fontSize: 13, color: '#64748B', fontWeight: '600' }}>
+                        <Text className="w-11 text-[13px] text-slate-500 font-semibold">
                           #{index + 1}
                         </Text>
 
@@ -552,17 +461,7 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
                           onChangeText={(t) => handleNameChange(index, t)}
                           editable={!isReadOnly && !item.isLocked}
                           placeholder="Tên đợt..."
-                          style={{
-                            flex: 2,
-                            height: 38,
-                            borderWidth: 1,
-                            borderColor: '#E2E8F0',
-                            borderRadius: 6,
-                            paddingHorizontal: 8,
-                            fontSize: 13,
-                            color: '#0F172A',
-                            backgroundColor: item.isLocked ? '#F1F5F9' : '#FFFFFF',
-                          }}
+                          className={`flex-2 h-[38px] border border-slate-200 rounded-md px-2 text-[13px] text-slate-900 ${item.isLocked ? 'bg-slate-100' : 'bg-white'}`}
                         />
 
                         {/* % Input */}
@@ -572,19 +471,7 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
                           editable={!isReadOnly && !item.isLocked}
                           keyboardType="numeric"
                           placeholder="%"
-                          style={{
-                            width: 80,
-                            marginHorizontal: 8,
-                            height: 38,
-                            borderWidth: 1,
-                            borderColor: '#E2E8F0',
-                            borderRadius: 6,
-                            textAlign: 'center',
-                            fontSize: 13,
-                            fontWeight: '600',
-                            color: '#0F172A',
-                            backgroundColor: item.isLocked ? '#F1F5F9' : '#FFFFFF',
-                          }}
+                          className={`w-20 mx-2 h-[38px] border border-slate-200 rounded-md text-center text-[13px] font-semibold text-slate-900 ${item.isLocked ? 'bg-slate-100' : 'bg-white'}`}
                         />
 
                         {/* Amount Input */}
@@ -594,19 +481,7 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
                           editable={!isReadOnly && !item.isLocked}
                           keyboardType="numeric"
                           placeholder="Số tiền..."
-                          style={{
-                            flex: 2,
-                            height: 38,
-                            borderWidth: 1,
-                            borderColor: '#E2E8F0',
-                            borderRadius: 6,
-                            paddingHorizontal: 8,
-                            fontSize: 13,
-                            textAlign: 'right',
-                            fontWeight: '600',
-                            color: '#F38820',
-                            backgroundColor: item.isLocked ? '#F1F5F9' : '#FFFFFF',
-                          }}
+                          className={`flex-2 h-[38px] border border-slate-200 rounded-md px-2 text-[13px] text-right font-semibold text-primary ${item.isLocked ? 'bg-slate-100' : 'bg-white'}`}
                         />
 
                         {/* Due Date Picker Button */}
@@ -617,33 +492,23 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
                             }
                           }}
                           disabled={isReadOnly || item.isLocked}
-                          style={{
-                            flex: 1.5,
-                            marginLeft: 8,
-                            height: 38,
-                            borderWidth: 1,
-                            borderColor: '#E2E8F0',
-                            borderRadius: 6,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            backgroundColor: item.isLocked ? '#F1F5F9' : '#FFFFFF',
-                          }}
+                          className={`flex-[1.5] ml-2 h-[38px] border border-slate-200 rounded-md items-center justify-center ${item.isLocked ? 'bg-slate-100' : 'bg-white'}`}
                         >
-                          <Text style={{ fontSize: 12, color: item.dueDate ? '#0F172A' : '#94A3B8' }}>
+                          <Text className={`text-xs ${item.dueDate ? 'text-slate-900' : 'text-slate-400'}`}>
                             {item.dueDate ? formatDateToDDMMYYYY(item.dueDate) : 'Chọn ngày'}
                           </Text>
                         </TouchableOpacity>
 
                         {/* Delete action */}
                         {!isReadOnly && (
-                          <View style={{ width: 44, alignItems: 'center' }}>
+                          <View className="w-11 items-center">
                             {item.isLocked ? (
                               <Feather name="lock" size={16} color="#94A3B8" />
                             ) : (
                               <TouchableOpacity
                                 onPress={() => handleRemoveRow(index)}
                                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                style={{ padding: 4 }}
+                                className="p-1"
                               >
                                 <Feather name="trash-2" size={16} color="#EF4444" />
                               </TouchableOpacity>
@@ -657,44 +522,17 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
                   /* ============================================================== */
                   /* PORTRAIT MODE: THẺ CARD DỌC INFO CARDS (THUMB ZONE TOUCH)      */
                   /* ============================================================== */
-                  <View style={{ gap: 12 }}>
+                  <View className="gap-3">
                     {milestones.map((item, index) => (
                       <View
                         key={item._tempId}
-                        style={{
-                          backgroundColor: '#FFFFFF',
-                          borderWidth: 1,
-                          borderColor: '#E2E8F0',
-                          borderRadius: 14,
-                          padding: 14,
-                          shadowColor: '#000',
-                          shadowOffset: { width: 0, height: 1 },
-                          shadowOpacity: 0.05,
-                          shadowRadius: 3,
-                          elevation: 2,
-                        }}
+                        className="bg-white border border-slate-200 rounded-[14px] p-3.5 shadow-sm"
                       >
                         {/* Card Header: Stt, Tên đợt, Xóa */}
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            marginBottom: 10,
-                          }}
-                        >
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                            <View
-                              style={{
-                                width: 24,
-                                height: 24,
-                                borderRadius: 12,
-                                backgroundColor: '#FFF7ED',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                              }}
-                            >
-                              <Text style={{ fontSize: 11, fontWeight: '700', color: '#F38820' }}>
+                        <View className="flex-row items-center justify-between mb-2.5">
+                          <View className="flex-row items-center gap-1.5 flex-1">
+                            <View className="w-6 h-6 rounded-full bg-orange-50 items-center justify-center">
+                              <Text className="text-[11px] font-bold text-primary">
                                 {index + 1}
                               </Text>
                             </View>
@@ -704,45 +542,22 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
                               onChangeText={(t) => handleNameChange(index, t)}
                               editable={!isReadOnly && !item.isLocked}
                               placeholder="Tên đợt thanh toán..."
-                              style={{
-                                flex: 1,
-                                fontSize: 14,
-                                fontWeight: '700',
-                                color: '#0F172A',
-                                paddingVertical: 2,
-                              }}
+                              className="flex-1 text-sm font-bold text-slate-900 py-0.5"
                             />
                           </View>
 
                           {!isReadOnly && (
                             <View>
                               {item.isLocked ? (
-                                <View
-                                  style={{
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    gap: 4,
-                                    backgroundColor: '#F1F5F9',
-                                    paddingHorizontal: 8,
-                                    paddingVertical: 3,
-                                    borderRadius: 6,
-                                  }}
-                                >
+                                <View className="flex-row items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-md">
                                   <Feather name="lock" size={12} color="#64748B" />
-                                  <Text style={{ fontSize: 11, color: '#64748B' }}>Đã thu</Text>
+                                  <Text className="text-[11px] text-slate-500">Đã thu</Text>
                                 </View>
                               ) : (
                                 <TouchableOpacity
                                   onPress={() => handleRemoveRow(index)}
                                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                  style={{
-                                    width: 32,
-                                    height: 32,
-                                    borderRadius: 16,
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    backgroundColor: '#FEF2F2',
-                                  }}
+                                  className="w-8 h-8 rounded-full items-center justify-center bg-red-50"
                                 >
                                   <Feather name="trash-2" size={15} color="#EF4444" />
                                 </TouchableOpacity>
@@ -752,23 +567,14 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
                         </View>
 
                         {/* Card Body: Tỷ lệ % & Số tiền */}
-                        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+                        <View className="flex-row gap-2.5 mb-2.5">
                           {/* % Input */}
-                          <View style={{ width: 90 }}>
-                            <Text style={{ fontSize: 11, color: '#64748B', marginBottom: 4 }}>
+                          <View className="w-[90px]">
+                            <Text className="text-[11px] text-slate-500 mb-1">
                               Tỷ lệ (%)
                             </Text>
                             <View
-                              style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                borderWidth: 1,
-                                borderColor: '#E2E8F0',
-                                borderRadius: 8,
-                                paddingHorizontal: 8,
-                                height: 42,
-                                backgroundColor: item.isLocked ? '#F1F5F9' : '#FFFFFF',
-                              }}
+                              className={`flex-row items-center border border-slate-200 rounded-lg px-2 h-[42px] ${item.isLocked ? 'bg-slate-100' : 'bg-white'}`}
                             >
                               <TextInput
                                 value={String(item.percentage || '')}
@@ -776,34 +582,19 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
                                 editable={!isReadOnly && !item.isLocked}
                                 keyboardType="numeric"
                                 placeholder="0"
-                                style={{
-                                  flex: 1,
-                                  fontSize: 14,
-                                  fontWeight: '700',
-                                  color: '#0F172A',
-                                  textAlign: 'center',
-                                }}
+                                className="flex-1 text-sm font-bold text-slate-900 text-center"
                               />
-                              <Text style={{ fontSize: 12, color: '#94A3B8', fontWeight: '600' }}>%</Text>
+                              <Text className="text-xs text-slate-400 font-semibold">%</Text>
                             </View>
                           </View>
 
                           {/* Amount Input */}
-                          <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 11, color: '#64748B', marginBottom: 4 }}>
+                          <View className="flex-1">
+                            <Text className="text-[11px] text-slate-500 mb-1">
                               Số tiền thanh toán
                             </Text>
                             <View
-                              style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                borderWidth: 1,
-                                borderColor: '#E2E8F0',
-                                borderRadius: 8,
-                                paddingHorizontal: 10,
-                                height: 42,
-                                backgroundColor: item.isLocked ? '#F1F5F9' : '#FFFFFF',
-                              }}
+                              className={`flex-row items-center border border-slate-200 rounded-lg px-2.5 h-[42px] ${item.isLocked ? 'bg-slate-100' : 'bg-white'}`}
                             >
                               <TextInput
                                 value={formatNumberInput(item.amount)}
@@ -811,22 +602,16 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
                                 editable={!isReadOnly && !item.isLocked}
                                 keyboardType="numeric"
                                 placeholder="0"
-                                style={{
-                                  flex: 1,
-                                  fontSize: 14,
-                                  fontWeight: '700',
-                                  color: '#F38820',
-                                  textAlign: 'right',
-                                }}
+                                className="flex-1 text-sm font-bold text-primary text-right"
                               />
-                              <Text style={{ fontSize: 12, color: '#64748B', marginLeft: 6 }}>VNĐ</Text>
+                              <Text className="text-xs text-slate-500 ml-1.5">VNĐ</Text>
                             </View>
                           </View>
                         </View>
 
                         {/* Card Footer: Hạn thanh toán */}
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <Text style={{ fontSize: 11, color: '#64748B' }}>Hạn thanh toán dự kiến:</Text>
+                        <View className="flex-row items-center justify-between">
+                          <Text className="text-[11px] text-slate-500">Hạn thanh toán dự kiến:</Text>
                           <TouchableOpacity
                             onPress={() => {
                               if (!isReadOnly && !item.isLocked) {
@@ -834,17 +619,7 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
                               }
                             }}
                             disabled={isReadOnly || item.isLocked}
-                            style={{
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                              gap: 6,
-                              paddingHorizontal: 10,
-                              paddingVertical: 6,
-                              borderRadius: 6,
-                              borderWidth: 1,
-                              borderColor: '#E2E8F0',
-                              backgroundColor: item.dueDate ? '#EFF6FF' : '#F8FAFC',
-                            }}
+                            className={`flex-row items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-200 ${item.dueDate ? 'bg-blue-50' : 'bg-slate-50'}`}
                           >
                             <Feather
                               name="calendar"
@@ -852,11 +627,7 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
                               color={item.dueDate ? '#2563EB' : '#64748B'}
                             />
                             <Text
-                              style={{
-                                fontSize: 12,
-                                fontWeight: '600',
-                                color: item.dueDate ? '#1E40AF' : '#64748B',
-                              }}
+                              className={`text-xs font-semibold ${item.dueDate ? 'text-blue-800' : 'text-slate-500'}`}
                             >
                               {item.dueDate ? formatDateToDDMMYYYY(item.dueDate) : 'Chọn ngày'}
                             </Text>
@@ -871,36 +642,15 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
 
             {/* Bottom Sticky Action Bar (Thumb Zone) */}
             {!isReadOnly && (
-              <View
-                style={{
-                  paddingHorizontal: 20,
-                  paddingTop: 12,
-                  borderTopWidth: 1,
-                  borderTopColor: '#F1F5F9',
-                  backgroundColor: '#FFFFFF',
-                  flexDirection: 'row',
-                  gap: 12,
-                }}
-              >
+              <View className="px-5 pt-3 border-t border-slate-100 bg-white flex-row gap-3">
                 {/* Add Row Button (Ẩn khi hợp đồng đã hoàn tất/hủy) */}
                 {canAddMilestone(contractStatus) && (
                   <TouchableOpacity
                     onPress={handleAddRow}
-                    style={{
-                      flex: 1,
-                      height: 48,
-                      borderRadius: 10,
-                      borderWidth: 1,
-                      borderColor: '#FDCB9E',
-                      backgroundColor: '#FFF7ED',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'row',
-                      gap: 6,
-                    }}
+                    className="flex-1 h-12 rounded-xl border border-orange-200 bg-orange-50 items-center justify-center flex-row gap-1.5"
                   >
                     <Feather name="plus" size={18} color="#F38820" />
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#F38820' }}>
+                    <Text className="text-sm font-bold text-primary">
                       Thêm đợt
                     </Text>
                   </TouchableOpacity>
@@ -910,24 +660,14 @@ export const MilestoneModal: React.FC<MilestoneModalProps> = ({
                 <TouchableOpacity
                   onPress={handleSave}
                   disabled={bulkSaveMutation.isPending}
-                  style={{
-                    flex: 1.5,
-                    height: 48,
-                    borderRadius: 10,
-                    backgroundColor: '#F38820',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexDirection: 'row',
-                    gap: 8,
-                    opacity: bulkSaveMutation.isPending ? 0.7 : 1,
-                  }}
+                  className={`flex-[1.5] h-12 rounded-xl bg-primary items-center justify-center flex-row gap-2 ${bulkSaveMutation.isPending ? 'opacity-70' : ''}`}
                 >
                   {bulkSaveMutation.isPending ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
                     <>
                       <Feather name="save" size={18} color="#FFFFFF" />
-                      <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>
+                      <Text className="text-[15px] font-bold text-white">
                         Lưu kế hoạch
                       </Text>
                     </>

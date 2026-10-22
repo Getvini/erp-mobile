@@ -242,7 +242,7 @@ function FinanceFilterSheet({
           </View>
 
           <SectionList
-            style={{ flexShrink: 1 }}
+            className="shrink"
             sections={sections}
             extraData={draft}
             keyExtractor={(item, index) => `${item.id}-${index}`}

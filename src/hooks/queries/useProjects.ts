@@ -413,17 +413,22 @@ export function useUpdateWorkingFilesMutation() {
 }
 
 /**
- * Hook to fetch team members for a team
+ * Hook to fetch team members for a team (kèm workload theo tháng/năm)
  */
-export function useTeamMembersQuery(teamId?: string) {
+export function useTeamMembersQuery(
+  teamId?: string,
+  params?: { month?: number; year?: number }
+) {
+  const month = params?.month;
+  const year = params?.year;
   return useQuery({
-    queryKey: ['teams', 'members', teamId],
+    queryKey: ['teams', 'members', teamId, month ?? null, year ?? null],
     queryFn: async () => {
       if (!teamId) return [];
       const now = new Date();
-      const month = now.getMonth() + 1;
-      const year = now.getFullYear();
-      const res = await teamService.getTeamMembers(teamId, month, year);
+      const targetMonth = month ?? now.getMonth() + 1;
+      const targetYear = year ?? now.getFullYear();
+      const res = await teamService.getTeamMembers(teamId, targetMonth, targetYear);
       if (res.error) {
         throw new Error(res.error);
       }

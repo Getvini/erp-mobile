@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,12 +11,13 @@ import {
   ImageBackground,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/context/AuthContext';
 import { useLoginMutation } from '@/hooks/queries';
 import { STORAGE_REMEMBER_KEY } from '@/services/api';
 import { privateStorage } from '@/services/secureStorage';
+import { authService, BiometricStatus } from '@/services/authService';
 
 const bg = require('@/assets/images/bg.jpg');
 
@@ -29,24 +30,69 @@ export default function LoginScreen() {
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
 
+  // Biometric state (Option A)
+  const [biometricStatus, setBiometricStatus] = useState<BiometricStatus | null>(null);
+  const [isBiometricAvailable, setIsBiometricAvailable] = useState(false);
+  const [biometricUsername, setBiometricUsername] = useState('');
+  const [isBiometricLoading, setIsBiometricLoading] = useState(false);
+  const hasAutoPromptedRef = useRef(false);
+
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const loginMutation = useLoginMutation();
   const isLoading = loginMutation.isPending;
 
-  // Load saved username and remember status on mount
+  // Load saved username and remember status on mount, plus initialize biometrics
   useEffect(() => {
-    const loadRememberedUsername = async () => {
+    let isMounted = true;
+
+    const initLoginScreen = async () => {
       try {
         const savedUsername = await privateStorage.getItem(STORAGE_REMEMBER_KEY);
-        if (savedUsername) {
+        if (savedUsername && isMounted) {
           setUsername(savedUsername);
           setRememberMe(true);
         }
+
+        // Kiểm tra phần cứng & cài đặt sinh trắc học
+        const bioStatus = await authService.checkBiometrics();
+        const isBioEnabled = await authService.isBiometricEnabled();
+        const bioCreds = await authService.getBiometricCredentials();
+
+        if (isMounted) {
+          setBiometricStatus(bioStatus);
+          const available =
+            bioStatus.isSupported &&
+            isBioEnabled &&
+            !!bioCreds?.username &&
+            !!bioCreds?.password;
+
+          setIsBiometricAvailable(available);
+
+          if (bioCreds?.username) {
+            setBiometricUsername(bioCreds.username);
+            // Điền sẵn username nếu ô đang trống
+            setUsername((prev) => prev || bioCreds.username);
+          }
+
+          // Option A: Tự động bung popup quét sinh trắc học 1 lần khi vừa vào màn hình login
+          if (available && !hasAutoPromptedRef.current && !isAuthenticated) {
+            hasAutoPromptedRef.current = true;
+            setTimeout(() => {
+              if (isMounted) {
+                triggerBiometricLogin(true);
+              }
+            }, 400);
+          }
+        }
       } catch {}
     };
-    loadRememberedUsername();
-  }, []);
+
+    initLoginScreen();
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated]);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -54,6 +100,56 @@ export default function LoginScreen() {
       router.replace('/');
     }
   }, [isAuthenticated]);
+
+  const triggerBiometricLogin = async (isAuto = false) => {
+    if (isLoading || isBiometricLoading) return;
+    setError('');
+    setIsBiometricLoading(true);
+
+    try {
+      const bioCreds = await authService.getBiometricCredentials();
+      if (!bioCreds?.username || !bioCreds?.password) {
+        if (!isAuto) {
+          setError('Chưa có thông tin đăng nhập sinh trắc học được lưu.');
+        }
+        setIsBiometricLoading(false);
+        return;
+      }
+
+      const typeLabel =
+        biometricStatus?.typeLabel === 'FaceID'
+          ? 'Face ID'
+          : biometricStatus?.typeLabel === 'Fingerprint'
+          ? 'Vân tay'
+          : 'sinh trắc học';
+
+      const authSuccess = await authService.authenticateBiometrics(
+        `Xác thực ${typeLabel} để đăng nhập vào Getvini ERP`
+      );
+
+      if (!authSuccess) {
+        if (!isAuto) {
+          setError(`Xác thực ${typeLabel} không thành công hoặc đã bị hủy.`);
+        }
+        setIsBiometricLoading(false);
+        return;
+      }
+
+      await loginMutation.mutateAsync({
+        username: bioCreds.username,
+        password: bioCreds.password,
+        rememberMe: true,
+      });
+
+      router.replace('/');
+    } catch (err: any) {
+      if (!isAuto) {
+        setError(err?.message || 'Đăng nhập bằng sinh trắc học thất bại.');
+      }
+    } finally {
+      setIsBiometricLoading(false);
+    }
+  };
 
   const handleSubmit = async () => {
     setError('');
@@ -192,26 +288,83 @@ export default function LoginScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Submit Button */}
-              <TouchableOpacity
-                className={`mt-1.5 h-[50px] items-center justify-center rounded-[10px] bg-primary shadow-md ${
-                  isLoading ? 'opacity-60' : ''
-                }`}
-                onPress={handleSubmit}
-                disabled={isLoading}
-                activeOpacity={0.9}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: isLoading }}
-              >
-                {isLoading ? (
-                  <View className="flex-row items-center justify-center gap-2">
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                    <Text className="text-base font-bold text-white">Đang đăng nhập...</Text>
-                  </View>
-                ) : (
-                  <Text className="text-base font-bold text-white">Đăng nhập</Text>
+              {/* Submit Button & Biometric Quick Button (Option A) */}
+              <View className="mt-1.5 flex-row items-center gap-2.5">
+                <TouchableOpacity
+                  className={`h-[50px] flex-1 items-center justify-center rounded-[10px] bg-primary shadow-md ${
+                    isLoading || isBiometricLoading ? 'opacity-60' : ''
+                  }`}
+                  onPress={handleSubmit}
+                  disabled={isLoading || isBiometricLoading}
+                  activeOpacity={0.9}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: isLoading || isBiometricLoading }}
+                >
+                  {isLoading ? (
+                    <View className="flex-row items-center justify-center gap-2">
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                      <Text className="text-base font-bold text-white">Đang đăng nhập...</Text>
+                    </View>
+                  ) : (
+                    <Text className="text-base font-bold text-white">Đăng nhập</Text>
+                  )}
+                </TouchableOpacity>
+
+                {isBiometricAvailable && (
+                  <TouchableOpacity
+                    className={`h-[50px] w-[50px] items-center justify-center rounded-[10px] border border-primary/30 bg-orange-50 active:bg-orange-100 ${
+                      isBiometricLoading ? 'opacity-60' : ''
+                    }`}
+                    onPress={() => triggerBiometricLogin(false)}
+                    disabled={isLoading || isBiometricLoading}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Đăng nhập bằng ${
+                      biometricStatus?.typeLabel === 'FaceID' ? 'Face ID' : 'Vân tay'
+                    }`}
+                  >
+                    {isBiometricLoading ? (
+                      <ActivityIndicator size="small" color="#F38820" />
+                    ) : (
+                      <MaterialCommunityIcons
+                        name={
+                          biometricStatus?.typeLabel === 'FaceID'
+                            ? 'face-recognition'
+                            : 'fingerprint'
+                        }
+                        size={26}
+                        color="#F38820"
+                      />
+                    )}
+                  </TouchableOpacity>
                 )}
-              </TouchableOpacity>
+              </View>
+
+              {/* Quick Biometric Hint */}
+              {isBiometricAvailable && !!biometricUsername && (
+                <TouchableOpacity
+                  onPress={() => triggerBiometricLogin(false)}
+                  activeOpacity={0.7}
+                  className="mt-1 flex-row items-center justify-center gap-1.5 py-1"
+                >
+                  <MaterialCommunityIcons
+                    name={
+                      biometricStatus?.typeLabel === 'FaceID'
+                        ? 'face-recognition'
+                        : 'fingerprint'
+                    }
+                    size={14}
+                    color="#F38820"
+                  />
+                  <Text className="text-xs text-slate-500">
+                    Đăng nhập nhanh cho{' '}
+                    <Text className="font-semibold text-slate-800">{biometricUsername}</Text> bằng{' '}
+                    <Text className="font-bold text-primary">
+                      {biometricStatus?.typeLabel === 'FaceID' ? 'Face ID' : 'Vân tay'}
+                    </Text>
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* IT Support & Enterprise Trust Section */}

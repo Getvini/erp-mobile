@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { ContractDebtGroup } from '@/services/financeService';
@@ -9,144 +9,107 @@ interface DebtAgingMiniChartProps {
 }
 
 export const DebtAgingMiniChart: React.FC<DebtAgingMiniChartProps> = ({ contractGroups }) => {
-  const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
-  const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const { totalOutstanding, overdueDebt, dueSoonDebt, inTermDebt, overduePercent, dueSoonPercent, inTermPercent } =
+    useMemo(() => {
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+      const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  let overdueDebt = 0;
-  let dueSoonDebt = 0;
-  let inTermDebt = 0;
+      let overdue = 0;
+      let dueSoon = 0;
+      let inTerm = 0;
 
-  contractGroups.forEach((group) => {
-    (group.milestones || []).forEach((m) => {
-      const remaining = Number(m.remaining || 0);
-      if (remaining <= 0) return;
+      contractGroups.forEach((group) => {
+        (group.milestones || []).forEach((m) => {
+          const remaining = Number(m.remaining || 0);
+          if (remaining <= 0) return;
 
-      const due = m.dueDate ? m.dueDate.split('T')[0] : '';
-      if (!due || due < todayStr) {
-        overdueDebt += remaining;
-      } else if (due <= sevenDaysLater) {
-        dueSoonDebt += remaining;
-      } else {
-        inTermDebt += remaining;
-      }
-    });
-  });
+          const due = m.dueDate ? m.dueDate.split('T')[0] : '';
+          if (!due || due < todayStr) {
+            overdue += remaining;
+          } else if (due <= sevenDaysLater) {
+            dueSoon += remaining;
+          } else {
+            inTerm += remaining;
+          }
+        });
+      });
 
-  const totalOutstanding = overdueDebt + dueSoonDebt + inTermDebt;
-  const overduePercent = totalOutstanding > 0 ? Math.round((overdueDebt / totalOutstanding) * 100) : 0;
-  const dueSoonPercent = totalOutstanding > 0 ? Math.round((dueSoonDebt / totalOutstanding) * 100) : 0;
-  const inTermPercent = totalOutstanding > 0 ? Math.max(0, 100 - overduePercent - dueSoonPercent) : 0;
+      const total = overdue + dueSoon + inTerm;
+      const overduePct = total > 0 ? Math.round((overdue / total) * 100) : 0;
+      const dueSoonPct = total > 0 ? Math.round((dueSoon / total) * 100) : 0;
+      const inTermPct = total > 0 ? Math.max(0, 100 - overduePct - dueSoonPct) : 0;
+
+      return {
+        totalOutstanding: total,
+        overdueDebt: overdue,
+        dueSoonDebt: dueSoon,
+        inTermDebt: inTerm,
+        overduePercent: overduePct,
+        dueSoonPercent: dueSoonPct,
+        inTermPercent: inTermPct,
+      };
+    }, [contractGroups]);
 
   if (totalOutstanding <= 0) {
     return null;
   }
 
   return (
-    <View
-      style={{
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        padding: 16,
-        marginBottom: 14,
-        borderWidth: 1,
-        borderColor: '#E2E8F0',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.04,
-        shadowRadius: 3,
-        elevation: 1,
-      }}
-    >
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+    <View className="bg-white rounded-2xl p-4 mb-3.5 border border-slate-200 shadow-sm">
+      <View className="flex-row items-center justify-between mb-2.5">
+        <View className="flex-row items-center gap-1.5">
           <Feather name="clock" size={15} color="#DC2626" />
-          <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E293B' }}>
-            Phân Tích Tuổi Nợ (Aging)
+          <Text className="text-[13px] font-bold text-slate-800">
+            Theo Dõi Hạn Thanh Toán
           </Text>
         </View>
-        <Text style={{ fontSize: 12, fontWeight: '700', color: '#0F172A' }}>
+        <Text className="text-xs font-bold text-slate-900">
           Tổng: {formatVND(totalOutstanding)}
         </Text>
       </View>
 
       {/* Multi-segment Segmented Bar */}
-      <View
-        style={{
-          height: 10,
-          backgroundColor: '#F1F5F9',
-          borderRadius: 5,
-          flexDirection: 'row',
-          overflow: 'hidden',
-          marginBottom: 12,
-        }}
-      >
+      <View className="h-2.5 bg-slate-100 rounded-full flex-row overflow-hidden mb-3">
         {overdueDebt > 0 && (
-          <View style={{ width: `${overduePercent}%`, backgroundColor: '#DC2626' }} />
+          <View className="bg-red-600" style={{ width: `${overduePercent}%` }} />
         )}
         {dueSoonDebt > 0 && (
-          <View style={{ width: `${dueSoonPercent}%`, backgroundColor: '#F59E0B' }} />
+          <View className="bg-amber-500" style={{ width: `${dueSoonPercent}%` }} />
         )}
         {inTermDebt > 0 && (
-          <View style={{ width: `${inTermPercent}%`, backgroundColor: '#10B981' }} />
+          <View className="bg-emerald-500" style={{ width: `${inTermPercent}%` }} />
         )}
       </View>
 
       {/* 3 Categories Grid */}
-      <View style={{ flexDirection: 'row', gap: 8 }}>
+      <View className="flex-row gap-2">
         {/* Overdue */}
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: '#FEF2F2',
-            padding: 8,
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: '#FEE2E2',
-          }}
-        >
-          <Text style={{ fontSize: 10, fontWeight: '700', color: '#DC2626', marginBottom: 2 }}>
+        <View className="flex-1 bg-red-50 p-2 rounded-lg border border-red-100">
+          <Text className="text-[10px] font-bold text-red-600 mb-0.5">
             Quá hạn ({overduePercent}%)
           </Text>
-          <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '800', color: '#991B1B' }}>
+          <Text numberOfLines={1} className="text-xs font-extrabold text-red-800">
             {formatVND(overdueDebt)}
           </Text>
         </View>
 
         {/* Due soon */}
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: '#FFFBEB',
-            padding: 8,
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: '#FEF3C7',
-          }}
-        >
-          <Text style={{ fontSize: 10, fontWeight: '700', color: '#D97706', marginBottom: 2 }}>
+        <View className="flex-1 bg-amber-50 p-2 rounded-lg border border-amber-100">
+          <Text className="text-[10px] font-bold text-amber-600 mb-0.5">
             Sắp đến hạn ({dueSoonPercent}%)
           </Text>
-          <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '800', color: '#92400E' }}>
+          <Text numberOfLines={1} className="text-xs font-extrabold text-amber-800">
             {formatVND(dueSoonDebt)}
           </Text>
         </View>
 
         {/* In term */}
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: '#F0FDF4',
-            padding: 8,
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: '#DCFCE7',
-          }}
-        >
-          <Text style={{ fontSize: 10, fontWeight: '700', color: '#16A34A', marginBottom: 2 }}>
+        <View className="flex-1 bg-emerald-50 p-2 rounded-lg border border-emerald-100">
+          <Text className="text-[10px] font-bold text-emerald-600 mb-0.5">
             Trong hạn ({inTermPercent}%)
           </Text>
-          <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '800', color: '#166534' }}>
+          <Text numberOfLines={1} className="text-xs font-extrabold text-emerald-800">
             {formatVND(inTermDebt)}
           </Text>
         </View>
