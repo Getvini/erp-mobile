@@ -26,6 +26,8 @@ interface ChatStoreState {
   markAsRead: (roomId: string) => Promise<void>;
 }
 
+let isConnecting = false;
+
 export const useChatStore = create<ChatStoreState>((set, get) => ({
   socket: null,
   isConnected: false,
@@ -45,24 +47,35 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       return;
     }
 
-    if (existing) {
-      existing.disconnect();
+    if (isConnecting) {
+      return;
     }
+    isConnecting = true;
 
-    const token = await apiService.getAccessToken();
-    const socketUrl = apiService.getBaseOrigin();
+    try {
+      if (existing) {
+        existing.disconnect();
+      }
 
-    const socket = io(socketUrl, {
-      auth: { token },
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 10000,
-      timeout: 20000,
-    });
+      const token = await apiService.getAccessToken();
+      const cookieHeader = apiService.getCookieHeader();
+      const socketUrl = apiService.getBaseOrigin();
+
+      console.log('📡 [Socket.io] Connecting to:', socketUrl, '| Token:', token ? 'Có token' : 'Không có token');
+
+      const socket = io(socketUrl, {
+        auth: { token },
+        extraHeaders: cookieHeader ? { Cookie: cookieHeader } : {},
+        transports: ['polling', 'websocket'],
+        reconnection: true,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 10000,
+        timeout: 20000,
+      });
 
     socket.on('connect', () => {
+      console.log('✅ [Socket.io] Connected successfully! Socket ID:', socket.id);
       set({ isConnected: true, socket });
       const { activeRoomId } = get();
       if (activeRoomId) {
@@ -71,11 +84,13 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       get().fetchRooms();
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
+      console.log('🔌 [Socket.io] Disconnected:', reason);
       set({ isConnected: false });
     });
 
-    socket.on('connect_error', () => {
+    socket.on('connect_error', (error) => {
+      console.log('❌ [Socket.io] Connect error:', error?.message || error);
       set({ isConnected: false });
     });
 
@@ -207,7 +222,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     });
 
     set({ socket, currentUserId: userId });
-  },
+  } catch (err) {
+    console.log('💥 [Socket.io] Error initializing socket:', err);
+  } finally {
+    isConnecting = false;
+  }
+},
 
   disconnectSocket: () => {
     const { socket } = get();

@@ -14,6 +14,8 @@ import {
 import { privateStorage } from '@/services/secureStorage';
 import { queryKeys } from '@/services/queryKeys';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { notificationService } from '@/services/notificationService';
+import { getOrCreateDeviceId } from '@/utils/deviceHelper';
 
 /**
  * Hook to fetch current user profile and sync with useAuthStore
@@ -200,6 +202,11 @@ export function useLogoutMutation() {
 
   return useMutation({
     mutationFn: async () => {
+      try {
+        const deviceId = await getOrCreateDeviceId();
+        await notificationService.unregisterDevice(deviceId).catch(() => undefined);
+      } catch {}
+
       try {
         await authService.logout();
       } catch (err) {

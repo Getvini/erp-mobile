@@ -116,20 +116,13 @@ export default function LoginScreen() {
         return;
       }
 
-      const typeLabel =
-        biometricStatus?.typeLabel === 'FaceID'
-          ? 'Face ID'
-          : biometricStatus?.typeLabel === 'Fingerprint'
-          ? 'Vân tay'
-          : 'sinh trắc học';
-
       const authSuccess = await authService.authenticateBiometrics(
-        `Xác thực ${typeLabel} để đăng nhập vào Getvini ERP`
+        'Xác thực sinh trắc học để đăng nhập vào Getvini ERP'
       );
 
       if (!authSuccess) {
         if (!isAuto) {
-          setError(`Xác thực ${typeLabel} không thành công hoặc đã bị hủy.`);
+          setError('Xác thực sinh trắc học không thành công hoặc đã bị hủy.');
         }
         setIsBiometricLoading(false);
         return;
@@ -319,19 +312,13 @@ export default function LoginScreen() {
                     disabled={isLoading || isBiometricLoading}
                     activeOpacity={0.7}
                     accessibilityRole="button"
-                    accessibilityLabel={`Đăng nhập bằng ${
-                      biometricStatus?.typeLabel === 'FaceID' ? 'Face ID' : 'Vân tay'
-                    }`}
+                    accessibilityLabel="Đăng nhập bằng Sinh trắc học"
                   >
                     {isBiometricLoading ? (
                       <ActivityIndicator size="small" color="#F38820" />
                     ) : (
                       <MaterialCommunityIcons
-                        name={
-                          biometricStatus?.typeLabel === 'FaceID'
-                            ? 'face-recognition'
-                            : 'fingerprint'
-                        }
+                        name="fingerprint"
                         size={26}
                         color="#F38820"
                       />
@@ -348,20 +335,14 @@ export default function LoginScreen() {
                   className="mt-1 flex-row items-center justify-center gap-1.5 py-1"
                 >
                   <MaterialCommunityIcons
-                    name={
-                      biometricStatus?.typeLabel === 'FaceID'
-                        ? 'face-recognition'
-                        : 'fingerprint'
-                    }
+                    name="fingerprint"
                     size={14}
                     color="#F38820"
                   />
                   <Text className="text-xs text-slate-500">
                     Đăng nhập nhanh cho{' '}
                     <Text className="font-semibold text-slate-800">{biometricUsername}</Text> bằng{' '}
-                    <Text className="font-bold text-primary">
-                      {biometricStatus?.typeLabel === 'FaceID' ? 'Face ID' : 'Vân tay'}
-                    </Text>
+                    <Text className="font-bold text-primary">Sinh trắc học</Text>
                   </Text>
                 </TouchableOpacity>
               )}

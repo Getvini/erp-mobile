@@ -111,11 +111,7 @@ class AuthService {
       const biometricTypes = await LocalAuthentication.supportedAuthenticationTypesAsync();
 
       let typeLabel: 'FaceID' | 'Fingerprint' | 'Biometrics' | 'None' = 'None';
-      if (biometricTypes.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
-        typeLabel = 'FaceID';
-      } else if (biometricTypes.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
-        typeLabel = 'Fingerprint';
-      } else if (hasHardware && isEnrolled) {
+      if (hasHardware && isEnrolled) {
         typeLabel = 'Biometrics';
       }
 

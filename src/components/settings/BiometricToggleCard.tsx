@@ -39,14 +39,7 @@ export const BiometricToggleCard: React.FC = () => {
     try {
       const bioStatus: BiometricStatus = await authService.checkBiometrics();
       setIsSupported(bioStatus.isSupported);
-
-      if (bioStatus.typeLabel === 'FaceID') {
-        setBiometricType('Face ID');
-      } else if (bioStatus.typeLabel === 'Fingerprint') {
-        setBiometricType('Vân tay');
-      } else {
-        setBiometricType('Sinh trắc học');
-      }
+      setBiometricType('Sinh trắc học');
 
       if (bioStatus.isSupported) {
         const enabled = await authService.isBiometricEnabled();
@@ -145,17 +138,17 @@ export const BiometricToggleCard: React.FC = () => {
         <View className="flex-row items-center gap-3">
           <View className="w-[42px] h-[42px] rounded-xl bg-orange-50 items-center justify-center">
             <MaterialCommunityIcons
-              name={biometricType === 'Face ID' ? 'face-recognition' : 'fingerprint'}
+              name="fingerprint"
               size={22}
               color="#F38820"
             />
           </View>
 
           <View className="flex-1">
-            <Text className="text-sm font-bold text-slate-900">Đăng nhập {biometricType}</Text>
+            <Text className="text-sm font-bold text-slate-900">Đăng nhập Sinh trắc học</Text>
             <Text className="text-xs text-slate-500 mt-0.5 leading-4">
               {isSupported
-                ? `Sử dụng ${biometricType} để đăng nhập ứng dụng nhanh chóng & an toàn`
+                ? 'Sử dụng vân tay hoặc Face ID để đăng nhập ứng dụng nhanh chóng & an toàn'
                 : 'Thiết bị chưa cài đặt hoặc không hỗ trợ sinh trắc học'}
             </Text>
           </View>
@@ -188,13 +181,13 @@ export const BiometricToggleCard: React.FC = () => {
             <View className="items-center mb-4">
               <View className="w-12 h-12 rounded-full bg-orange-50 items-center justify-center mb-2">
                 <MaterialCommunityIcons
-                  name={biometricType === 'Face ID' ? 'face-recognition' : 'fingerprint'}
+                  name="fingerprint"
                   size={26}
                   color="#F38820"
                 />
               </View>
               <Text className="text-base font-bold text-slate-900 text-center">
-                Kích hoạt {biometricType}
+                Kích hoạt Sinh trắc học
               </Text>
               <Text className="text-xs text-slate-500 text-center mt-1">
                 Nhập mật khẩu của tài khoản{' '}

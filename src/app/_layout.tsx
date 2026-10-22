@@ -12,6 +12,7 @@ import { Colors } from '@/constants/theme';
 import { AuthProvider } from '@/context/AuthContext';
 import { useSSE } from '@/hooks/useSSE';
 import { useSSEQueryBridge } from '@/hooks/useSSEQueryBridge';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { QueryProvider } from '@/providers/QueryProvider';
 import { ScreenErrorBoundary } from '@/components/common/ErrorBoundary';
 
@@ -88,5 +89,6 @@ export default function RootLayout() {
 function SSEManager() {
   useSSE();
   useSSEQueryBridge();
+  usePushNotifications();
   return null;
 }

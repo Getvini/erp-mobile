@@ -105,6 +105,27 @@ class NotificationService {
     const failedResult = results.find((result) => !result.success);
     return failedResult ?? { success: true };
   }
+
+  /**
+   * Đăng ký device push token lên backend
+   */
+  async registerDevice(data: {
+    token: string;
+    deviceId: string;
+    platform: string;
+    deviceName?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const res = await apiService.post('/notifications/devices', data);
+    return { success: !res.error, error: res.error };
+  }
+
+  /**
+   * Hủy đăng ký device push token khi đăng xuất
+   */
+  async unregisterDevice(deviceId: string): Promise<{ success: boolean; error?: string }> {
+    const res = await apiService.delete(`/notifications/devices/${deviceId}`);
+    return { success: !res.error, error: res.error };
+  }
 }
 
 export const notificationService = new NotificationService();
