@@ -126,7 +126,7 @@ export default function ProfileScreen() {
           >
             <View className="flex-row items-center gap-2.5">
               <Feather name="settings" size={16} color={BrandColors.primary} />
-              <Text className="text-sm font-medium text-slate-700">Cài đặt hệ thống & QC</Text>
+              <Text className="text-sm font-medium text-slate-700">Cài đặt hệ thống</Text>
             </View>
             <Feather name="chevron-right" size={16} color="#CBD5E1" />
           </TouchableOpacity>

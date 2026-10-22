@@ -24,9 +24,10 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { paymentRequestService } from '@/services/paymentRequestService';
 import { DatePickerModal } from '@/components/common/DatePickerModal';
 import {
-  InvoiceUploadPicker,
-  UploadedFileItem,
-} from '@/components/payment-requests/InvoiceUploadPicker';
+  ProductionDocumentPicker,
+  ProductionDocItem,
+} from '@/components/payment-requests/ProductionDocumentPicker';
+import { PaymentRequestDocModal } from '@/components/payment-requests/PaymentRequestDocModal';
 import { ServiceBudgetBox } from '@/components/payment-requests/ServiceBudgetBox';
 import {
   formatNumberInput,
@@ -34,6 +35,11 @@ import {
   formatDateToDDMMYYYY,
   formatDateToYYYYMMDD,
 } from '@/utils/formatters';
+import {
+  isProjectActive,
+  isTaskBudgetService,
+  validatePaymentRequestInput,
+} from '@/utils/paymentRequestHelper';
 
 export default function CreatePaymentRequestScreen() {
   const router = useRouter();
@@ -60,13 +66,39 @@ export default function CreatePaymentRequestScreen() {
   });
   const [showSettlementDatePicker, setShowSettlementDatePicker] = useState(false);
   const [overBudgetReason, setOverBudgetReason] = useState('');
-  const [beneficiaryName, setBeneficiaryName] = useState('');
-  const [beneficiaryAccount, setBeneficiaryAccount] = useState('');
-  const [beneficiaryBank, setBeneficiaryBank] = useState('');
-  const [files, setFiles] = useState<UploadedFileItem[]>([]);
+  const [isUrgent, setIsUrgent] = useState(false);
+  const [files, setFiles] = useState<ProductionDocItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [showDocModal, setShowDocModal] = useState(false);
 
-  const { data: projects = [], isLoading: loadingProjects } = useProjectsQuery();
+  const handleApplyDocFromModal = (
+    docItem: ProductionDocItem,
+    syncData?: { amount: number; reason: string; dueDate: string }
+  ) => {
+    // Đính kèm Giấy ĐNTT mẫu (thay thế mẫu cũ nếu có)
+    setFiles((prev) => {
+      const filtered = prev.filter((f) => !f.isGeneratedDoc);
+      return [...filtered, docItem];
+    });
+
+    // Đồng bộ ngược các trường ra form chính
+    if (syncData) {
+      if (syncData.amount > 0) {
+        setAmountRaw(formatNumberInput(String(syncData.amount)));
+      }
+      if (syncData.reason && syncData.reason.trim()) {
+        if (!title.trim() || title === reason) {
+          setTitle(syncData.reason.trim());
+        }
+        setReason(syncData.reason.trim());
+      }
+      if (syncData.dueDate) {
+        setDueDate(syncData.dueDate);
+      }
+    }
+  };
+
+  const { data: rawProjects = [], isLoading: loadingProjects } = useProjectsQuery();
   const { data: projectTasks = [], isLoading: loadingTasks } = useTasksByProjectQuery(projectId);
   const { data: userTasksData, isLoading: loadingOtherTasks } = useTasksQuery({
     assigneeId: currentUserId,
@@ -78,10 +110,23 @@ export default function CreatePaymentRequestScreen() {
   });
   const createMutation = useCreatePaymentRequestMutation();
 
+  // 1. Chỉ lấy các dự án đang hoạt động (ẩn COMPLETED, CANCELLED, ON_HOLD)
+  const activeProjects = useMemo(() => {
+    return (rawProjects || []).filter(isProjectActive);
+  }, [rawProjects]);
+
+  // Lấy dự án hiện tại đang chọn
+  const selectedProject = useMemo(() => {
+    return activeProjects.find((p) => p.id === projectId);
+  }, [activeProjects, projectId]);
+
+  // 2. Lọc công việc trong dự án: Phải được giao cho user VÀ thuộc dịch vụ quản lý ngân sách
   const myProjectTasks = useMemo(() => {
-    return projectTasks.filter(
-      (t: any) => t.assigneeId === currentUserId || t.assignee?.id === currentUserId
-    );
+    return (projectTasks || []).filter((t: any) => {
+      const isAssigned = t.assigneeId === currentUserId || t.assignee?.id === currentUserId;
+      if (!isAssigned) return false;
+      return isTaskBudgetService(t);
+    });
   }, [projectTasks, currentUserId]);
 
   const nonProjectTasks = useMemo(() => {
@@ -100,44 +145,30 @@ export default function CreatePaymentRequestScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!title.trim()) {
-      Alert.alert('Thiếu thông tin', 'Vui lòng nhập nội dung đề xuất thanh toán.');
-      return;
-    }
+    const parsedAmount = parseNumberInput(amountRaw) || 0;
 
-    const parsedAmount = parseNumberInput(amountRaw);
-    if (!parsedAmount || parsedAmount <= 0) {
-      Alert.alert('Số tiền không hợp lệ', 'Vui lòng nhập số tiền chi lớn hơn 0 VNĐ.');
-      return;
-    }
+    // Kiểm tra vượt ngân sách cấp dịch vụ
+    const remainingTotal = Number(budgetInfo?.remainingTotalServiceBudget) || 0;
+    const isOverBudget = Boolean(
+      budgetInfo?.hasTotalServiceBudget &&
+      (remainingTotal <= 0 || parsedAmount > remainingTotal)
+    );
 
-    if (type === 'PROJECT') {
-      if (!projectId) {
-        Alert.alert('Chưa chọn dự án', 'Đề xuất theo dự án bắt buộc phải chọn dự án liên quan.');
-        return;
-      }
-      if (!taskId) {
-        Alert.alert('Chưa chọn công việc', 'Vui lòng chọn công việc của bạn trong dự án.');
-        return;
-      }
-    }
-    // Ghi chú: Khi type === 'OTHER_WORK', công việc là TÙY CHỌN, KHÔNG BẮT BUỘC!
+    // Validate dữ liệu tập trung qua helper
+    const validation = validatePaymentRequestInput({
+      type,
+      title: title.trim(),
+      amount: parsedAmount,
+      dueDate,
+      projectId: (type === 'PROJECT' || Boolean(projectId)) ? projectId : undefined,
+      taskId: taskId || undefined,
+      isOverBudget,
+      overBudgetReason,
+      settlementDueDate: type === 'ADVANCE' ? settlementDueDate : undefined,
+    });
 
-    if (type === 'ADVANCE') {
-      if (!settlementDueDate) {
-        Alert.alert('Thiếu thông tin', 'Đề xuất tạm ứng bắt buộc phải chọn hạn hoàn ứng / quyết toán.');
-        return;
-      }
-    }
-
-    if (!dueDate) {
-      Alert.alert('Thiếu thông tin', 'Vui lòng chọn thời hạn thanh toán.');
-      return;
-    }
-
-    // Với đề xuất thông thường bắt buộc hóa đơn, với Tạm ứng cho phép nộp chứng từ hoàn ứng sau
-    if (type !== 'ADVANCE' && files.length === 0) {
-      Alert.alert('Thiếu hóa đơn', 'Vui lòng đính kèm ít nhất một file hóa đơn hoặc chứng từ.');
+    if (!validation.isValid) {
+      Alert.alert('Chưa hợp lệ', validation.error || 'Vui lòng kiểm tra lại thông tin.');
       return;
     }
 
@@ -148,7 +179,21 @@ export default function CreatePaymentRequestScreen() {
       const invoiceImages: any[] = [];
       const invoicePdfs: any[] = [];
 
+      // Upload từng file chứng từ lên Cloudinary (nếu có đính kèm)
       for (const file of files) {
+        if (file.isGeneratedDoc) {
+          // File mẫu chuẩn Word: Backend sẽ tự sinh file docx từ template và lưu vào hồ sơ
+          invoicePdfs.push({
+            name: file.name,
+            standardName: file.standardName,
+            docType: 'PAYMENT_REQUEST_DOC',
+            fileType: 'DOC',
+            isGeneratedDoc: true,
+            docData: file.docData,
+          });
+          continue;
+        }
+
         const formData = new FormData();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (formData as any).append('file', {
@@ -156,13 +201,22 @@ export default function CreatePaymentRequestScreen() {
           name: file.name,
           type: file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
         });
+
         const uploadRes = await paymentRequestService.uploadPaymentRequestInvoiceFile(formData);
         if (uploadRes.data) {
           const isPdf = file.type?.includes('pdf') || file.name?.toLowerCase().endsWith('.pdf');
+          const fileMeta = {
+            ...uploadRes.data,
+            name: file.name,
+            standardName: file.standardName,
+            docType: file.docType,
+            fileType: isPdf ? 'PDF' : 'IMAGE',
+          };
+
           if (isPdf) {
-            invoicePdfs.push({ ...uploadRes.data, fileType: 'PDF' });
+            invoicePdfs.push(fileMeta);
           } else {
-            invoiceImages.push({ ...uploadRes.data, fileType: 'IMAGE' });
+            invoiceImages.push(fileMeta);
           }
         }
       }
@@ -178,12 +232,10 @@ export default function CreatePaymentRequestScreen() {
         overBudgetReason: overBudgetReason.trim() || undefined,
         projectId: (type === 'PROJECT' || Boolean(projectId)) ? projectId : undefined,
         taskId: taskId || undefined,
-        beneficiaryName: beneficiaryName.trim() || undefined,
-        beneficiaryAccount: beneficiaryAccount.trim() || undefined,
-        beneficiaryBank: beneficiaryBank.trim() || undefined,
+        isUrgent,
         invoiceImages,
         invoicePdfs,
-        invoiceFiles: files.map((f) => ({ url: f.uri, name: f.name })),
+        invoiceFiles: files.map((f) => ({ url: f.uri, name: f.name, docType: f.docType })),
       });
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -242,7 +294,7 @@ export default function CreatePaymentRequestScreen() {
       {/* Form Content */}
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 110 }}
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled"
       >
@@ -341,10 +393,14 @@ export default function CreatePaymentRequestScreen() {
               </Text>
               {loadingProjects ? (
                 <ActivityIndicator size="small" color="#F38820" />
+              ) : activeProjects.length === 0 ? (
+                <Text style={{ fontSize: 12, color: '#EA580C', fontStyle: 'italic' }}>
+                  Không có dự án đang hoạt động
+                </Text>
               ) : (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
                   <View style={{ flexDirection: 'row', gap: 8 }}>
-                    {projects.map((p) => {
+                    {activeProjects.map((p) => {
                       const active = projectId === p.id;
                       return (
                         <TouchableOpacity
@@ -388,7 +444,7 @@ export default function CreatePaymentRequestScreen() {
                   <ActivityIndicator size="small" color="#F38820" />
                 ) : myProjectTasks.length === 0 ? (
                   <Text style={{ fontSize: 12, color: '#EA580C', fontStyle: 'italic' }}>
-                    Bạn chưa được giao công việc nào trong dự án này
+                    Bạn chưa có công việc có ngân sách trong dự án này
                   </Text>
                 ) : (
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
@@ -430,7 +486,77 @@ export default function CreatePaymentRequestScreen() {
           </>
         )}
 
-        {/* 2c. Chọn dự án & thời hạn hoàn ứng nếu type === 'ADVANCE' */}
+        {/* 2b. Chọn công việc ngoài dự án nếu type === 'OTHER_WORK' */}
+        {type === 'OTHER_WORK' && (
+          <View style={{ marginBottom: 14 }}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 6 }}>
+              Công Việc Ngoài Dự Án <Text style={{ fontSize: 11, fontWeight: 'normal', color: '#94A3B8' }}>(tùy chọn)</Text>
+            </Text>
+            {loadingOtherTasks ? (
+              <ActivityIndicator size="small" color="#F38820" />
+            ) : nonProjectTasks.length === 0 ? (
+              <Text style={{ fontSize: 12, color: '#64748B', fontStyle: 'italic' }}>
+                Bạn không có công việc ngoài dự án nào (có thể để trống)
+              </Text>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity
+                    onPress={() => setTaskId('')}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: !taskId ? '#F38820' : '#E2E8F0',
+                      backgroundColor: !taskId ? '#FFF7ED' : '#FFFFFF',
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: !taskId ? '700' : '500',
+                        color: !taskId ? '#F38820' : '#64748B',
+                      }}
+                    >
+                      -- Không gắn công việc --
+                    </Text>
+                  </TouchableOpacity>
+
+                  {nonProjectTasks.map((t: any) => {
+                    const active = taskId === t.id;
+                    return (
+                      <TouchableOpacity
+                        key={t.id}
+                        onPress={() => setTaskId(t.id)}
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 8,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: active ? '#F38820' : '#E2E8F0',
+                          backgroundColor: active ? '#FFF7ED' : '#FFFFFF',
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            fontWeight: active ? '700' : '500',
+                            color: active ? '#F38820' : '#334155',
+                          }}
+                        >
+                          {t.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        )}
+
+        {/* 2c. Chọn dự án, CÔNG VIỆC (Vá bug) & thời hạn hoàn ứng nếu type === 'ADVANCE' */}
         {type === 'ADVANCE' && (
           <View style={{ marginBottom: 14, gap: 12 }}>
             <View>
@@ -467,7 +593,7 @@ export default function CreatePaymentRequestScreen() {
                       </Text>
                     </TouchableOpacity>
 
-                    {projects.map((p) => {
+                    {activeProjects.map((p) => {
                       const active = projectId === p.id;
                       return (
                         <TouchableOpacity
@@ -501,6 +627,56 @@ export default function CreatePaymentRequestScreen() {
                 </ScrollView>
               )}
             </View>
+
+            {/* SỬA BUG: Khi Tạm ứng có chọn Dự án, bắt buộc phải chọn Công việc của bạn trong dự án */}
+            {projectId ? (
+              <View>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 6 }}>
+                  Công Việc Của Bạn Trong Dự Án <Text style={{ color: '#EF4444' }}>*</Text>
+                </Text>
+                {loadingTasks ? (
+                  <ActivityIndicator size="small" color="#9333EA" />
+                ) : myProjectTasks.length === 0 ? (
+                  <Text style={{ fontSize: 12, color: '#EA580C', fontStyle: 'italic' }}>
+                    Bạn chưa có công việc có ngân sách trong dự án này
+                  </Text>
+                ) : (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {myProjectTasks.map((t: any) => {
+                        const active = taskId === t.id;
+                        return (
+                          <TouchableOpacity
+                            key={t.id}
+                            onPress={() => setTaskId(t.id)}
+                            style={{
+                              paddingHorizontal: 12,
+                              paddingVertical: 8,
+                              borderRadius: 8,
+                              borderWidth: 1,
+                              borderColor: active ? '#9333EA' : '#E2E8F0',
+                              backgroundColor: active ? '#FAF5FF' : '#FFFFFF',
+                              maxWidth: 240,
+                            }}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              style={{
+                                fontSize: 13,
+                                fontWeight: active ? '700' : '500',
+                                color: active ? '#9333EA' : '#334155',
+                              }}
+                            >
+                              {t.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                )}
+              </View>
+            ) : null}
 
             {/* Hạn hoàn ứng / quyết toán */}
             <View>
@@ -549,7 +725,7 @@ export default function CreatePaymentRequestScreen() {
           <TextInput
             value={title}
             onChangeText={setTitle}
-            placeholder="Mô tả nội dung yêu cầu thanh toán..."
+            placeholder={type === 'ADVANCE' ? 'Mô tả mục đích tạm ứng kinh phí sản xuất, các khoản dự kiến...' : 'Mô tả nội dung chi phí sản xuất, họ tên đối tác/talent, công việc...'}
             placeholderTextColor="#94A3B8"
             style={{
               height: 44,
@@ -567,7 +743,7 @@ export default function CreatePaymentRequestScreen() {
         {/* 4. Thời hạn thanh toán */}
         <View style={{ marginBottom: 14 }}>
           <Text style={{ fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 6 }}>
-            Thời Hạn Thanh Toán <Text style={{ color: '#EF4444' }}>*</Text>
+            Thời Hạn Thanh Toán {type === 'ADVANCE' ? '(Nhận tiền)' : ''} <Text style={{ color: '#EF4444' }}>*</Text>
           </Text>
           <TouchableOpacity
             onPress={() => setShowDatePicker(true)}
@@ -601,10 +777,10 @@ export default function CreatePaymentRequestScreen() {
           onClose={() => setShowDatePicker(false)}
         />
 
-        {/* 4. Số tiền */}
+        {/* 5. Số tiền */}
         <View style={{ marginBottom: 14 }}>
           <Text style={{ fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 6 }}>
-            Số Tiền Yêu Cầu Chi (VNĐ) <Text style={{ color: '#EF4444' }}>*</Text>
+            Số Tiền Yêu Cầu Chi {type === 'ADVANCE' ? 'Tạm Ứng' : ''} (VNĐ) <Text style={{ color: '#EF4444' }}>*</Text>
           </Text>
           <View
             style={{
@@ -635,6 +811,49 @@ export default function CreatePaymentRequestScreen() {
           </View>
         </View>
 
+        {/* 6. Cờ Thanh toán gấp (Studio yêu cầu thanh toán ngay) */}
+        <TouchableOpacity
+          onPress={() => setIsUrgent(!isUrgent)}
+          activeOpacity={0.8}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: isUrgent ? '#F59E0B' : '#E2E8F0',
+            backgroundColor: isUrgent ? '#FFFBEB' : '#FFFFFF',
+            padding: 12,
+            marginBottom: 14,
+          }}
+        >
+          <View
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: 4,
+              borderWidth: 1.5,
+              borderColor: isUrgent ? '#D97706' : '#94A3B8',
+              backgroundColor: isUrgent ? '#D97706' : 'transparent',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {isUrgent && <Feather name="check" size={14} color="#FFFFFF" />}
+          </View>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Feather name="zap" size={14} color="#D97706" />
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#92400E' }}>
+                Studio yêu cầu thanh toán gấp (sau buổi quay)
+              </Text>
+            </View>
+            <Text style={{ fontSize: 11, color: '#B45309', marginTop: 2 }}>
+              Áp dụng khi có thỏa thuận Studio cần trả ngay; hệ thống ưu tiên duyệt & chi tiền sớm.
+            </Text>
+          </View>
+        </TouchableOpacity>
+
         {/* Hộp Đối Soát Ngân Sách 2 Tầng (ServiceBudgetBox) khi có dự án */}
         {Boolean(projectId) && (
           <View style={{ marginBottom: 14 }}>
@@ -649,7 +868,7 @@ export default function CreatePaymentRequestScreen() {
           </View>
         )}
 
-        {/* 5. Lý do chi tiết */}
+        {/* 7. Lý do chi tiết */}
         <View style={{ marginBottom: 14 }}>
           <Text style={{ fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 6 }}>
             Lý Do Chi &amp; Nội Dung Diễn Giải
@@ -676,86 +895,28 @@ export default function CreatePaymentRequestScreen() {
           />
         </View>
 
-        {/* 6. Thông tin thụ hưởng */}
-        <View
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 10,
-            padding: 14,
-            borderWidth: 1,
-            borderColor: '#E2E8F0',
-            marginBottom: 14,
-          }}
-        >
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E293B', marginBottom: 10 }}>
-            Thông Tin Tài Khoản Thụ Hưởng
-          </Text>
-
-          {/* Tên người thụ hưởng */}
-          <View style={{ marginBottom: 10 }}>
-            <Text style={{ fontSize: 12, color: '#64748B', marginBottom: 4 }}>Người / Đơn vị thụ hưởng</Text>
-            <TextInput
-              value={beneficiaryName}
-              onChangeText={setBeneficiaryName}
-              placeholder="Ví dụ: NGUYEN VAN A hoặc CÔNG TY TNHH..."
-              placeholderTextColor="#94A3B8"
-              style={{
-                height: 40,
-                borderWidth: 1,
-                borderColor: '#E2E8F0',
-                borderRadius: 6,
-                paddingHorizontal: 10,
-                fontSize: 13,
-                color: '#0F172A',
-              }}
-            />
-          </View>
-
-          {/* Số tài khoản */}
-          <View style={{ marginBottom: 10 }}>
-            <Text style={{ fontSize: 12, color: '#64748B', marginBottom: 4 }}>Số tài khoản ngân hàng</Text>
-            <TextInput
-              value={beneficiaryAccount}
-              onChangeText={setBeneficiaryAccount}
-              keyboardType="numeric"
-              placeholder="Ví dụ: 19034567890012"
-              placeholderTextColor="#94A3B8"
-              style={{
-                height: 40,
-                borderWidth: 1,
-                borderColor: '#E2E8F0',
-                borderRadius: 6,
-                paddingHorizontal: 10,
-                fontSize: 13,
-                color: '#0F172A',
-              }}
-            />
-          </View>
-
-          {/* Ngân hàng */}
-          <View>
-            <Text style={{ fontSize: 12, color: '#64748B', marginBottom: 4 }}>Ngân hàng &amp; Chi nhánh</Text>
-            <TextInput
-              value={beneficiaryBank}
-              onChangeText={setBeneficiaryBank}
-              placeholder="Ví dụ: Techcombank - CN Tân Bình"
-              placeholderTextColor="#94A3B8"
-              style={{
-                height: 40,
-                borderWidth: 1,
-                borderColor: '#E2E8F0',
-                borderRadius: 6,
-                paddingHorizontal: 10,
-                fontSize: 13,
-                color: '#0F172A',
-              }}
-            />
-          </View>
-        </View>
-
-        {/* 7. Hóa đơn / Chứng từ đính kèm (Nén ảnh tự động < 1MB) */}
-        <InvoiceUploadPicker files={files} onChange={setFiles} />
+        {/* 8. Bộ Hồ Sơ Chứng Từ Sản Xuất (5 danh mục chuẩn Getvini - Tùy chọn) */}
+        <ProductionDocumentPicker
+          files={files}
+          onChange={setFiles}
+          projectName={selectedProject?.name}
+          requestType={type}
+          onOpenTemplateModal={() => setShowDocModal(true)}
+        />
       </ScrollView>
+
+      {/* Modal Lập Giấy ĐNTT từ mẫu chuẩn Word Getvini */}
+      <PaymentRequestDocModal
+        visible={showDocModal}
+        onClose={() => setShowDocModal(false)}
+        onApplyDoc={handleApplyDocFromModal}
+        currentUser={currentUser}
+        initialAmount={parseNumberInput(amountRaw) || 0}
+        initialReason={reason || title}
+        initialDueDate={dueDate}
+        projectName={selectedProject?.name}
+        requestType={type}
+      />
 
       {/* Sticky Bottom Action Bar (Thumb Zone) */}
       <View
@@ -798,7 +959,7 @@ export default function CreatePaymentRequestScreen() {
             <>
               <Feather name="send" size={18} color="#FFFFFF" />
               <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>
-                Tạo Đề Xuất Thanh Toán
+                {type === 'ADVANCE' ? 'Tạo Phiếu Tạm Ứng' : 'Tạo Đề Xuất Thanh Toán'}
               </Text>
             </>
           )}

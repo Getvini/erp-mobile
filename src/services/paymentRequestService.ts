@@ -205,15 +205,25 @@ export interface PaymentTransactionRecord {
 }
 
 export interface ServiceBudgetInfo {
-  itemBudget: number | null;
-  itemPaid: number;
-  itemRemaining: number | null;
-  totalServiceBudget: number | null;
-  totalServicePaid: number;
-  totalServiceRemaining: number | null;
+  hasService?: boolean;
+  serviceId?: string | null;
   serviceName?: string;
-  isOverItemBudget: boolean;
-  isOverTotalBudget: boolean;
+  itemContractServiceId?: string | null;
+  itemServiceName?: string;
+  hasItemBudget?: boolean;
+  itemBudget?: number | null;
+  itemSpent?: number;
+  remainingItemBudget?: number | null;
+  hasTotalServiceBudget?: boolean;
+  totalServiceBudget?: number | null;
+  totalServiceSpent?: number;
+  remainingTotalServiceBudget?: number | null;
+  itemPaid?: number;
+  itemRemaining?: number | null;
+  totalServicePaid?: number;
+  totalServiceRemaining?: number | null;
+  isOverItemBudget?: boolean;
+  isOverTotalBudget?: boolean;
 }
 
 export interface PaymentRequest {
@@ -292,6 +302,7 @@ export interface CreatePaymentRequestPayload {
   taskId?: string;
   contractId?: string;
   vendorId?: string;
+  isUrgent?: boolean;
   beneficiaryName?: string;
   beneficiaryAccount?: string;
   beneficiaryBank?: string;
