@@ -45,3 +45,9 @@ example
 *.md
 
 /test
+
+# Firebase configuration (NEVER commit to git)
+google-services.json
+GoogleService-Info.plist
+*-firebase-adminsdk-*.json
+erp-getvini-firebase-adminsdk-fbsvc-8553dfa246.json
