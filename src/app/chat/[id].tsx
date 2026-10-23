@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Platform,
   Image,
   Alert,
+  Keyboard,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,16 +18,74 @@ import { Feather, MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import * as DocumentPicker from 'expo-document-picker';
 import { useChatStore } from '@/stores/useChatStore';
 import { useAuth } from '@/context/AuthContext';
-import { ChatMessage, chatService } from '@/services/chatService';
+import { ChatAttachment, ChatMessage, chatService } from '@/services/chatService';
+import { uploadToCloudinary } from '@/services/cloudinaryService';
 import { BrandColors } from '@/constants/colors';
 import { ChatMessageItem } from '@/components/chat/ChatMessageItem';
 import { ChatAddMembersModal } from '@/components/chat/ChatAddMembersModal';
+import { PinnedMessageBanner } from '@/components/chat/PinnedMessageBanner';
+import { PinnedMessagesModal } from '@/components/chat/PinnedMessagesModal';
+import { VoiceRecorderBar } from '@/components/chat/VoiceRecorderBar';
+import { ChatForwardModal } from '@/components/chat/ChatForwardModal';
+import { ChatEmojiPicker } from '@/components/chat/ChatEmojiPicker';
+import { RoomAvatar } from '@/components/chat/RoomAvatar';
+import { ChatComposerInput } from '@/components/chat/ChatComposerInput';
 import { useTasksQuery } from '@/hooks/queries/useTasks';
 import { useUsersQuery } from '@/hooks/queries/useUsers';
 import { UserItem } from '@/services/userService';
-import { buildTaskToken, buildUserToken, buildAllToken } from '@/utils/chatTokenHelper';
+import {
+  ComposerTokenRange,
+  deserializeComposerContent,
+  insertComposerToken,
+  reconcileComposerRanges,
+  serializeComposerContent,
+} from '@/utils/chatComposerTokens';
+import { buildRemoteChatAttachment } from '@/utils/chatAttachments';
+import {
+  validateChatFile,
+  MAX_CHAT_FILE_SIZE_MB,
+  CHAT_ALLOWED_MIME_TYPES,
+  formatBytes,
+} from '@/utils/chatFileValidation';
+
+interface AttachedMediaItem {
+  id: string;
+  uri: string;
+  name: string;
+  type: string;
+  size?: number;
+  isImage: boolean;
+  uploadState: 'pending' | 'uploading' | 'uploaded' | 'error';
+  uploadProgress?: number;
+  remoteAttachment?: ChatAttachment;
+  error?: string;
+}
+
+const createAttachmentId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+const getDocFileColor = (fileName?: string) => {
+  const ext = (fileName || '').split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'pdf':
+      return { icon: 'file-text' as const, color: '#EF4444', bg: '#FEE2E2', label: 'PDF' };
+    case 'xls':
+    case 'xlsx':
+    case 'csv':
+      return { icon: 'grid' as const, color: '#10B981', bg: '#D1FAE5', label: 'EXCEL' };
+    case 'doc':
+    case 'docx':
+      return { icon: 'file-text' as const, color: '#2563EB', bg: '#DBEAFE', label: 'WORD' };
+    case 'zip':
+    case 'rar':
+    case '7z':
+      return { icon: 'archive' as const, color: '#F59E0B', bg: '#FEF3C7', label: 'NÉN' };
+    default:
+      return { icon: 'file' as const, color: '#64748B', bg: '#F1F5F9', label: (ext || 'FILE').toUpperCase() };
+  }
+};
 
 export default function ChatDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -36,13 +95,50 @@ export default function ChatDetailScreen() {
   const flatListRef = useRef<FlatList>(null);
 
   const [inputContent, setInputContent] = useState('');
-  const [attachedImages, setAttachedImages] = useState<{ uri: string; name?: string; type?: string }[]>([]);
+  const [inputTokenRanges, setInputTokenRanges] = useState<ComposerTokenRange[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<AttachedMediaItem[]>([]);
   const [showMembersModal, setShowMembersModal] = useState(false);
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [showPinnedModal, setShowPinnedModal] = useState(false);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const typingTimeoutRef = useRef<any>(null);
+
+  // Lắng nghe trạng thái bàn phím để căn chỉnh offset và tự cuộn tin nhắn mượt mà
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, () => {
+      setKeyboardVisible(true);
+      setShowEmojiPicker(false);
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardVisible(false);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  // Tự động cuộn xuống khi có tệp đính kèm mới để không bị che tin nhắn cuối
+  useEffect(() => {
+    if (attachedFiles.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [attachedFiles.length]);
 
   const rooms = useChatStore((s) => s.rooms);
   const messagesMap = useChatStore((s) => s.messages);
+  const pinnedMessagesMap = useChatStore((s) => s.pinnedMessages);
   const loadingMessages = useChatStore((s) => s.loadingMessages);
   const typingUsers = useChatStore((s) => s.typingUsers);
   const isConnected = useChatStore((s) => s.isConnected);
@@ -51,6 +147,35 @@ export default function ChatDetailScreen() {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const sendTyping = useChatStore((s) => s.sendTyping);
   const fetchRooms = useChatStore((s) => s.fetchRooms);
+  const fetchPinnedMessages = useChatStore((s) => s.fetchPinnedMessages);
+  const replyingToMessage = useChatStore((s) => s.replyingToMessage);
+  const editingMessage = useChatStore((s) => s.editingMessage);
+  const setReplyingToMessage = useChatStore((s) => s.setReplyingToMessage);
+  const setEditingMessage = useChatStore((s) => s.setEditingMessage);
+  const recallMessage = useChatStore((s) => s.recallMessage);
+  const editMessage = useChatStore((s) => s.editMessage);
+  const reactToMessage = useChatStore((s) => s.reactToMessage);
+  const pinMessage = useChatStore((s) => s.pinMessage);
+
+  // Kích hoạt phòng chat và lấy tin nhắn đã ghim
+  useEffect(() => {
+    if (id) {
+      selectRoom(id);
+      fetchPinnedMessages(id);
+    }
+    return () => {
+      selectRoom(null);
+    };
+  }, [id, selectRoom, fetchPinnedMessages]);
+
+  // Điền nội dung tin nhắn khi bật chế độ chỉnh sửa
+  useEffect(() => {
+    if (editingMessage) {
+      const draft = deserializeComposerContent(editingMessage.content || '');
+      setInputContent(draft.text);
+      setInputTokenRanges(draft.ranges);
+    }
+  }, [editingMessage]);
 
   // Queries cho mention & task tag
   const { data: tasksResp } = useTasksQuery({ limit: 100 });
@@ -158,21 +283,46 @@ export default function ChatDetailScreen() {
 
   const handleSelectTaskToken = (task: any) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    const token = buildTaskToken(task.id, task.name || task.code || 'Task');
-    const replaced = inputContent.replace(/#([a-zA-Z0-9_\-\s]*)$/, `${token} `);
-    setInputContent(replaced);
+    const match = inputContent.match(/#([a-zA-Z0-9_\-\s]*)$/);
+    if (!match || match.index === undefined) return;
+    const draft = insertComposerToken(
+      inputContent,
+      inputTokenRanges,
+      match.index,
+      inputContent.length,
+      {
+        type: 'task',
+        id: task.id,
+        display: task.code || task.nickname || task.name || 'TASK',
+      }
+    );
+    setInputContent(draft.text);
+    setInputTokenRanges(draft.ranges);
   };
 
   const handleSelectUserToken = (targetUser: any) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    const token = targetUser.isAll
-      ? buildAllToken()
-      : buildUserToken(targetUser.id, targetUser.fullName || targetUser.username || 'User');
-    const replaced = inputContent.replace(/@([a-zA-Z0-9_\-\s]*)$/, `${token} `);
-    setInputContent(replaced);
+    const match = inputContent.match(/@([a-zA-Z0-9_\-\s]*)$/);
+    if (!match || match.index === undefined) return;
+    const draft = insertComposerToken(
+      inputContent,
+      inputTokenRanges,
+      match.index,
+      inputContent.length,
+      {
+        type: targetUser.isAll ? 'all' : 'user',
+        id: targetUser.isAll ? 'all' : targetUser.id,
+        display: targetUser.isAll
+          ? 'Tất cả mọi người'
+          : targetUser.fullName || targetUser.username || 'Thành viên',
+      }
+    );
+    setInputContent(draft.text);
+    setInputTokenRanges(draft.ranges);
   };
 
   const handleInputChange = (text: string) => {
+    setInputTokenRanges((ranges) => reconcileComposerRanges(inputContent, text, ranges));
     setInputContent(text);
     if (!id) return;
     sendTyping(id, true);
@@ -198,6 +348,11 @@ export default function ChatDetailScreen() {
 
   const handleCamera = async () => {
     try {
+      if (attachedFiles.length >= 10) {
+        Alert.alert('Giới hạn', 'Chỉ được gửi tối đa 10 tệp cùng một lúc.');
+        return;
+      }
+
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
         Alert.alert('Quyền truy cập', 'Vui lòng cấp quyền mở Camera để chụp ảnh hiện trường.');
@@ -211,14 +366,33 @@ export default function ChatDetailScreen() {
       });
 
       if (!res.canceled && res.assets && res.assets[0]) {
-        const compressedUri = await processImage(res.assets[0].uri);
+        const asset = res.assets[0];
+        const validation = validateChatFile(
+          {
+            name: asset.fileName || 'Ảnh_Hiện_Trường.jpg',
+            size: asset.fileSize,
+            mimeType: asset.mimeType || 'image/jpeg',
+          },
+          { requireImage: true }
+        );
+
+        if (!validation.valid) {
+          Alert.alert('Tệp không hợp lệ', validation.error || 'Ảnh không hợp lệ.');
+          return;
+        }
+
+        const compressedUri = await processImage(asset.uri);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-        setAttachedImages((prev) => [
+        setAttachedFiles((prev) => [
           ...prev,
           {
+            id: createAttachmentId(),
             uri: compressedUri,
-            name: `Ảnh_Hiện_Trường_${Date.now()}.jpg`,
+            name: asset.fileName || `Ảnh_Hiện_Trường_${Date.now()}.jpg`,
             type: 'image/jpeg',
+            size: asset.fileSize,
+            isImage: true,
+            uploadState: 'pending',
           },
         ]);
       }
@@ -229,6 +403,11 @@ export default function ChatDetailScreen() {
 
   const handlePickImage = async () => {
     try {
+      if (attachedFiles.length >= 10) {
+        Alert.alert('Giới hạn', 'Chỉ được gửi tối đa 10 tệp cùng một lúc.');
+        return;
+      }
+
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
         Alert.alert('Quyền truy cập', 'Vui lòng cấp quyền xem thư viện ảnh.');
@@ -242,37 +421,173 @@ export default function ChatDetailScreen() {
       });
 
       if (!res.canceled && res.assets) {
+        const validItems: AttachedMediaItem[] = [];
+        const errors: string[] = [];
+
         for (const asset of res.assets) {
-          const compressedUri = await processImage(asset.uri);
-          setAttachedImages((prev) => [
-            ...prev,
+          const validation = validateChatFile(
             {
+              name: asset.fileName || 'image.jpg',
+              size: asset.fileSize,
+              mimeType: asset.mimeType || 'image/jpeg',
+            },
+            { requireImage: true }
+          );
+
+          if (!validation.valid) {
+            errors.push(validation.error || `Ảnh ${asset.fileName || ''} không hợp lệ.`);
+          } else {
+            const compressedUri = await processImage(asset.uri);
+            validItems.push({
+              id: createAttachmentId(),
               uri: compressedUri,
               name: asset.fileName || `Ảnh_${Date.now()}.jpg`,
               type: 'image/jpeg',
-            },
-          ]);
+              size: asset.fileSize,
+              isImage: true,
+              uploadState: 'pending',
+            });
+          }
         }
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+
+        if (errors.length > 0) {
+          Alert.alert('Tệp không hợp lệ', errors.join('\n\n'));
+        }
+
+        if (validItems.length > 0) {
+          setAttachedFiles((prev) => {
+            const combined = [...prev, ...validItems];
+            if (combined.length > 10) {
+              Alert.alert('Giới hạn', 'Chỉ được gửi tối đa 10 tệp cùng một lúc.');
+              return combined.slice(0, 10);
+            }
+            return combined;
+          });
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        }
       }
     } catch {
       Alert.alert('Lỗi', 'Không thể chọn ảnh từ thư viện.');
     }
   };
 
-  const handleRemoveImage = (index: number) => {
+  const handlePickDocument = async () => {
+    try {
+      if (attachedFiles.length >= 10) {
+        Alert.alert('Giới hạn', 'Chỉ được gửi tối đa 10 tệp cùng một lúc.');
+        return;
+      }
+
+      const res = await DocumentPicker.getDocumentAsync({
+        type: CHAT_ALLOWED_MIME_TYPES,
+        copyToCacheDirectory: true,
+        multiple: true,
+      });
+
+      if (!res.canceled && res.assets) {
+        const validItems: AttachedMediaItem[] = [];
+        const errors: string[] = [];
+
+        for (const asset of res.assets) {
+          const validation = validateChatFile({
+            name: asset.name,
+            size: asset.size,
+            mimeType: asset.mimeType,
+          });
+
+          if (!validation.valid) {
+            errors.push(validation.error || `Tệp ${asset.name} không hợp lệ.`);
+          } else {
+            validItems.push({
+              id: createAttachmentId(),
+              uri: asset.uri,
+              name: asset.name || `Tep_${Date.now()}`,
+              type: asset.mimeType || 'application/octet-stream',
+              size: asset.size,
+              isImage: validation.isImage,
+              uploadState: 'pending',
+            });
+          }
+        }
+
+        if (errors.length > 0) {
+          Alert.alert('Tệp không hợp lệ', errors.join('\n\n'));
+        }
+
+        if (validItems.length > 0) {
+          setAttachedFiles((prev) => {
+            const combined = [...prev, ...validItems];
+            if (combined.length > 10) {
+              Alert.alert('Giới hạn', 'Chỉ được gửi tối đa 10 tệp cùng một lúc.');
+              return combined.slice(0, 10);
+            }
+            return combined;
+          });
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        }
+      }
+    } catch {
+      Alert.alert('Lỗi', 'Không thể mở trình chọn tài liệu.');
+    }
+  };
+
+  const handleRemoveFile = (index: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    setAttachedImages((prev) => prev.filter((_, i) => i !== index));
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleToggleEmojiPicker = () => {
+    if (showEmojiPicker) {
+      setShowEmojiPicker(false);
+    } else {
+      Keyboard.dismiss();
+      setShowEmojiPicker(true);
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 120);
+    }
+  };
+
+  const handleSelectEmoji = (emoji: string) => {
+    setInputContent((prev) => prev + emoji);
+  };
+
+  const handleBackspaceEmoji = () => {
+    setInputContent((prev) => {
+      if (!prev) return '';
+      const chars = Array.from(prev);
+      chars.pop();
+      return chars.join('');
+    });
+  };
+
+  const handleQuickLike = async () => {
+    if (!id) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    await sendMessage(id, '👍', [], replyingToMessage?.id);
+    setReplyingToMessage(null);
   };
 
   const handleSend = async () => {
     const trimmed = inputContent.trim();
-    if ((!trimmed && attachedImages.length === 0) || !id) return;
+    if ((!trimmed && attachedFiles.length === 0) || !id) return;
 
+    setShowEmojiPicker(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+
+    // Nếu đang ở chế độ chỉnh sửa tin nhắn
+    if (editingMessage) {
+      if (!trimmed) return;
+      const msgToEdit = editingMessage;
+      setEditingMessage(null);
+      setInputContent('');
+      await editMessage(id, msgToEdit.id, trimmed);
+      return;
+    }
+
     setInputContent('');
-    const toSendImages = [...attachedImages];
-    setAttachedImages([]);
+    const toSendFiles = [...attachedFiles];
+    setAttachedFiles([]);
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -280,18 +595,18 @@ export default function ChatDetailScreen() {
       sendTyping(id, false);
     }
 
-    // Gửi tin nhắn kèm attachments
+    // Gửi tin nhắn kèm attachments và replyToId
     try {
-      setIsUploadingImage(true);
+      setIsUploading(true);
       const attachmentsPayload: any[] = [];
 
-      for (const img of toSendImages) {
+      for (const file of toSendFiles) {
         const formData = new FormData();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (formData as any).append('file', {
-          uri: img.uri,
-          name: img.name || 'image.jpg',
-          type: img.type || 'image/jpeg',
+          uri: file.uri,
+          name: file.name,
+          type: file.type || 'application/octet-stream',
         });
 
         try {
@@ -299,33 +614,124 @@ export default function ChatDetailScreen() {
           if (uploadRes.data?.url) {
             attachmentsPayload.push({
               url: uploadRes.data.url,
-              name: img.name,
-              type: 'image/jpeg',
+              name: file.name,
+              type: file.type,
             });
           } else {
-            // fallback gửi uri trực tiếp
             attachmentsPayload.push({
-              url: img.uri,
-              name: img.name,
-              type: 'image/jpeg',
+              url: file.uri,
+              name: file.name,
+              type: file.type,
             });
           }
         } catch {
           attachmentsPayload.push({
-            url: img.uri,
-            name: img.name,
-            type: 'image/jpeg',
+            url: file.uri,
+            name: file.name,
+            type: file.type,
           });
         }
       }
 
-      await sendMessage(id, trimmed, attachmentsPayload);
+      await sendMessage(id, trimmed, attachmentsPayload, replyingToMessage?.id);
+    } catch {
+      Alert.alert('Lỗi', 'Không thể tải tệp lên hoặc gửi tin nhắn.');
     } finally {
-      setIsUploadingImage(false);
+      setIsUploading(false);
     }
   };
 
-  const formatMessageTime = (dateStr?: string) => {
+  const roomPinnedMessages = useMemo(() => {
+    return id ? pinnedMessagesMap[id] || [] : [];
+  }, [pinnedMessagesMap, id]);
+
+  const handleScrollToMessage = (targetMsg: ChatMessage) => {
+    const idx = messages.findIndex((m) => String(m.id) === String(targetMsg.id));
+    if (idx !== -1 && flatListRef.current) {
+      try {
+        flatListRef.current.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
+      } catch {
+        flatListRef.current.scrollToEnd({ animated: true });
+      }
+    }
+  };
+
+  const handleSendAudio = async (uri: string, durationSeconds: number) => {
+    if (!id) return;
+    try {
+      setIsUploading(true);
+      const formData = new FormData();
+      const filename = `voice_${Date.now()}.m4a`;
+      // @ts-ignore
+      formData.append('file', {
+        uri,
+        name: filename,
+        type: 'audio/m4a',
+      });
+
+      const res = await chatService.uploadChatAttachment(formData);
+      const audioUrl = res.data?.url || uri;
+      await sendMessage(
+        id,
+        '',
+        [
+          {
+            url: audioUrl,
+            name: `Tin nhắn thoại (${durationSeconds}s)`,
+            type: 'audio/m4a',
+          },
+        ],
+        replyingToMessage?.id
+      );
+      setReplyingToMessage(null);
+      setIsRecordingVoice(false);
+    } catch {
+      Alert.alert('Lỗi', 'Không thể tải tin nhắn thoại lên.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // In-room Message Search & Forwarding State
+  const [isSearchingInRoom, setIsSearchingInRoom] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [searchMatchIndex, setSearchMatchIndex] = useState(0);
+  const [forwardingMessage, setForwardingMessage] = useState<ChatMessage | null>(null);
+
+  const searchMatchingIndices = useMemo(() => {
+    const q = searchKeyword.trim().toLowerCase();
+    if (!q) return [];
+    const indices: number[] = [];
+    messages.forEach((m, idx) => {
+      if (m.content && m.content.toLowerCase().includes(q) && !m.isRecalled) {
+        indices.push(idx);
+      }
+    });
+    return indices;
+  }, [messages, searchKeyword]);
+
+  const handleNextSearchMatch = () => {
+    if (searchMatchingIndices.length === 0) return;
+    const nextIdx = (searchMatchIndex + 1) % searchMatchingIndices.length;
+    setSearchMatchIndex(nextIdx);
+    const targetMsgIdx = searchMatchingIndices[nextIdx];
+    try {
+      flatListRef.current?.scrollToIndex({ index: targetMsgIdx, animated: true, viewPosition: 0.5 });
+    } catch {}
+  };
+
+  const handlePrevSearchMatch = () => {
+    if (searchMatchingIndices.length === 0) return;
+    const prevIdx =
+      (searchMatchIndex - 1 + searchMatchingIndices.length) % searchMatchingIndices.length;
+    setSearchMatchIndex(prevIdx);
+    const targetMsgIdx = searchMatchingIndices[prevIdx];
+    try {
+      flatListRef.current?.scrollToIndex({ index: targetMsgIdx, animated: true, viewPosition: 0.5 });
+    } catch {}
+  };
+
+  const formatMessageTime = useCallback((dateStr?: string) => {
     if (!dateStr) return '';
     try {
       const d = new Date(dateStr);
@@ -333,7 +739,93 @@ export default function ChatDetailScreen() {
     } catch {
       return '';
     }
-  };
+  }, []);
+
+  const handleReplyMessage = useCallback((msg: ChatMessage) => {
+    setReplyingToMessage(msg);
+  }, []);
+
+  const handleForwardMessage = useCallback((msg: ChatMessage) => {
+    setForwardingMessage(msg);
+  }, []);
+
+  const handleEditMessage = useCallback((msg: ChatMessage) => {
+    setEditingMessage(msg);
+    setInputContent(msg.content);
+  }, []);
+
+  const handleRecallMessage = useCallback(
+    (msg: ChatMessage) => {
+      if (id) recallMessage(id, msg.id);
+    },
+    [id, recallMessage]
+  );
+
+  const handlePinMessage = useCallback(
+    (msg: ChatMessage) => {
+      if (id) pinMessage(id, msg.id, !msg.isPinned);
+    },
+    [id, pinMessage]
+  );
+
+  const handleReactMessage = useCallback(
+    (msg: ChatMessage, emoji: string) => {
+      if (id) reactToMessage(id, msg.id, emoji);
+    },
+    [id, reactToMessage]
+  );
+
+  const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
+
+  const renderMessageItem = useCallback(
+    ({ item, index }: { item: ChatMessage; index: number }) => {
+      const isMe = String(item.senderId) === String(user?.id);
+      const prevMsg = index > 0 ? messages[index - 1] : null;
+      const nextMsg = index < messages.length - 1 ? messages[index + 1] : null;
+
+      const isConsecutive = Boolean(
+        prevMsg &&
+        !prevMsg.isSystem &&
+        !item.isSystem &&
+        String(prevMsg.senderId) === String(item.senderId)
+      );
+      const showSenderName = !isConsecutive;
+      const showAvatar = Boolean(
+        !nextMsg ||
+        nextMsg.isSystem ||
+        String(nextMsg.senderId) !== String(item.senderId)
+      );
+
+      return (
+        <ChatMessageItem
+          message={item}
+          isMe={isMe}
+          selfUserId={user?.id}
+          formatTime={formatMessageTime}
+          showSenderName={showSenderName}
+          showAvatar={showAvatar}
+          isConsecutive={isConsecutive}
+          onReply={handleReplyMessage}
+          onForward={handleForwardMessage}
+          onEdit={handleEditMessage}
+          onRecall={handleRecallMessage}
+          onPin={handlePinMessage}
+          onReact={handleReactMessage}
+        />
+      );
+    },
+    [
+      user?.id,
+      messages,
+      formatMessageTime,
+      handleReplyMessage,
+      handleForwardMessage,
+      handleEditMessage,
+      handleRecallMessage,
+      handlePinMessage,
+      handleReactMessage,
+    ]
+  );
 
   const getRoomTitle = () => {
     if (!currentRoom) return 'Hội thoại';
@@ -351,8 +843,11 @@ export default function ChatDetailScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: '#F8FAFC' }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.select({
+        ios: 0,
+        android: 0,
+      })}
     >
       {/* Header */}
       <View
@@ -368,68 +863,35 @@ export default function ChatDetailScreen() {
           justifyContent: 'space-between',
         }}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 19,
-              backgroundColor: '#F1F5F9',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Feather name="arrow-left" size={20} color="#0F172A" />
-          </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: 19,
+            backgroundColor: '#F1F5F9',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: 10,
+          }}
+        >
+          <Feather name="arrow-left" size={20} color="#0F172A" />
+        </TouchableOpacity>
 
-          {/* Avatar Icon */}
-          <View style={{ position: 'relative' }}>
-            <View
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 19,
-                backgroundColor: currentRoom?.isGroup ? '#EFF6FF' : '#FFF7ED',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderWidth: 1,
-                borderColor: currentRoom?.isGroup ? '#DBEAFE' : '#FFEDD5',
-                overflow: 'hidden',
-              }}
-            >
-              {currentRoom?.isGroup ? (
-                <Feather name="users" size={17} color="#3B82F6" />
-              ) : (currentRoom?.avatarUrl || otherParticipant?.user?.avatarUrl) ? (
-                <Image
-                  source={{ uri: currentRoom?.avatarUrl || otherParticipant?.user?.avatarUrl }}
-                  style={{ width: '100%', height: '100%' }}
-                  resizeMode="cover"
-                />
-              ) : (
-                <Text style={{ fontSize: 15, fontWeight: '800', color: BrandColors.primary }}>
-                  {title.charAt(0).toUpperCase()}
-                </Text>
-              )}
-            </View>
-            {/* Online Status Dot */}
-            {!currentRoom?.isGroup && isOtherOnline && (
-              <View
-                style={{
-                  position: 'absolute',
-                  bottom: -1,
-                  right: -1,
-                  width: 11,
-                  height: 11,
-                  borderRadius: 6,
-                  backgroundColor: '#10B981',
-                  borderWidth: 2,
-                  borderColor: '#FFFFFF',
-                }}
-              />
-            )}
-          </View>
+        <TouchableOpacity
+          onPress={() => id && router.push(`/chat/${id}/info` as any)}
+          activeOpacity={0.7}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}
+        >
+          {/* Avatar Icon chuẩn Web ERP (Messenger style cho nhóm, Cam Getvini cho 1-1) */}
+          <RoomAvatar
+            room={currentRoom}
+            selfUserId={user?.id}
+            allUsers={allUsers}
+            size="md"
+            isOnline={isOtherOnline}
+          />
 
           <View style={{ flex: 1 }}>
             <Text numberOfLines={1} style={{ fontSize: 16, fontWeight: '700', color: '#0F172A' }}>
@@ -445,32 +907,166 @@ export default function ChatDetailScreen() {
                 : 'Hoạt động gần đây'}
             </Text>
           </View>
-        </View>
+        </TouchableOpacity>
 
-        {/* Nút xem/thêm thành viên nhóm khi là nhóm chat */}
-        {currentRoom?.isGroup && (
+        {/* Right Action Buttons */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {/* Nút Tìm Kiếm Tin Nhắn */}
           <TouchableOpacity
-            onPress={() => setShowMembersModal(true)}
-            activeOpacity={0.7}
+            onPress={() => {
+              Haptics.selectionAsync();
+              setIsSearchingInRoom(!isSearchingInRoom);
+              if (isSearchingInRoom) {
+                setSearchKeyword('');
+              }
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             style={{
-              flexDirection: 'row',
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: isSearchingInRoom ? '#FFF7ED' : '#F8FAFC',
               alignItems: 'center',
-              gap: 4,
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 8,
-              backgroundColor: '#EFF6FF',
+              justifyContent: 'center',
               borderWidth: 1,
-              borderColor: '#BFDBFE',
+              borderColor: isSearchingInRoom ? '#FED7AA' : '#E2E8F0',
             }}
           >
-            <Feather name="users" size={14} color="#2563EB" />
-            <Text style={{ fontSize: 12, fontWeight: '700', color: '#2563EB' }}>
-              {currentRoom.participants?.length || 0}
-            </Text>
+            <Feather
+              name="search"
+              size={17}
+              color={isSearchingInRoom ? BrandColors.primary : '#64748B'}
+            />
           </TouchableOpacity>
-        )}
+
+          {currentRoom?.isGroup && (
+            <TouchableOpacity
+              onPress={() => setShowMembersModal(true)}
+              activeOpacity={0.7}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+                paddingHorizontal: 8,
+                paddingVertical: 6,
+                borderRadius: 8,
+                backgroundColor: '#EFF6FF',
+                borderWidth: 1,
+                borderColor: '#BFDBFE',
+              }}
+            >
+              <Feather name="users" size={14} color="#2563EB" />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#2563EB' }}>
+                {currentRoom.participants?.length || 0}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            onPress={() => id && router.push(`/chat/${id}/info` as any)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: '#F8FAFC',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: '#E2E8F0',
+            }}
+          >
+            <Feather name="info" size={18} color="#64748B" />
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* In-room Search Bar */}
+      {isSearchingInRoom && (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: '#FFFFFF',
+            borderBottomWidth: 1,
+            borderBottomColor: '#E2E8F0',
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            gap: 8,
+          }}
+        >
+          <View
+            style={{
+              flex: 1,
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: '#F1F5F9',
+              borderRadius: 10,
+              paddingHorizontal: 10,
+              height: 38,
+            }}
+          >
+            <Feather name="search" size={16} color="#94A3B8" />
+            <TextInput
+              style={{ flex: 1, marginLeft: 8, fontSize: 13, color: '#0F172A' }}
+              placeholder="Tìm kiếm nội dung tin nhắn..."
+              placeholderTextColor="#94A3B8"
+              value={searchKeyword}
+              onChangeText={(text) => {
+                setSearchKeyword(text);
+                setSearchMatchIndex(0);
+              }}
+              autoFocus
+            />
+            {searchKeyword.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchKeyword('')}>
+                <Feather name="x-circle" size={15} color="#94A3B8" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {searchKeyword.trim().length > 0 && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={{ fontSize: 11, color: '#64748B', marginRight: 2 }}>
+                {searchMatchingIndices.length > 0
+                  ? `${searchMatchIndex + 1}/${searchMatchingIndices.length}`
+                  : '0/0'}
+              </Text>
+              <TouchableOpacity
+                onPress={handlePrevSearchMatch}
+                disabled={searchMatchingIndices.length === 0}
+                style={{ padding: 6, borderRadius: 6, backgroundColor: '#F8FAFC' }}
+              >
+                <Feather name="chevron-up" size={16} color="#64748B" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleNextSearchMatch}
+                disabled={searchMatchingIndices.length === 0}
+                style={{ padding: 6, borderRadius: 6, backgroundColor: '#F8FAFC' }}
+              >
+                <Feather name="chevron-down" size={16} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <TouchableOpacity
+            onPress={() => {
+              setIsSearchingInRoom(false);
+              setSearchKeyword('');
+            }}
+            style={{ padding: 6 }}
+          >
+            <Feather name="x" size={18} color="#64748B" />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Pinned Messages Banner */}
+      <PinnedMessageBanner
+        pinnedMessages={roomPinnedMessages}
+        onPressBanner={handleScrollToMessage}
+        onOpenList={() => setShowPinnedModal(true)}
+      />
 
       {/* Messages List */}
       {loadingMessages && messages.length === 0 ? (
@@ -483,9 +1079,15 @@ export default function ChatDetailScreen() {
       ) : (
         <FlatList
           ref={flatListRef}
+          style={{ flex: 1 }}
           data={messages}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractor}
           contentContainerStyle={{ paddingVertical: 14 }}
+          initialNumToRender={15}
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          removeClippedSubviews={Platform.OS === 'android'}
+          updateCellsBatchingPeriod={50}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
           ListEmptyComponent={
             <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 40 }}>
@@ -498,17 +1100,7 @@ export default function ChatDetailScreen() {
               </Text>
             </View>
           }
-          renderItem={({ item }: { item: ChatMessage }) => {
-            const isMe = String(item.senderId) === String(user?.id);
-            return (
-              <ChatMessageItem
-                message={item}
-                isMe={isMe}
-                selfUserId={user?.id}
-                formatTime={formatMessageTime}
-              />
-            );
-          }}
+          renderItem={renderMessageItem}
         />
       )}
 
@@ -582,151 +1174,446 @@ export default function ChatDetailScreen() {
         </View>
       )}
 
-      {/* Attached Images Preview Bar */}
-      {attachedImages.length > 0 && (
+      {/* Attached Files & Images Preview Bar */}
+      {attachedFiles.length > 0 && (
         <View
           style={{
             backgroundColor: '#FFFFFF',
-            paddingVertical: 8,
-            paddingHorizontal: 12,
             borderTopWidth: 1,
-            borderTopColor: '#F1F5F9',
+            borderTopColor: '#E2E8F0',
+            paddingTop: 8,
+            paddingBottom: 6,
           }}
         >
+          {/* Header xem trước tệp */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: 14,
+              marginBottom: 4,
+            }}
+          >
+            <Text style={{ fontSize: 11, fontWeight: '700', color: '#64748B' }}>
+              TỆP ĐÍNH KÈM ({attachedFiles.length}/10)
+            </Text>
+            <TouchableOpacity
+              onPress={() => setAttachedFiles([])}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={{ fontSize: 11, color: '#EF4444', fontWeight: '600' }}>
+                Xóa tất cả
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           <FlatList
             horizontal
             showsHorizontalScrollIndicator={false}
-            data={attachedImages}
+            data={attachedFiles}
             keyExtractor={(_, i) => String(i)}
-            contentContainerStyle={{ gap: 8 }}
-            renderItem={({ item, index }) => (
-              <View style={{ position: 'relative' }}>
-                <Image
-                  source={{ uri: item.uri }}
-                  style={{ width: 60, height: 60, borderRadius: 8 }}
-                  resizeMode="cover"
-                />
-                <TouchableOpacity
-                  onPress={() => handleRemoveImage(index)}
+            style={{ overflow: 'visible' }}
+            contentContainerStyle={{
+              paddingHorizontal: 14,
+              paddingTop: 10,
+              paddingBottom: 8,
+              gap: 12,
+              alignItems: 'center',
+            }}
+            renderItem={({ item, index }) => {
+              if (item.isImage) {
+                return (
+                  <View style={{ position: 'relative' }}>
+                    <Image
+                      source={{ uri: item.uri }}
+                      style={{
+                        width: 64,
+                        height: 64,
+                        borderRadius: 10,
+                        backgroundColor: '#F1F5F9',
+                        borderWidth: 1,
+                        borderColor: '#E2E8F0',
+                      }}
+                      resizeMode="cover"
+                    />
+                    <TouchableOpacity
+                      onPress={() => handleRemoveFile(index)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={{
+                        position: 'absolute',
+                        top: -6,
+                        right: -6,
+                        width: 20,
+                        height: 20,
+                        borderRadius: 10,
+                        backgroundColor: '#EF4444',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderWidth: 2,
+                        borderColor: '#FFFFFF',
+                        elevation: 3,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: 0.2,
+                        shadowRadius: 2,
+                        zIndex: 10,
+                      }}
+                    >
+                      <Feather name="x" size={11} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                );
+              }
+
+              const docColor = getDocFileColor(item.name);
+              return (
+                <View
                   style={{
-                    position: 'absolute',
-                    top: -4,
-                    right: -4,
-                    width: 18,
-                    height: 18,
-                    borderRadius: 9,
-                    backgroundColor: '#EF4444',
+                    flexDirection: 'row',
                     alignItems: 'center',
-                    justifyContent: 'center',
+                    gap: 10,
+                    backgroundColor: '#F8FAFC',
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    borderWidth: 1,
+                    borderColor: '#E2E8F0',
+                    minWidth: 160,
+                    maxWidth: 220,
+                    position: 'relative',
                   }}
                 >
-                  <Feather name="x" size={11} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
-            )}
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 8,
+                      backgroundColor: docColor.bg,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Feather name={docColor.icon} size={18} color={docColor.color} />
+                  </View>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '600', color: '#0F172A' }}>
+                      {item.name}
+                    </Text>
+                    {Boolean(item.size) && (
+                      <Text style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+                        {formatBytes(item.size)}
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => handleRemoveFile(index)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={{
+                      position: 'absolute',
+                      top: -6,
+                      right: -6,
+                      width: 20,
+                      height: 20,
+                      borderRadius: 10,
+                      backgroundColor: '#EF4444',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderWidth: 2,
+                      borderColor: '#FFFFFF',
+                      elevation: 3,
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowOpacity: 0.2,
+                      shadowRadius: 2,
+                      zIndex: 10,
+                    }}
+                  >
+                    <Feather name="x" size={11} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              );
+            }}
           />
         </View>
       )}
 
-      {/* Bottom Input Bar */}
-      <View
-        style={{
-          backgroundColor: '#FFFFFF',
-          borderTopWidth: 1,
-          borderTopColor: '#E2E8F0',
-          paddingHorizontal: 12,
-          paddingTop: 8,
-          paddingBottom: Math.max(insets.bottom, 12),
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 6,
-        }}
-      >
-        {/* Nút Chụp Ảnh Camera Hiện Trường */}
-        <TouchableOpacity
-          onPress={handleCamera}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      {/* Thanh hiển thị Đang chỉnh sửa tin nhắn */}
+      {editingMessage && (
+        <View
           style={{
-            width: 36,
-            height: 36,
-            borderRadius: 18,
-            backgroundColor: '#F8FAFC',
-            borderWidth: 1,
-            borderColor: '#E2E8F0',
+            backgroundColor: '#F0FDF4',
+            borderTopWidth: 1,
+            borderTopColor: '#BBF7D0',
+            borderLeftWidth: 4,
+            borderLeftColor: '#16A34A',
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'center',
+            justifyContent: 'space-between',
           }}
         >
-          <Feather name="camera" size={17} color="#475569" />
-        </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+            <Feather name="edit-2" size={15} color="#16A34A" />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#16A34A' }}>
+                ĐANG CHỈNH SỬA TIN NHẮN
+              </Text>
+              <Text numberOfLines={1} style={{ fontSize: 12, color: '#334155' }}>
+                {editingMessage.content}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            onPress={() => {
+              setEditingMessage(null);
+              setInputContent('');
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: 12,
+              backgroundColor: '#DCFCE7',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Feather name="x" size={13} color="#16A34A" />
+          </TouchableOpacity>
+        </View>
+      )}
 
-        {/* Nút Chọn Ảnh Thư Viện */}
-        <TouchableOpacity
-          onPress={handlePickImage}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      {/* Thanh hiển thị Đang trả lời tin nhắn (Quote Reply Bar) */}
+      {replyingToMessage && (
+        <View
           style={{
-            width: 36,
-            height: 36,
-            borderRadius: 18,
             backgroundColor: '#F8FAFC',
-            borderWidth: 1,
-            borderColor: '#E2E8F0',
+            borderTopWidth: 1,
+            borderTopColor: '#E2E8F0',
+            borderLeftWidth: 4,
+            borderLeftColor: BrandColors.primary,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'center',
+            justifyContent: 'space-between',
           }}
         >
-          <Feather name="image" size={17} color="#475569" />
-        </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+            <Feather name="corner-up-left" size={15} color={BrandColors.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: BrandColors.primary }}>
+                Đang trả lời {replyingToMessage.sender?.fullName || replyingToMessage.sender?.username || 'Tin nhắn'}
+              </Text>
+              <Text numberOfLines={1} style={{ fontSize: 12, color: '#475569' }}>
+                {replyingToMessage.content || (replyingToMessage.attachments?.length ? '[Tệp đính kèm]' : '...')}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            onPress={() => setReplyingToMessage(null)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: 12,
+              backgroundColor: '#F1F5F9',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Feather name="x" size={13} color="#64748B" />
+          </TouchableOpacity>
+        </View>
+      )}
 
-        {/* Ô nhập tin nhắn */}
-        <TextInput
-          value={inputContent}
-          onChangeText={handleInputChange}
-          placeholder="Nhập tin nhắn... (gõ # hoặc @)"
-          placeholderTextColor="#94A3B8"
-          multiline
-          maxLength={1000}
-          style={{
-            flex: 1,
-            minHeight: 40,
-            maxHeight: 100,
-            backgroundColor: '#F1F5F9',
-            borderRadius: 20,
-            paddingHorizontal: 14,
-            paddingTop: 10,
-            paddingBottom: 10,
-            fontSize: 14,
-            color: '#0F172A',
-          }}
+      {/* Voice Recorder Bar hoặc Bottom Input Bar */}
+      {isRecordingVoice ? (
+        <VoiceRecorderBar
+          onSendAudio={handleSendAudio}
+          onCancel={() => setIsRecordingVoice(false)}
         />
-
-        {/* Nút gửi */}
-        <TouchableOpacity
-          onPress={handleSend}
-          disabled={(!inputContent.trim() && attachedImages.length === 0) || isUploadingImage}
+      ) : (
+        <View
           style={{
-            width: 42,
-            height: 42,
-            borderRadius: 21,
-            backgroundColor:
-              (inputContent.trim() || attachedImages.length > 0) && !isUploadingImage
-                ? BrandColors.primary
-                : '#E2E8F0',
+            backgroundColor: '#FFFFFF',
+            borderTopWidth: 1,
+            borderTopColor: '#F1F5F9',
+            paddingHorizontal: 8,
+            paddingTop: 6,
+            paddingBottom: showEmojiPicker ? 4 : (isKeyboardVisible ? 6 : Math.max(insets.bottom, 8)),
+            flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'center',
+            gap: 2,
           }}
         >
-          {isUploadingImage ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Feather
-              name="send"
-              size={18}
-              color={inputContent.trim() || attachedImages.length > 0 ? '#FFFFFF' : '#94A3B8'}
+          {/* Nút Chụp Ảnh Camera Hiện Trường */}
+          <TouchableOpacity
+            onPress={handleCamera}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 15,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Feather name="camera" size={19} color={BrandColors.primary} />
+          </TouchableOpacity>
+
+          {/* Nút Chọn Ảnh Thư Viện */}
+          <TouchableOpacity
+            onPress={handlePickImage}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 15,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Feather name="image" size={19} color={BrandColors.primary} />
+          </TouchableOpacity>
+
+          {/* Nút Đính Kèm Tệp Tài Liệu */}
+          <TouchableOpacity
+            onPress={handlePickDocument}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 15,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Feather name="paperclip" size={19} color={BrandColors.primary} />
+          </TouchableOpacity>
+
+          {/* Nút Ghi Âm Giọng Nói (Voice Note) */}
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+              setIsRecordingVoice(true);
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 15,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Feather name="mic" size={19} color={BrandColors.primary} />
+          </TouchableOpacity>
+
+          {/* Ô nhập tin nhắn dạng Capsule kiểu Messenger */}
+          <View
+            style={{
+              flex: 1,
+              minHeight: 38,
+              maxHeight: 96,
+              backgroundColor: '#F1F5F9',
+              borderRadius: 20,
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingLeft: 12,
+              paddingRight: 6,
+              marginHorizontal: 3,
+            }}
+          >
+            <TextInput
+              value={inputContent}
+              onChangeText={handleInputChange}
+              onFocus={() => {
+                setShowEmojiPicker(false);
+                setTimeout(() => {
+                  flatListRef.current?.scrollToEnd({ animated: true });
+                }, 120);
+              }}
+              placeholder="Nhập tin nhắn... (gõ # hoặc @)"
+              placeholderTextColor="#94A3B8"
+              multiline
+              maxLength={1000}
+              style={{
+                flex: 1,
+                paddingVertical: Platform.OS === 'ios' ? 8 : 4,
+                fontSize: 14,
+                color: '#0F172A',
+              }}
             />
+
+            {/* Nút Emoji (Mặt cười) bên phải trong ô input */}
+            <TouchableOpacity
+              onPress={handleToggleEmojiPicker}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 14,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: showEmojiPicker ? '#FFEDD5' : 'transparent',
+              }}
+            >
+              <Feather
+                name="smile"
+                size={20}
+                color={BrandColors.primary}
+              />
+            </TouchableOpacity>
+          </View>
+
+          {/* Nút gửi hoặc Thích nhanh 👍 theo Messenger */}
+          {inputContent.trim() || attachedFiles.length > 0 ? (
+            <TouchableOpacity
+              onPress={handleSend}
+              disabled={isUploading}
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 17,
+                backgroundColor: BrandColors.primary,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {isUploading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Feather name="send" size={16} color="#FFFFFF" />
+              )}
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={handleQuickLike}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 17,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 20 }}>👍</Text>
+            </TouchableOpacity>
           )}
-        </TouchableOpacity>
-      </View>
+        </View>
+      )}
+
+      {/* Khay chọn Emoji */}
+      <ChatEmojiPicker
+        visible={showEmojiPicker}
+        onSelectEmoji={handleSelectEmoji}
+        onBackspace={handleBackspaceEmoji}
+        onClose={() => setShowEmojiPicker(false)}
+      />
 
       {/* Modal Quản Lý Thành Viên Nhóm Chat */}
       <ChatAddMembersModal
@@ -734,6 +1621,24 @@ export default function ChatDetailScreen() {
         room={currentRoom || null}
         onClose={() => setShowMembersModal(false)}
         onUpdated={() => fetchRooms()}
+      />
+
+      {/* Modal Danh Sách Tin Nhắn Đã Ghim */}
+      <PinnedMessagesModal
+        visible={showPinnedModal}
+        pinnedMessages={roomPinnedMessages}
+        onClose={() => setShowPinnedModal(false)}
+        onSelectMessage={handleScrollToMessage}
+        onUnpin={(msg) => id && pinMessage(id, msg.id, false)}
+      />
+
+      {/* Modal Chuyển Tiếp Tin Nhắn */}
+      <ChatForwardModal
+        visible={Boolean(forwardingMessage)}
+        message={forwardingMessage}
+        currentRoomId={String(id)}
+        onClose={() => setForwardingMessage(null)}
+        onSuccess={() => setForwardingMessage(null)}
       />
     </KeyboardAvoidingView>
   );

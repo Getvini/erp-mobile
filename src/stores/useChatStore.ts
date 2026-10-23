@@ -2,18 +2,23 @@ import { create } from 'zustand';
 import { io, Socket } from 'socket.io-client';
 import { chatService, ChatRoom, ChatMessage } from '@/services/chatService';
 import { apiService } from '@/services/api';
+import { isChatMembershipSystemMessage } from '@/utils/chatRealtime';
 
 interface ChatStoreState {
   socket: Socket | null;
   isConnected: boolean;
   rooms: ChatRoom[];
   activeRoomId: string | null;
+  lastRemovedRoomId: string | null;
   messages: Record<string, ChatMessage[]>;
   onlineUsers: string[];
   typingUsers: Record<string, Record<string, string>>; // roomId -> { [userId]: username }
   loadingRooms: boolean;
   loadingMessages: boolean;
   currentUserId: string | null;
+  replyingToMessage: ChatMessage | null;
+  editingMessage: ChatMessage | null;
+  pinnedMessages: Record<string, ChatMessage[]>;
 
   // Actions
   initSocket: (userId: string) => Promise<void>;
@@ -21,24 +26,42 @@ interface ChatStoreState {
   fetchRooms: () => Promise<void>;
   selectRoom: (roomId: string | null) => void;
   fetchMessages: (roomId: string) => Promise<void>;
-  sendMessage: (roomId: string, content: string, attachments?: any[]) => Promise<void>;
+  sendMessage: (
+    roomId: string,
+    content: string,
+    attachments?: any[],
+    replyToId?: string | null
+  ) => Promise<void>;
   sendTyping: (roomId: string, isTyping: boolean) => void;
   markAsRead: (roomId: string) => Promise<void>;
+  setReplyingToMessage: (message: ChatMessage | null) => void;
+  setEditingMessage: (message: ChatMessage | null) => void;
+  recallMessage: (roomId: string, messageId: string) => Promise<boolean>;
+  editMessage: (roomId: string, messageId: string, content: string) => Promise<boolean>;
+  reactToMessage: (roomId: string, messageId: string, emoji: string) => Promise<void>;
+  pinMessage: (roomId: string, messageId: string, isPinned: boolean) => Promise<void>;
+  fetchPinnedMessages: (roomId: string) => Promise<void>;
+  forwardMessage: (roomId: string, messageId: string, targetRoomIds: string[]) => Promise<boolean>;
 }
 
 let isConnecting = false;
+let roomsRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 export const useChatStore = create<ChatStoreState>((set, get) => ({
   socket: null,
   isConnected: false,
   rooms: [],
   activeRoomId: null,
+  lastRemovedRoomId: null,
   messages: {},
   onlineUsers: [],
   typingUsers: {},
   loadingRooms: false,
   loadingMessages: false,
   currentUserId: null,
+  replyingToMessage: null,
+  editingMessage: null,
+  pinnedMessages: {},
 
   initSocket: async (userId: string) => {
     const existing = get().socket;
@@ -73,6 +96,14 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         reconnectionDelayMax: 10000,
         timeout: 20000,
       });
+
+    const scheduleRoomsRefresh = () => {
+      if (roomsRefreshTimer) clearTimeout(roomsRefreshTimer);
+      roomsRefreshTimer = setTimeout(() => {
+        roomsRefreshTimer = null;
+        get().fetchRooms();
+      }, 150);
+    };
 
     socket.on('connect', () => {
       console.log('✅ [Socket.io] Connected successfully! Socket ID:', socket.id);
@@ -158,6 +189,33 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       if (activeRoomId === roomId) {
         get().markAsRead(roomId);
       }
+
+      if (isChatMembershipSystemMessage(message)) {
+        scheduleRoomsRefresh();
+      }
+    });
+
+    socket.on('room_added', () => {
+      scheduleRoomsRefresh();
+    });
+
+    socket.on('room_removed', ({ roomId }: { roomId?: string } = {}) => {
+      if (!roomId) return;
+      set((state) => {
+        const nextMessages = { ...state.messages };
+        const nextPinnedMessages = { ...state.pinnedMessages };
+        delete nextMessages[roomId];
+        delete nextPinnedMessages[roomId];
+        return {
+          rooms: state.rooms.filter((room) => String(room.id) !== String(roomId)),
+          messages: nextMessages,
+          pinnedMessages: nextPinnedMessages,
+          activeRoomId:
+            String(state.activeRoomId) === String(roomId) ? null : state.activeRoomId,
+          lastRemovedRoomId: roomId,
+        };
+      });
+      scheduleRoomsRefresh();
     });
 
     // Tin nhắn bị thu hồi từ client khác (Web/Mobile)
@@ -189,6 +247,56 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
                 ? { ...m, content: data.content, isEdited: true }
                 : m
             ),
+          },
+        };
+      });
+    });
+
+    // Cập nhật cảm xúc realtime từ client khác
+    socket.on('message_reaction', ({ messageId, roomId, reactions }: { messageId: string; roomId: string; reactions: any[] }) => {
+      set((state) => {
+        const roomMsgs = state.messages[roomId] || [];
+        return {
+          messages: {
+            ...state.messages,
+            [roomId]: roomMsgs.map((m) =>
+              String(m.id) === String(messageId) ? { ...m, reactions } : m
+            ),
+          },
+        };
+      });
+    });
+
+    // Cập nhật tin nhắn ghim realtime
+    socket.on('message_pinned', ({ messageId, roomId, isPinned, pinnedAt, pinnedById, message }: any) => {
+      set((state) => {
+        const roomMsgs = state.messages[roomId] || [];
+        const currentPinned = state.pinnedMessages[roomId] || [];
+        let nextPinned = [...currentPinned];
+
+        const updatedMsgs = roomMsgs.map((m) =>
+          String(m.id) === String(messageId)
+            ? { ...m, isPinned, pinnedAt, pinnedById, ...(message ? message : {}) }
+            : m
+        );
+
+        if (isPinned) {
+          const targetMsg = message || updatedMsgs.find((m) => String(m.id) === String(messageId));
+          if (targetMsg && !nextPinned.some((p) => String(p.id) === String(messageId))) {
+            nextPinned = [targetMsg, ...nextPinned];
+          }
+        } else {
+          nextPinned = nextPinned.filter((p) => String(p.id) !== String(messageId));
+        }
+
+        return {
+          messages: {
+            ...state.messages,
+            [roomId]: updatedMsgs,
+          },
+          pinnedMessages: {
+            ...state.pinnedMessages,
+            [roomId]: nextPinned,
           },
         };
       });
@@ -233,7 +341,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     const { socket } = get();
     if (socket) {
       socket.disconnect();
-      set({ socket: null, isConnected: false });
+      set({ socket: null, isConnected: false, lastRemovedRoomId: null });
+    }
+    if (roomsRefreshTimer) {
+      clearTimeout(roomsRefreshTimer);
+      roomsRefreshTimer = null;
     }
   },
 
@@ -255,13 +367,17 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       socket.emit('leave_room', activeRoomId);
     }
 
-    set({ activeRoomId: roomId });
+    set({
+      activeRoomId: roomId,
+      lastRemovedRoomId: roomId && get().lastRemovedRoomId === roomId ? null : get().lastRemovedRoomId,
+    });
 
     if (roomId) {
       if (socket) {
         socket.emit('join_room', roomId);
       }
       get().fetchMessages(roomId);
+      get().fetchPinnedMessages(roomId);
       get().markAsRead(roomId);
     }
   },
@@ -283,11 +399,17 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
   },
 
-  sendMessage: async (roomId: string, content: string, attachments: any[] = []) => {
-    const { socket, currentUserId } = get();
+  sendMessage: async (
+    roomId: string,
+    content: string,
+    attachments: any[] = [],
+    replyToId?: string | null
+  ) => {
+    const { socket, currentUserId, replyingToMessage } = get();
     const trimmed = content.trim();
     if (!trimmed && attachments.length === 0) return;
 
+    const targetReplyTo = replyToId || replyingToMessage?.id || null;
     const tempId = `temp-${Date.now()}`;
     const optimisticMsg: ChatMessage = {
       id: tempId,
@@ -295,9 +417,14 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       senderId: currentUserId || '',
       content: trimmed,
       attachments,
+      replyToId: targetReplyTo,
+      replyTo: replyingToMessage || undefined,
       createdAt: new Date().toISOString(),
       isOptimistic: true,
     };
+
+    // Reset trạng thái đang trả lời
+    set({ replyingToMessage: null });
 
     // Optimistic append ngay lập tức
     set((state) => ({
@@ -338,7 +465,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // Gửi qua socket với ack timeout 5s; nếu fail tự động fallback sang REST
       socket.timeout(5000).emit(
         'send_message',
-        { roomId, content: trimmed, attachments },
+        { roomId, content: trimmed, attachments, replyToId: targetReplyTo },
         (err: any, response: { ok: boolean; message?: ChatMessage }) => {
           if (err || !response?.ok) {
             sendViaRest();
@@ -365,7 +492,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   sendTyping: (roomId: string, isTyping: boolean) => {
     const { socket } = get();
     if (!socket || !socket.connected) return;
-    // Gửi trực tiếp chuỗi roomId (backend nhận cả string lẫn object sau fix)
     socket.emit(isTyping ? 'typing' : 'stop_typing', roomId);
   },
 
@@ -379,6 +505,111 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       }));
     } catch {
       // silent
+    }
+  },
+
+  setReplyingToMessage: (message: ChatMessage | null) => {
+    set({ replyingToMessage: message, editingMessage: null });
+  },
+
+  setEditingMessage: (message: ChatMessage | null) => {
+    set({ editingMessage: message, replyingToMessage: null });
+  },
+
+  recallMessage: async (roomId: string, messageId: string) => {
+    try {
+      const res = await chatService.recallMessage(roomId, messageId);
+      if (res.data?.success) {
+        set((state) => {
+          const roomMsgs = state.messages[roomId] || [];
+          return {
+            messages: {
+              ...state.messages,
+              [roomId]: roomMsgs.map((m) =>
+                String(m.id) === String(messageId)
+                  ? { ...m, content: '⛔ Tin nhắn đã bị thu hồi', isRecalled: true }
+                  : m
+              ),
+            },
+          };
+        });
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  },
+
+  editMessage: async (roomId: string, messageId: string, content: string) => {
+    try {
+      const res = await chatService.editMessage(roomId, messageId, content);
+      if (res.data) {
+        set((state) => {
+          const roomMsgs = state.messages[roomId] || [];
+          return {
+            editingMessage: null,
+            messages: {
+              ...state.messages,
+              [roomId]: roomMsgs.map((m) =>
+                String(m.id) === String(messageId)
+                  ? { ...m, content: res.data!.content, isEdited: true, editedAt: res.data!.editedAt }
+                  : m
+              ),
+            },
+          };
+        });
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  },
+
+  reactToMessage: async (roomId: string, messageId: string, emoji: string) => {
+    try {
+      await chatService.reactToMessage(roomId, messageId, emoji);
+    } catch (err) {
+      console.log('Error reacting to message:', err);
+    }
+  },
+
+  pinMessage: async (roomId: string, messageId: string, isPinned: boolean) => {
+    try {
+      await chatService.pinMessage(roomId, messageId, isPinned);
+    } catch (err) {
+      console.log('Error pinning message:', err);
+    }
+  },
+
+  fetchPinnedMessages: async (roomId: string) => {
+    try {
+      const res = await chatService.getPinnedMessages(roomId);
+      if (res.data) {
+        set((state) => ({
+          pinnedMessages: {
+            ...state.pinnedMessages,
+            [roomId]: res.data || [],
+          },
+        }));
+      }
+    } catch (err) {
+      console.log('Error fetching pinned messages:', err);
+    }
+  },
+
+  forwardMessage: async (roomId: string, messageId: string, targetRoomIds: string[]) => {
+    try {
+      const res = await chatService.forwardMessage(roomId, messageId, targetRoomIds);
+      if (res.data?.success) {
+        get().fetchRooms();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.log('Error forwarding message:', err);
+      return false;
     }
   },
 }));

@@ -84,7 +84,14 @@ export const stripChatTokens = (content?: string | null): string => {
 
 export const formatSystemMessage = (message: any, selfUserId?: string | null): string => {
   if (!message) return '';
-  const meta = message.systemMetadata || {};
+  let meta = message.systemMetadata || {};
+  if (typeof meta === 'string') {
+    try {
+      meta = JSON.parse(meta);
+    } catch {
+      meta = {};
+    }
+  }
   const action = meta.action;
   const actorId = meta.actorId || message.senderId || message.sender?.id;
   const isActorMe = selfUserId && String(actorId) === String(selfUserId);
@@ -130,8 +137,10 @@ export const formatSystemMessage = (message: any, selfUserId?: string | null): s
       return `${actorName} đã xóa ${targetName} khỏi nhóm.`;
     }
 
-    case 'LEAVE_GROUP':
-      return isActorMe ? 'Bạn đã rời khỏi nhóm.' : `${actorName} đã rời khỏi nhóm.`;
+    case 'LEAVE_GROUP': {
+      const isTargetMe = isActorMe || (selfUserId && String(meta.actorId || meta.targetId) === String(selfUserId));
+      return isTargetMe ? 'Bạn đã rời khỏi nhóm.' : `${actorName} đã rời khỏi nhóm.`;
+    }
 
     case 'RENAME_GROUP':
       return `${actorName} đã đổi tên nhóm thành "${meta.newName || ''}".`;
