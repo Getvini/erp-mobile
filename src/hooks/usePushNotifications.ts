@@ -38,6 +38,8 @@ export const usePushNotifications = () => {
   const { user } = useAuth();
   const router = useRouter();
   const responseListener = useRef<{ remove: () => void } | null>(null);
+  const isRegisteringRef = useRef(false);
+  const lastRegisteredKeyRef = useRef<string | null>(null);
 
   // 1. Đăng ký nhận token & gửi lên server khi user đăng nhập
   useEffect(() => {
@@ -45,6 +47,8 @@ export const usePushNotifications = () => {
     const notificationsApi = Notifications;
 
     const registerPushToken = async () => {
+      if (isRegisteringRef.current) return;
+      isRegisteringRef.current = true;
       try {
         if (!Device.isDevice) {
           console.log('📱 [PushNotification] Thiết bị là Simulator/Emulator, bỏ qua đăng ký token.');
@@ -89,6 +93,11 @@ export const usePushNotifications = () => {
           return;
         }
 
+        const registrationKey = `${user.id}:${tokenResult.data}`;
+        if (lastRegisteredKeyRef.current === registrationKey) {
+          return;
+        }
+
         const deviceId = await getOrCreateDeviceId();
         const deviceName = getDeviceDisplayName();
 
@@ -101,6 +110,7 @@ export const usePushNotifications = () => {
           deviceName,
         });
 
+        lastRegisteredKeyRef.current = registrationKey;
         console.log('✅ [PushNotification] Đăng ký thiết bị thành công!');
       } catch (error: any) {
         if (error?.message?.includes('googleServicesFile') || error?.message?.includes('FirebaseApp')) {
@@ -108,6 +118,8 @@ export const usePushNotifications = () => {
         } else {
           console.error('💥 [PushNotification] Lỗi trong quá trình đăng ký token:', error);
         }
+      } finally {
+        isRegisteringRef.current = false;
       }
     };
 

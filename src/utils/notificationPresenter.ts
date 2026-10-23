@@ -90,6 +90,7 @@ export const getNotificationCategoryIcon = (
  * Link của Web dùng cùng cấu trúc `/tasks/:id`, `/contracts/:id`, ...
  */
 export const INTERNAL_ROUTE_PREFIXES = [
+  '/chat',
   '/tasks',
   '/projects',
   '/contracts',
@@ -125,6 +126,9 @@ export const getFallbackDeepLink = (notification: {
   const type = (notification.type || '').toUpperCase();
   const id = notification.targetId;
 
+  if (entity === 'CHAT_ROOM' || entity === 'CHAT' || type.startsWith('CHAT')) {
+    return id ? `/chat/${id}` : '/chat';
+  }
   if (entity === 'TASK' || type.startsWith('TASK_')) {
     return id ? `/tasks/${id}` : '/tasks';
   }
