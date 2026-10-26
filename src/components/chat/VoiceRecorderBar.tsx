@@ -83,14 +83,14 @@ export const VoiceRecorderBar: React.FC<VoiceRecorderBarProps> = ({
       if (!Audio) {
         Alert.alert(
           'Ghi âm giọng nói',
-          'Thiết bị chưa tích hợp module ghi âm native (ExponentAV). Bạn có thể gửi file âm thanh qua tính năng đính kèm tệp.'
+          'Thiết bị chưa tích hợp module ghi âm native (ExpoAudio). Bạn có thể gửi file âm thanh qua tính năng đính kèm tệp.'
         );
         onCancel();
         return;
       }
 
-      const permission = await Audio.requestPermissionsAsync();
-      if (permission.status !== 'granted') {
+      const permission = await Audio.requestRecordingPermissionsAsync();
+      if (!permission.granted) {
         Alert.alert(
           'Quyền ghi âm',
           'Vui lòng cấp quyền truy cập micro trong cài đặt để ghi âm tin nhắn giọng nói.'
@@ -100,17 +100,20 @@ export const VoiceRecorderBar: React.FC<VoiceRecorderBarProps> = ({
       }
 
       await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
+        allowsRecording: true,
+        playsInSilentMode: true,
+      }).catch(() => {});
 
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets?.HIGH_QUALITY || {}
+      const recorder = new Audio.AudioModule.AudioRecorder(
+        Audio.RecordingPresets.HIGH_QUALITY
       );
-      recordingRef.current = recording;
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      recordingRef.current = recorder;
       setIsRecording(true);
+      setIsPaused(false);
       setSeconds(0);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     } catch (err: any) {
       Alert.alert('Lỗi', err.message || 'Không thể bắt đầu ghi âm');
       onCancel();
@@ -120,14 +123,14 @@ export const VoiceRecorderBar: React.FC<VoiceRecorderBarProps> = ({
   const cancelRecordingInternal = async () => {
     try {
       if (recordingRef.current) {
-        await recordingRef.current.stopAndUnloadAsync().catch(() => {});
+        await recordingRef.current.stop().catch(() => {});
         recordingRef.current = null;
       }
     } catch {}
   };
 
   const handleCancel = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     await cancelRecordingInternal();
     onCancel();
   };
@@ -135,12 +138,12 @@ export const VoiceRecorderBar: React.FC<VoiceRecorderBarProps> = ({
   const handleTogglePause = async () => {
     if (!recordingRef.current) return;
     try {
-      Haptics.selectionAsync();
+      Haptics.selectionAsync().catch(() => {});
       if (isPaused) {
-        await recordingRef.current.startAsync();
+        recordingRef.current.record();
         setIsPaused(false);
       } else {
-        await recordingRef.current.pauseAsync();
+        recordingRef.current.pause();
         setIsPaused(true);
       }
     } catch {}
@@ -150,10 +153,11 @@ export const VoiceRecorderBar: React.FC<VoiceRecorderBarProps> = ({
     if (!recordingRef.current || isSending) return;
     try {
       setIsSending(true);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI();
+      const recorder = recordingRef.current;
+      await recorder.stop();
+      const uri = recorder.uri;
       recordingRef.current = null;
 
       if (!uri) {
@@ -163,7 +167,7 @@ export const VoiceRecorderBar: React.FC<VoiceRecorderBarProps> = ({
       }
 
       await onSendAudio(uri, seconds);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     } catch (err: any) {
       Alert.alert('Lỗi', err.message || 'Gửi tin nhắn thoại thất bại');
       onCancel();

@@ -24,47 +24,34 @@ const AudioMessagePlayerComponent: React.FC<AudioMessagePlayerProps> = ({
   isMe = false,
   onLongPress,
 }) => {
-  const soundRef = useRef<any>(null);
+  const playerRef = useRef<any>(null);
+  const statusSubRef = useRef<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [durationMillis, setDurationMillis] = useState<number>(0);
-  const [positionMillis, setPositionMillis] = useState<number>(0);
+  const [durationSeconds, setDurationSeconds] = useState<number>(0);
+  const [positionSeconds, setPositionSeconds] = useState<number>(0);
 
   useEffect(() => {
     return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync?.().catch(() => {});
+      if (statusSubRef.current) {
+        statusSubRef.current.remove?.();
+        statusSubRef.current = null;
+      }
+      if (playerRef.current) {
+        try {
+          playerRef.current.pause();
+          playerRef.current.remove();
+        } catch {}
+        playerRef.current = null;
       }
     };
   }, []);
 
-  const formatMillis = (millis: number) => {
-    const totalSeconds = Math.max(0, Math.floor(millis / 1000));
+  const formatSeconds = (seconds: number) => {
+    const totalSeconds = Math.max(0, Math.floor(seconds));
     const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-  };
-
-  const onPlaybackStatusUpdate = (status: any) => {
-    if (!status?.isLoaded) {
-      if (status?.error) {
-        setIsPlaying(false);
-        setIsLoading(false);
-      }
-      return;
-    }
-
-    setIsPlaying(!!status.isPlaying);
-    setPositionMillis(status.positionMillis || 0);
-    if (status.durationMillis) {
-      setDurationMillis(status.durationMillis);
-    }
-
-    if (status.didJustFinish) {
-      setIsPlaying(false);
-      setPositionMillis(0);
-      soundRef.current?.setPositionAsync?.(0).catch(() => {});
-    }
+    const secs = totalSeconds % 60;
+    return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
   const handleTogglePlay = async () => {
@@ -85,31 +72,57 @@ const AudioMessagePlayerComponent: React.FC<AudioMessagePlayerProps> = ({
     try {
       Haptics.selectionAsync().catch(() => {});
 
-      if (!soundRef.current) {
+      if (!playerRef.current) {
         setIsLoading(true);
         await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          shouldDuckAndroid: true,
-        });
+          playsInSilentMode: true,
+          shouldPlayInBackground: false,
+          allowsRecording: false,
+        }).catch(() => {});
 
-        const { sound } = await Audio.Sound.createAsync(
-          { uri },
-          { shouldPlay: true },
-          onPlaybackStatusUpdate
-        );
-        soundRef.current = sound;
-        setIsLoading(false);
+        const player = Audio.createAudioPlayer(uri, { updateInterval: 250 });
+        playerRef.current = player;
+
+        const sub = player.addListener('playbackStatusUpdate', (status) => {
+          if (!status?.isLoaded) {
+            if (status?.error) {
+              setIsPlaying(false);
+              setIsLoading(false);
+            }
+            return;
+          }
+
+          setIsPlaying(Boolean(status.playing));
+          if (typeof status.currentTime === 'number') {
+            setPositionSeconds(status.currentTime);
+          }
+          if (typeof status.duration === 'number' && status.duration > 0) {
+            setDurationSeconds(status.duration);
+          }
+          if (status.isLoaded) {
+            setIsLoading(false);
+          }
+
+          if (status.didJustFinish) {
+            setIsPlaying(false);
+            setPositionSeconds(0);
+            player.seekTo(0).catch(() => {});
+          }
+        });
+        statusSubRef.current = sub;
+
+        player.play();
         setIsPlaying(true);
       } else {
         if (isPlaying) {
-          await soundRef.current.pauseAsync();
+          playerRef.current.pause();
+          setIsPlaying(false);
         } else {
-          if (positionMillis >= durationMillis && durationMillis > 0) {
-            await soundRef.current.setPositionAsync(0);
+          if (positionSeconds >= durationSeconds && durationSeconds > 0) {
+            await playerRef.current.seekTo(0);
           }
-          await soundRef.current.playAsync();
+          playerRef.current.play();
+          setIsPlaying(true);
         }
       }
     } catch {
@@ -119,7 +132,7 @@ const AudioMessagePlayerComponent: React.FC<AudioMessagePlayerProps> = ({
   };
 
   const progressPercent =
-    durationMillis > 0 ? Math.min(100, (positionMillis / durationMillis) * 100) : 0;
+    durationSeconds > 0 ? Math.min(100, (positionSeconds / durationSeconds) * 100) : 0;
 
   const btnBgColor = isMe ? '#FFFFFF' : BrandColors.primary;
   const btnIconColor = isMe ? BrandColors.primary : '#FFFFFF';
@@ -163,10 +176,10 @@ const AudioMessagePlayerComponent: React.FC<AudioMessagePlayerProps> = ({
 
         <View style={styles.timeRow}>
           <Text style={[styles.timeText, { color: textColor }]}>
-            {formatMillis(positionMillis)}
+            {formatSeconds(positionSeconds)}
           </Text>
           <Text style={[styles.timeText, { color: textColor }]}>
-            {durationMillis > 0 ? formatMillis(durationMillis) : 'Ghi âm'}
+            {durationSeconds > 0 ? formatSeconds(durationSeconds) : 'Ghi âm'}
           </Text>
         </View>
       </TouchableOpacity>

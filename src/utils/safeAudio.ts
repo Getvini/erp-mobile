@@ -1,35 +1,37 @@
-// Safe lazy wrapper for expo-av to prevent native module crashes
-// when running on builds without ExponentAV
+// Safe lazy wrapper for expo-audio to prevent native module crashes
+// when running on builds without ExpoAudio
 import { requireOptionalNativeModule } from 'expo-modules-core';
 
-let cachedAudio: any = undefined;
+export type ExpoAudioType = typeof import('expo-audio');
 
-export const getSafeAudio = (): any => {
+let cachedAudio: ExpoAudioType | null | undefined = undefined;
+
+export const getSafeAudio = (): ExpoAudioType | null => {
   if (cachedAudio !== undefined) {
     return cachedAudio;
   }
   try {
-    // Check if the native module ExponentAV actually exists before requiring expo-av
-    let hasNativeAV: any = null;
+    // Check if the native module ExpoAudio actually exists before requiring expo-audio
+    let hasNativeAudio: any = null;
     try {
-      hasNativeAV = requireOptionalNativeModule('ExponentAV');
+      hasNativeAudio = requireOptionalNativeModule('ExpoAudio');
     } catch {
-      hasNativeAV = null;
+      hasNativeAudio = null;
     }
 
-    if (!hasNativeAV) {
+    if (!hasNativeAudio) {
       cachedAudio = null;
       return null;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const expoAv = require('expo-av');
-    if (expoAv && expoAv.Audio) {
-      cachedAudio = expoAv.Audio;
+    const expoAudio: ExpoAudioType = require('expo-audio');
+    if (expoAudio) {
+      cachedAudio = expoAudio;
       return cachedAudio;
     }
   } catch {
-    // Native module ExponentAV not installed in running client build
+    // Native module ExpoAudio not installed in running client build
   }
   cachedAudio = null;
   return null;

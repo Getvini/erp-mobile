@@ -54,7 +54,14 @@
           "icon": "./assets/images/logo.png",
           "color": "#F38820"
         }
-      ]
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Cho phép $(PRODUCT_NAME) truy cập micro để ghi âm tin nhắn giọng nói."
+        }
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
