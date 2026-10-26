@@ -530,17 +530,47 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
   const isPlaceholderText =
     rawContent === '[Hình ảnh]' ||
     rawContent === '[Tệp đính kèm]' ||
+    rawContent === '🎤 [Tin nhắn thoại]' ||
+    rawContent === '[Tin nhắn thoại]' ||
     rawContent.toLowerCase() === '[image]' ||
     rawContent.toLowerCase() === '[attachment]';
   const hasText = Boolean(rawContent && (!hasAttachments || !isPlaceholderText));
   const tokens = parseChatTokens(rawContent);
-  const isSingleTagOnly = tokens.length === 1 && (tokens[0].type === 'user' || tokens[0].type === 'task' || tokens[0].type === 'legacy-task');
+  const isImageAttachment = (a: any) =>
+    Boolean(a?.type?.includes('image') || a?.url?.match(/\.(jpeg|jpg|png|webp|gif)($|\?)/i));
+  const isAudioAttachment = (a: any) =>
+    Boolean(
+      a?.type?.includes('audio') ||
+      a?.name?.startsWith('Tin nhắn thoại') ||
+      a?.name?.includes('voice_') ||
+      a?.url?.match(/\.(m4a|mp3|wav|aac|ogg|webm|3gp|3gpp|amr)($|\?)/i) ||
+      a?.name?.match(/\.(m4a|mp3|wav|aac|ogg|webm|3gp|3gpp|amr)($|\?)/i)
+    );
+  const isDocAttachment = (a: any) =>
+    !isImageAttachment(a) && !isAudioAttachment(a);
+
+  // Pure images (no text, only images) -> no orange bubble wrapper needed
+  const isPureImageOnly = Boolean(
+    hasAttachments && !hasText && message.attachments?.every(isImageAttachment)
+  );
+
+  // Pure document attachment (PDF, Docx, Excel, Zip...) -> card has its own background/border
+  const isPureDocOnly = Boolean(
+    hasAttachments && !hasText && message.attachments?.every(isDocAttachment)
+  );
+
+  const isPureAudioOnly = Boolean(
+    hasAttachments && !hasText && message.attachments?.every(isAudioAttachment)
+  );
+
+  const hasDocAttachment = Boolean(
+    message.attachments?.some(isDocAttachment)
+  );
+  const hasAudioAttachment = Boolean(
+    message.attachments?.some(isAudioAttachment)
+  );
   const hasNonImageAttachment = Boolean(
-    message.attachments?.some(
-      (a) =>
-        !a.type?.includes('image') &&
-        !a.url?.match(/\.(jpeg|jpg|png|webp|gif)($|\?)/i)
-    )
+    message.attachments?.some((a) => !isImageAttachment(a))
   );
   const isPureAttachment = hasAttachments && !hasText;
 
@@ -655,8 +685,8 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
 
       <View
         style={{
-          maxWidth: hasNonImageAttachment ? '88%' : '75%',
-          minWidth: hasNonImageAttachment ? 260 : undefined,
+          maxWidth: hasDocAttachment ? '88%' : (hasAudioAttachment ? '82%' : '75%'),
+          minWidth: hasDocAttachment ? 260 : undefined,
           alignSelf: isMe ? 'flex-end' : 'flex-start',
         }}
       >
@@ -686,21 +716,23 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
           onLongPress={handleTriggerActionSheet}
           style={{
             alignSelf: isMe ? 'flex-end' : 'flex-start',
-            width: isPureAttachment && hasNonImageAttachment ? '100%' : undefined,
-            borderRadius: 16,
-            borderBottomRightRadius: isPureAttachment ? 16 : (isMe ? 3 : 16),
-            borderBottomLeftRadius: isPureAttachment ? 16 : (!isMe ? 3 : 16),
-            backgroundColor: isPureAttachment ? 'transparent' : (isMe ? BrandColors.primary : '#FFFFFF'),
-            paddingHorizontal: isPureAttachment ? 0 : (isSingleTagOnly ? 8 : 12),
-            paddingTop: isPureAttachment ? 0 : 8,
-            paddingBottom: isPureAttachment ? 0 : 6,
-            borderWidth: isPureAttachment ? 0 : (isMe ? 0 : 1),
+            maxWidth: isPureDocOnly ? 340 : (isPureImageOnly ? undefined : '82%'),
+            borderRadius: isPureAudioOnly ? 24 : 16,
+            borderBottomRightRadius: (isPureImageOnly || isPureDocOnly) ? 16 : isPureAudioOnly ? 24 : (isMe ? 3 : 16),
+            borderBottomLeftRadius: (isPureImageOnly || isPureDocOnly) ? 16 : isPureAudioOnly ? 24 : (!isMe ? 3 : 16),
+            backgroundColor: (isPureImageOnly || isPureDocOnly)
+              ? 'transparent'
+              : (isMe ? BrandColors.primary : '#F1F5F9'),
+            paddingHorizontal: (isPureImageOnly || isPureDocOnly) ? 0 : (isPureAudioOnly ? 8 : 12),
+            paddingTop: (isPureImageOnly || isPureDocOnly) ? 0 : (isPureAudioOnly ? 6 : 8),
+            paddingBottom: (isPureImageOnly || isPureDocOnly) ? 0 : (isPureAudioOnly ? 6 : 6),
+            borderWidth: (isPureImageOnly || isPureDocOnly) ? 0 : (isMe ? 0 : 1),
             borderColor: '#E2E8F0',
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: isPureAttachment ? 0 : 0.05,
-            shadowRadius: isPureAttachment ? 0 : 2,
-            elevation: isPureAttachment ? 0 : 1,
+            shadowOpacity: (isPureImageOnly || isPureDocOnly) ? 0 : 0.05,
+            shadowRadius: (isPureImageOnly || isPureDocOnly) ? 0 : 2,
+            elevation: (isPureImageOnly || isPureDocOnly) ? 0 : 1,
             gap: 4,
           }}
         >
@@ -785,13 +817,16 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
               {message.attachments!.map((att, idx) => {
                 const isAudio =
                   att.type?.includes('audio') ||
-                  att.url?.match(/\.(m4a|mp3|wav|aac|ogg)($|\?)/i);
+                  att.name?.startsWith('Tin nhắn thoại') ||
+                  att.name?.includes('voice_') ||
+                  att.url?.match(/\.(m4a|mp3|wav|aac|ogg|webm|3gp|3gpp|amr)($|\?)/i);
 
                 if (isAudio && att.url) {
                   return (
                     <View key={idx} style={{ marginVertical: 2 }}>
                       <AudioMessagePlayer
                         uri={att.url}
+                        fileName={att.name}
                         isMe={isMe}
                         onLongPress={handleTriggerActionSheet}
                       />

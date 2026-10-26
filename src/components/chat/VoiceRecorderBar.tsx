@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandColors } from '@/constants/colors';
 import { getSafeAudio } from '@/utils/safeAudio';
 
@@ -22,6 +23,7 @@ export const VoiceRecorderBar: React.FC<VoiceRecorderBarProps> = ({
   onSendAudio,
   onCancel,
 }) => {
+  const insets = useSafeAreaInsets();
   const recordingRef = useRef<any>(null);
   const [seconds, setSeconds] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
@@ -104,9 +106,19 @@ export const VoiceRecorderBar: React.FC<VoiceRecorderBarProps> = ({
         playsInSilentMode: true,
       }).catch(() => {});
 
-      const recorder = new Audio.AudioModule.AudioRecorder(
-        Audio.RecordingPresets.HIGH_QUALITY
-      );
+      // Cấu hình chuẩn MPEG-4 AAC (.m4a) cho cả Android và iOS để Web giải mã native
+      const recordingOptions = {
+        ...Audio.RecordingPresets.HIGH_QUALITY,
+        extension: '.m4a',
+        android: {
+          ...Audio.RecordingPresets.HIGH_QUALITY?.android,
+          extension: '.m4a',
+          outputFormat: 'mpeg4',
+          audioEncoder: 'aac',
+        },
+      };
+
+      const recorder = new Audio.AudioModule.AudioRecorder(recordingOptions as any);
       await recorder.prepareToRecordAsync();
       recorder.record();
       recordingRef.current = recorder;
@@ -183,7 +195,7 @@ export const VoiceRecorderBar: React.FC<VoiceRecorderBarProps> = ({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 10) }]}>
       {/* Nút hủy / xóa */}
       <TouchableOpacity
         style={styles.cancelBtn}

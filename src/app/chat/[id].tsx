@@ -85,6 +85,12 @@ const getDocFileColor = (fileName?: string) => {
     case 'rar':
     case '7z':
       return { icon: 'archive' as const, color: '#F59E0B', bg: '#FEF3C7', label: 'NÉN' };
+    case 'm4a':
+    case 'mp3':
+    case 'wav':
+    case 'aac':
+    case 'ogg':
+      return { icon: 'mic' as const, color: '#8B5CF6', bg: '#EDE9FE', label: 'AUDIO' };
     default:
       return { icon: 'file' as const, color: '#64748B', bg: '#F1F5F9', label: (ext || 'FILE').toUpperCase() };
   }
@@ -677,7 +683,7 @@ export default function ChatDetailScreen() {
           {
             url: uploadRes.data.url,
             name: `Tin nhắn thoại (${durationSeconds}s)`,
-            type: 'audio/m4a',
+            type: 'audio',
           },
         ],
         replyingToMessage?.id
@@ -1686,7 +1692,7 @@ export default function ChatDetailScreen() {
               if (!isAudioSupported()) {
                 Alert.alert(
                   'Ghi âm giọng nói',
-                  'Bản dựng ứng dụng hiện tại chưa tích hợp module ghi âm native (ExponentAV). Bạn có thể gửi file âm thanh (.m4a, .mp3) qua tính năng đính kèm tệp.'
+                  'Bản dựng ứng dụng hiện tại chưa tích hợp module ghi âm native (ExpoAudio). Bạn có thể gửi file âm thanh (.m4a, .mp3) qua tính năng đính kèm tệp.'
                 );
                 return;
               }
