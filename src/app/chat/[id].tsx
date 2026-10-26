@@ -26,6 +26,7 @@ import { uploadToCloudinary } from '@/services/cloudinaryService';
 import { BrandColors } from '@/constants/colors';
 import { ChatMessageItem } from '@/components/chat/ChatMessageItem';
 import { ChatAddMembersModal } from '@/components/chat/ChatAddMembersModal';
+import { ChatRenameModal } from '@/components/chat/ChatRenameModal';
 import { PinnedMessageBanner } from '@/components/chat/PinnedMessageBanner';
 import { PinnedMessagesModal } from '@/components/chat/PinnedMessagesModal';
 import { VoiceRecorderBar } from '@/components/chat/VoiceRecorderBar';
@@ -98,6 +99,7 @@ export default function ChatDetailScreen() {
   const [inputTokenRanges, setInputTokenRanges] = useState<ComposerTokenRange[]>([]);
   const [attachedFiles, setAttachedFiles] = useState<AttachedMediaItem[]>([]);
   const [showMembersModal, setShowMembersModal] = useState(false);
+  const [showRenameModal, setShowRenameModal] = useState(false);
   const [showPinnedModal, setShowPinnedModal] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -616,12 +618,14 @@ export default function ChatDetailScreen() {
               url: uploadRes.data.url,
               name: file.name,
               type: file.type,
+              size: file.size,
             });
           } else {
             attachmentsPayload.push({
               url: file.uri,
               name: file.name,
               type: file.type,
+              size: file.size,
             });
           }
         } catch {
@@ -629,6 +633,7 @@ export default function ChatDetailScreen() {
             url: file.uri,
             name: file.name,
             type: file.type,
+            size: file.size,
           });
         }
       }
@@ -775,6 +780,49 @@ export default function ChatDetailScreen() {
     [id, reactToMessage]
   );
 
+  const shouldShowDateDivider = useCallback((currentMsg: ChatMessage, prevMsg: ChatMessage | null) => {
+    if (!prevMsg) return true; // Tin nhắn đầu tiên luôn có mốc thời gian
+    try {
+      const currTime = new Date(currentMsg.createdAt).getTime();
+      const prevTime = new Date(prevMsg.createdAt).getTime();
+      const isDifferentDay =
+        new Date(currentMsg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString();
+      // Nếu khác ngày hoặc cách nhau hơn 20 phút
+      return isDifferentDay || currTime - prevTime > 20 * 60 * 1000;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const formatDateDivider = useCallback((dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      const now = new Date();
+      const isToday = d.toDateString() === now.toDateString();
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+
+      if (isToday) {
+        return `${hours}:${minutes}`;
+      }
+
+      const yesterday = new Date();
+      yesterday.setDate(now.getDate() - 1);
+      if (d.toDateString() === yesterday.toDateString()) {
+        return `Hôm qua ${hours}:${minutes}`;
+      }
+
+      const dayNames = ['CN', 'Th 2', 'Th 3', 'Th 4', 'Th 5', 'Th 6', 'Th 7'];
+      const dayName = dayNames[d.getDay()];
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      return `${dayName}, ${day}/${month} lúc ${hours}:${minutes}`;
+    } catch {
+      return '';
+    }
+  }, []);
+
   const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
 
   const renderMessageItem = useCallback(
@@ -783,12 +831,32 @@ export default function ChatDetailScreen() {
       const prevMsg = index > 0 ? messages[index - 1] : null;
       const nextMsg = index < messages.length - 1 ? messages[index + 1] : null;
 
+      const timeDiffWithPrev =
+        prevMsg && item.createdAt && prevMsg.createdAt
+          ? Math.abs(new Date(item.createdAt).getTime() - new Date(prevMsg.createdAt).getTime())
+          : 0;
+
+      const timeDiffWithNext =
+        nextMsg && item.createdAt && nextMsg.createdAt
+          ? Math.abs(new Date(nextMsg.createdAt).getTime() - new Date(item.createdAt).getTime())
+          : 0;
+
       const isConsecutive = Boolean(
         prevMsg &&
         !prevMsg.isSystem &&
         !item.isSystem &&
-        String(prevMsg.senderId) === String(item.senderId)
+        String(prevMsg.senderId) === String(item.senderId) &&
+        timeDiffWithPrev < 10 * 60 * 1000
       );
+
+      const isNextConsecutive = Boolean(
+        nextMsg &&
+        !nextMsg.isSystem &&
+        !item.isSystem &&
+        String(nextMsg.senderId) === String(item.senderId) &&
+        timeDiffWithNext < 10 * 60 * 1000
+      );
+
       const showSenderName = !isConsecutive;
       const showAvatar = Boolean(
         !nextMsg ||
@@ -796,28 +864,60 @@ export default function ChatDetailScreen() {
         String(nextMsg.senderId) !== String(item.senderId)
       );
 
+      const showDivider = shouldShowDateDivider(item, prevMsg);
+
       return (
-        <ChatMessageItem
-          message={item}
-          isMe={isMe}
-          selfUserId={user?.id}
-          formatTime={formatMessageTime}
-          showSenderName={showSenderName}
-          showAvatar={showAvatar}
-          isConsecutive={isConsecutive}
-          onReply={handleReplyMessage}
-          onForward={handleForwardMessage}
-          onEdit={handleEditMessage}
-          onRecall={handleRecallMessage}
-          onPin={handlePinMessage}
-          onReact={handleReactMessage}
-        />
+        <View key={item.id}>
+          {showDivider && (
+            <View
+              style={{
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginVertical: 12,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: '600',
+                  color: '#94A3B8',
+                  backgroundColor: '#F1F5F9',
+                  paddingHorizontal: 10,
+                  paddingVertical: 3,
+                  borderRadius: 10,
+                  overflow: 'hidden',
+                }}
+              >
+                {formatDateDivider(item.createdAt)}
+              </Text>
+            </View>
+          )}
+
+          <ChatMessageItem
+            message={item}
+            isMe={isMe}
+            selfUserId={user?.id}
+            formatTime={formatMessageTime}
+            showSenderName={showSenderName}
+            showAvatar={showAvatar}
+            isConsecutive={isConsecutive}
+            isNextConsecutive={isNextConsecutive}
+            onReply={handleReplyMessage}
+            onForward={handleForwardMessage}
+            onEdit={handleEditMessage}
+            onRecall={handleRecallMessage}
+            onPin={handlePinMessage}
+            onReact={handleReactMessage}
+          />
+        </View>
       );
     },
     [
       user?.id,
       messages,
       formatMessageTime,
+      shouldShowDateDivider,
+      formatDateDivider,
       handleReplyMessage,
       handleForwardMessage,
       handleEditMessage,
@@ -950,13 +1050,13 @@ export default function ChatDetailScreen() {
                 paddingHorizontal: 8,
                 paddingVertical: 6,
                 borderRadius: 8,
-                backgroundColor: '#EFF6FF',
+                backgroundColor: '#FFF7ED',
                 borderWidth: 1,
-                borderColor: '#BFDBFE',
+                borderColor: '#FED7AA',
               }}
             >
-              <Feather name="users" size={14} color="#2563EB" />
-              <Text style={{ fontSize: 12, fontWeight: '700', color: '#2563EB' }}>
+              <Feather name="users" size={14} color={BrandColors.primary} />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: BrandColors.primary }}>
                 {currentRoom.participants?.length || 0}
               </Text>
             </TouchableOpacity>
@@ -1089,6 +1189,95 @@ export default function ChatDetailScreen() {
           removeClippedSubviews={Platform.OS === 'android'}
           updateCellsBatchingPeriod={50}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          ListHeaderComponent={
+            currentRoom?.isGroup ? (
+              <View
+                style={{
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingTop: 16,
+                  paddingBottom: 16,
+                  paddingHorizontal: 16,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: '600',
+                    color: '#1E293B',
+                    textAlign: 'center',
+                    marginBottom: 14,
+                  }}
+                >
+                  {user?.id && currentRoom?.creatorId && String(currentRoom.creatorId) === String(user.id)
+                    ? 'Bạn đã tạo nhóm này'
+                    : `${
+                        currentRoom?.participants?.find((p) => String(p.userId) === String(currentRoom?.creatorId))
+                          ?.user?.fullName ||
+                        currentRoom?.participants?.find((p) => String(p.userId) === String(currentRoom?.creatorId))
+                          ?.user?.username ||
+                        'Ai đó'
+                      } đã tạo nhóm này`}
+                </Text>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 32,
+                  }}
+                >
+                  <TouchableOpacity
+                    onPress={() => setShowMembersModal(true)}
+                    activeOpacity={0.7}
+                    style={{ alignItems: 'center', gap: 6 }}
+                  >
+                    <View
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 22,
+                        backgroundColor: '#F1F5F9',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderWidth: 1,
+                        borderColor: '#E2E8F0',
+                      }}
+                    >
+                      <Feather name="user-plus" size={18} color="#475569" />
+                    </View>
+                    <Text style={{ fontSize: 12, fontWeight: '500', color: '#475569' }}>
+                      Thêm
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setShowRenameModal(true)}
+                    activeOpacity={0.7}
+                    style={{ alignItems: 'center', gap: 6 }}
+                  >
+                    <View
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 22,
+                        backgroundColor: '#F1F5F9',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderWidth: 1,
+                        borderColor: '#E2E8F0',
+                      }}
+                    >
+                      <Feather name="edit-2" size={18} color="#475569" />
+                    </View>
+                    <Text style={{ fontSize: 12, fontWeight: '500', color: '#475569' }}>
+                      Tên
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
             <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 40 }}>
               <MaterialIcons name="forum" size={44} color="#CBD5E1" />
@@ -1516,10 +1705,10 @@ export default function ChatDetailScreen() {
           <View
             style={{
               flex: 1,
-              minHeight: 38,
+              minHeight: 36,
               maxHeight: 96,
               backgroundColor: '#F1F5F9',
-              borderRadius: 20,
+              borderRadius: 18,
               flexDirection: 'row',
               alignItems: 'center',
               paddingLeft: 12,
@@ -1536,14 +1725,15 @@ export default function ChatDetailScreen() {
                   flatListRef.current?.scrollToEnd({ animated: true });
                 }, 120);
               }}
-              placeholder="Nhập tin nhắn... (gõ # hoặc @)"
+              placeholder="Nhắn tin... (@ tag, # task)"
               placeholderTextColor="#94A3B8"
               multiline
               maxLength={1000}
               style={{
                 flex: 1,
-                paddingVertical: Platform.OS === 'ios' ? 8 : 4,
+                paddingVertical: Platform.OS === 'ios' ? 6 : 2,
                 fontSize: 14,
+                lineHeight: 19,
                 color: '#0F172A',
               }}
             />
@@ -1621,6 +1811,14 @@ export default function ChatDetailScreen() {
         room={currentRoom || null}
         onClose={() => setShowMembersModal(false)}
         onUpdated={() => fetchRooms()}
+      />
+
+      {/* Modal Đổi Tên Nhóm Chat */}
+      <ChatRenameModal
+        visible={showRenameModal}
+        room={currentRoom || null}
+        onClose={() => setShowRenameModal(false)}
+        onSuccess={() => fetchRooms()}
       />
 
       {/* Modal Danh Sách Tin Nhắn Đã Ghim */}

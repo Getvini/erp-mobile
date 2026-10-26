@@ -94,11 +94,15 @@ export const insertComposerToken = (
   token: ComposerTokenInput
 ): ComposerDraft => {
   const visible = getVisibleToken(token);
+  const actualStart =
+    replaceStart > 0 && text[replaceStart - 1] === visible[0]
+      ? replaceStart - 1
+      : replaceStart;
   const inserted = `${visible} `;
-  const nextText = `${text.slice(0, replaceStart)}${inserted}${text.slice(replaceEnd)}`;
-  const delta = inserted.length - (replaceEnd - replaceStart);
+  const nextText = `${text.slice(0, actualStart)}${inserted}${text.slice(replaceEnd)}`;
+  const delta = inserted.length - (replaceEnd - actualStart);
   const nextRanges = ranges
-    .filter((range) => range.end <= replaceStart || range.start >= replaceEnd)
+    .filter((range) => range.end <= actualStart || range.start >= replaceEnd)
     .map((range) =>
       range.start >= replaceEnd
         ? { ...range, start: range.start + delta, end: range.end + delta }
@@ -107,8 +111,8 @@ export const insertComposerToken = (
 
   nextRanges.push({
     ...token,
-    start: replaceStart,
-    end: replaceStart + visible.length,
+    start: actualStart,
+    end: actualStart + visible.length,
   });
 
   return { text: nextText, ranges: nextRanges.sort((a, b) => a.start - b.start) };
