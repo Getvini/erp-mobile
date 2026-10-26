@@ -27,10 +27,10 @@ export const getChatAttachmentKind = (file: {
   const mime = (file.mimeType || file.type || '').toLowerCase();
   const source = `${file.name || ''} ${file.url || ''}`.toLowerCase();
 
-  if (mime.startsWith('image/') || /\.(jpe?g|png|webp|gif)(?:$|[?#])/i.test(source)) {
+  if (mime.startsWith('image/') || /\.(jpe?g|png|webp|gif)(?:$|[?#\s])/i.test(source)) {
     return 'image';
   }
-  if (mime.startsWith('audio/') || /\.(m4a|mp3|wav|aac|ogg|webm)(?:$|[?#])/i.test(source)) {
+  if (mime.startsWith('audio/') || /\.(m4a|mp3|wav|aac|ogg|webm)(?:$|[?#\s])/i.test(source)) {
     return 'audio';
   }
   return 'file';

@@ -15,6 +15,7 @@ import * as Haptics from 'expo-haptics';
 import { ChatMessage, ChatAttachment } from '@/services/chatService';
 import { BrandColors } from '@/constants/colors';
 import { formatDateToDDMMYYYY } from '@/utils/formatters';
+import { getFileNameFromUrl } from '@/utils/fileDetector';
 
 interface RoomSharedFilesTabProps {
   messages: ChatMessage[];
@@ -83,7 +84,7 @@ export const RoomSharedFilesTab: React.FC<RoomSharedFilesTabProps> = ({ messages
             list.push({
               id: `${msg.id}_${idx}`,
               url: att.url,
-              name: att.name || 'Tài liệu đính kèm',
+              name: getFileNameFromUrl(att.url, att.name),
               size: att.size,
               type: att.type,
               senderName: msg.sender?.fullName || 'Thành viên',

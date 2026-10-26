@@ -178,15 +178,38 @@ export const getDocumentViewerUrl = (url: string = ''): string => {
 };
 
 export const getFileNameFromUrl = (url: string = '', defaultName: string = ''): string => {
-  if (defaultName) return defaultName;
-  if (!url) return 'Tai-lieu';
+  const trimmed = (defaultName || '').trim();
+  // Nếu có defaultName và không phải generic fallback
+  if (
+    trimmed &&
+    trimmed !== 'Tệp đính kèm' &&
+    trimmed !== 'Tài liệu' &&
+    trimmed !== 'Tài liệu đính kèm' &&
+    trimmed !== 'Tai-lieu'
+  ) {
+    return trimmed;
+  }
+
+  if (!url) return trimmed || 'Tài liệu';
+
+  if (isGoogleDocUrl(url)) return 'Tài liệu Google Docs';
+  if (isGoogleSheetUrl(url)) return 'Bảng tính Google Sheets';
+  if (isGoogleSlideUrl(url)) return 'Bản trình bày Google Slides';
+  if (isGoogleDriveUrl(url)) return 'Tệp Google Drive';
 
   try {
     const cleanUrl = url.split('?')[0].split('#')[0];
     const segments = cleanUrl.split('/');
-    const last = segments[segments.length - 1];
-    return decodeURIComponent(last) || 'Tai-lieu';
+    let last = decodeURIComponent(segments[segments.length - 1] || '');
+
+    // Loại bỏ prefix timestamp hoặc hash do Cloudinary sinh ra dạng: 1739281829102_HopDong.pdf hoặc 1234567890_name.docx
+    if (/^\d{10,}_/.test(last)) {
+      last = last.replace(/^\d{10,}_/, '');
+    }
+
+    return last || trimmed || 'Tài liệu';
   } catch {
-    return 'Tai-lieu';
+    return trimmed || 'Tài liệu';
   }
 };
+

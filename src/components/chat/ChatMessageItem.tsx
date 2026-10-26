@@ -8,7 +8,7 @@ import {
   Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Swipeable } from 'react-native-gesture-handler';
 import { ChatMessage } from '@/services/chatService';
@@ -22,25 +22,195 @@ import { ChatMessageActionSheet } from '@/components/chat/ChatMessageActionSheet
 import { ChatMessageReactionsBadge } from '@/components/chat/ChatMessageReactionsBadge';
 import { AudioMessagePlayer } from '@/components/chat/AudioMessagePlayer';
 
-const getFileMetadata = (fileName?: string) => {
-  const ext = (fileName || '').split('.').pop()?.toLowerCase();
+import { formatBytes } from '@/utils/chatFileValidation';
+import { getFileNameFromUrl } from '@/utils/fileDetector';
+
+const getFileMetadata = (fileName?: string, fileUrl?: string) => {
+  const raw = fileName || (fileUrl ? fileUrl.split('?')[0] : '');
+  const match = raw.match(/\.([a-zA-Z0-9]+)$/);
+  const ext = match ? match[1].toLowerCase() : '';
   switch (ext) {
     case 'pdf':
-      return { icon: 'file-text' as const, color: '#EF4444', bg: '#FEE2E2', label: 'PDF' };
-    case 'xls':
-    case 'xlsx':
-    case 'csv':
-      return { icon: 'grid' as const, color: '#10B981', bg: '#D1FAE5', label: 'EXCEL' };
+      return { label: 'PDF', bg: '#EF4444' };
     case 'doc':
     case 'docx':
-      return { icon: 'file-text' as const, color: '#2563EB', bg: '#DBEAFE', label: 'WORD' };
+      return { label: 'DOC', bg: '#2563EB' };
+    case 'xls':
+    case 'xlsx':
+      return { label: 'XLS', bg: '#10B981' };
+    case 'csv':
+      return { label: 'CSV', bg: '#10B981' };
+    case 'ppt':
+    case 'pptx':
+      return { label: 'PPT', bg: '#F59E0B' };
     case 'zip':
     case 'rar':
     case '7z':
-      return { icon: 'archive' as const, color: '#F59E0B', bg: '#FEF3C7', label: 'NÉN' };
+    case 'tar':
+    case 'gz':
+      return { label: 'ZIP', bg: '#8B5CF6' };
+    case 'txt':
+    case 'log':
+    case 'md':
+      return { label: 'TXT', bg: '#64748B' };
     default:
-      return { icon: 'file' as const, color: '#64748B', bg: '#F1F5F9', label: (ext || 'FILE').toUpperCase() };
+      return { label: ext ? ext.slice(0, 4).toUpperCase() : 'FILE', bg: '#64748B' };
   }
+};
+
+interface ChatFileAttachmentCardProps {
+  file: { name?: string; url?: string; size?: number; type?: string };
+  createdAt?: string;
+  isMe: boolean;
+  formatTime: (date?: string) => string;
+}
+
+const ChatFileAttachmentCard: React.FC<ChatFileAttachmentCardProps> = ({
+  file,
+  createdAt,
+  isMe,
+  formatTime,
+}) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawFile = file as any;
+  const fileUrl = file.url || rawFile?.fileUrl || rawFile?.path || rawFile?.uri || '';
+  const rawName = file.name || rawFile?.fileName || rawFile?.originalName || rawFile?.originalname || '';
+  const fileName = getFileNameFromUrl(fileUrl, rawName);
+  const fileMeta = getFileMetadata(fileName, fileUrl);
+  const fileSize = file.size ?? rawFile?.fileSize ?? rawFile?.bytes;
+  const sizeText = fileSize ? formatBytes(fileSize) : null;
+  const timeText = formatTime ? formatTime(createdAt) : '';
+
+  const handleOpen = () => {
+    if (fileUrl) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      Linking.openURL(fileUrl).catch(() => {});
+    }
+  };
+
+  return (
+    <View
+      style={{
+        width: '100%',
+        minWidth: 260,
+        maxWidth: 340,
+        borderRadius: 16,
+        padding: 10,
+        backgroundColor: isMe ? '#FFF6ED' : '#F0F2F5',
+        borderWidth: 1,
+        borderColor: isMe ? '#FED7AA' : '#E2E8F0',
+      }}
+    >
+      {/* Top Row: Folded Badge + Name & Size + 2 Action Buttons */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        {/* Folded Badge */}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={handleOpen}
+          style={{
+            width: 42,
+            height: 46,
+            borderRadius: 7,
+            backgroundColor: fileMeta.bg,
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'relative',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Folded corner flap */}
+          <View
+            style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              width: 12,
+              height: 12,
+              backgroundColor: 'rgba(255,255,255,0.4)',
+              borderBottomLeftRadius: 6,
+            }}
+          />
+          <Text
+            style={{
+              fontSize: 10.5,
+              fontWeight: '900',
+              color: '#FFFFFF',
+              letterSpacing: 0.5,
+              paddingTop: 3,
+            }}
+          >
+            {fileMeta.label}
+          </Text>
+        </TouchableOpacity>
+
+        {/* File Name & Size */}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={handleOpen}
+          style={{ flex: 1, minWidth: 90, paddingRight: 4, justifyContent: 'center' }}
+        >
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="middle"
+            style={{
+              fontSize: 13.5,
+              fontWeight: '700',
+              color: '#0F172A',
+              lineHeight: 18,
+            }}
+          >
+            {fileName}
+          </Text>
+          {Boolean(sizeText) && (
+            <Text style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+              {sizeText}
+            </Text>
+          )}
+        </TouchableOpacity>
+
+        {/* 2 Action Buttons: Folder & Download */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={handleOpen}
+            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              backgroundColor: 'rgba(0,0,0,0.05)',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Feather name="folder" size={15} color="#475569" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={handleOpen}
+            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              backgroundColor: 'rgba(0,0,0,0.05)',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Feather name="download" size={15} color="#475569" />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Bottom Row: Timestamp */}
+      {Boolean(timeText) && (
+        <View style={{ marginTop: 4, paddingLeft: 2 }}>
+          <Text style={{ fontSize: 10.5, color: '#94A3B8' }}>{timeText}</Text>
+        </View>
+      )}
+    </View>
+  );
 };
 
 const resolveAvatarUrl = (url?: string): string | undefined => {
@@ -61,6 +231,7 @@ interface ChatMessageItemProps {
   showSenderName?: boolean;
   showAvatar?: boolean;
   isConsecutive?: boolean;
+  isNextConsecutive?: boolean;
   onReply?: (msg: ChatMessage) => void;
   onForward?: (msg: ChatMessage) => void;
   onEdit?: (msg: ChatMessage) => void;
@@ -77,6 +248,7 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
   showSenderName = true,
   showAvatar = true,
   isConsecutive = false,
+  isNextConsecutive = false,
   onReply,
   onForward,
   onEdit,
@@ -88,12 +260,7 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
   const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [imageError, setImageError] = useState(false);
-
-  const hasNonImageAttachment = Boolean(
-    message.attachments?.some(
-      (att) => !att.type?.includes('image') && !att.url?.match(/\.(jpeg|jpg|png|webp|gif)($|\?)/i)
-    )
-  );
+  const [showTimestamp, setShowTimestamp] = useState(false);
 
   // 1. Xử lý tin nhắn hệ thống (System Messages) căn giữa phẳng, thanh lịch theo chuẩn Web ERP
   if (message.isSystem) {
@@ -122,7 +289,7 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
           }}
         >
           {(isPinAction || isUnpinAction) && (
-            <Feather name="bookmark" size={13} color="#F38820" style={{ marginRight: 5 }} />
+            <MaterialCommunityIcons name="pin" size={14} color="#F38820" style={{ marginRight: 5 }} />
           )}
           <Text
             style={{
@@ -209,9 +376,9 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
               selfUserId && seg.id && String(seg.id) === String(selfUserId)
             );
 
-            let tagBg = '#DBEAFE';
-            let tagBorder = '#BFDBFE';
-            let tagText = '#1D4ED8';
+            let tagBg = '#FFF7ED';
+            let tagBorder = '#FED7AA';
+            let tagText = '#EA580C';
             let tagWeight: '600' | '700' = '600';
 
             if (isMe) {
@@ -353,6 +520,19 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
   const resolvedAvatar = resolveAvatarUrl(senderAvatar);
   const initial = (senderName || 'T').charAt(0).toUpperCase();
   const hasAttachments = Boolean(message.attachments && message.attachments.length > 0);
+  const rawContent = (message.content || '').trim();
+  const isPlaceholderText = rawContent === '[Hình ảnh]' || rawContent === '[Tệp đính kèm]';
+  const hasText = Boolean(rawContent && (!hasAttachments || !isPlaceholderText));
+  const tokens = parseChatTokens(rawContent);
+  const isSingleTagOnly = tokens.length === 1 && (tokens[0].type === 'user' || tokens[0].type === 'task' || tokens[0].type === 'legacy-task');
+  const hasNonImageAttachment = Boolean(
+    message.attachments?.some(
+      (a) =>
+        !a.type?.includes('image') &&
+        !a.url?.match(/\.(jpeg|jpg|png|webp|gif)($|\?)/i)
+    )
+  );
+  const isPureAttachment = hasAttachments && !hasText;
 
   const swipeableRef = useRef<Swipeable>(null);
 
@@ -412,7 +592,7 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
         style={{
           flexDirection: 'row',
           justifyContent: isMe ? 'flex-end' : 'flex-start',
-          marginBottom: isConsecutive ? 3 : 10,
+          marginBottom: isNextConsecutive ? 2.5 : 6,
           paddingHorizontal: 12,
         }}
       >
@@ -458,7 +638,13 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
         )
       )}
 
-      <View style={{ maxWidth: '75%', alignSelf: isMe ? 'flex-end' : 'flex-start' }}>
+      <View
+        style={{
+          maxWidth: hasNonImageAttachment ? '88%' : '75%',
+          minWidth: hasNonImageAttachment ? 260 : undefined,
+          alignSelf: isMe ? 'flex-end' : 'flex-start',
+        }}
+      >
         {!isMe && showSenderName && (
           <TouchableOpacity
             activeOpacity={0.7}
@@ -474,37 +660,42 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
           </TouchableOpacity>
         )}
 
-        {/* Message Bubble with Long-Press */}
+        {/* Message Bubble with Long-Press & Tap */}
         <TouchableOpacity
-          activeOpacity={0.9}
+          activeOpacity={0.88}
           delayLongPress={250}
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => {});
+            setShowTimestamp((prev) => !prev);
+          }}
           onLongPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
             setShowActionSheet(true);
           }}
           style={{
             alignSelf: isMe ? 'flex-end' : 'flex-start',
+            width: isPureAttachment && hasNonImageAttachment ? '100%' : undefined,
             borderRadius: 16,
-            borderBottomRightRadius: isMe ? 3 : 16,
-            borderBottomLeftRadius: !isMe ? 3 : 16,
-            backgroundColor: isMe ? BrandColors.primary : '#FFFFFF',
-            paddingHorizontal: 12,
-            paddingTop: 8,
-            paddingBottom: 6,
-            borderWidth: isMe ? 0 : 1,
+            borderBottomRightRadius: isPureAttachment && hasNonImageAttachment ? 16 : (isMe ? 3 : 16),
+            borderBottomLeftRadius: isPureAttachment && hasNonImageAttachment ? 16 : (!isMe ? 3 : 16),
+            backgroundColor: isPureAttachment && hasNonImageAttachment ? 'transparent' : (isMe ? BrandColors.primary : '#FFFFFF'),
+            paddingHorizontal: isPureAttachment && hasNonImageAttachment ? 0 : (isSingleTagOnly ? 8 : 12),
+            paddingTop: isPureAttachment && hasNonImageAttachment ? 0 : 8,
+            paddingBottom: isPureAttachment && hasNonImageAttachment ? 0 : 6,
+            borderWidth: isPureAttachment && hasNonImageAttachment ? 0 : (isMe ? 0 : 1),
             borderColor: '#E2E8F0',
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.05,
-            shadowRadius: 2,
-            elevation: 1,
+            shadowOpacity: isPureAttachment && hasNonImageAttachment ? 0 : 0.05,
+            shadowRadius: isPureAttachment && hasNonImageAttachment ? 0 : 2,
+            elevation: isPureAttachment && hasNonImageAttachment ? 0 : 1,
             gap: 4,
           }}
         >
           {/* Pinned Indicator */}
           {message.isPinned && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 2 }}>
-              <Feather name="bookmark" size={11} color={isMe ? '#FFFFFF' : '#EA580C'} />
+              <MaterialCommunityIcons name="pin" size={12} color={isMe ? '#FFFFFF' : '#EA580C'} />
               <Text
                 style={{
                   fontSize: 10,
@@ -554,11 +745,11 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
           )}
 
           {/* Text Message */}
-          {Boolean(message.content) && renderFormattedContent(message.content)}
+          {hasText && renderFormattedContent(message.content)}
 
           {/* Attachments (Ảnh hiện trường hoặc tệp) */}
           {hasAttachments && !message.isRecalled && (
-            <View style={{ gap: 6, marginTop: 4 }}>
+            <View style={{ gap: 6, marginTop: hasText ? 4 : 0 }}>
               {message.attachments!.map((att, idx) => {
                 const isAudio =
                   att.type?.includes('audio') ||
@@ -597,113 +788,49 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
                   );
                 }
 
-                const fileMeta = getFileMetadata(att.name || att.url);
                 return (
-                  <TouchableOpacity
+                  <ChatFileAttachmentCard
                     key={idx}
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      if (att.url) {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                        Linking.openURL(att.url);
-                      }
-                    }}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 10,
-                      padding: 10,
-                      borderRadius: 12,
-                      backgroundColor: isMe ? 'rgba(255,255,255,0.18)' : '#F8FAFC',
-                      borderWidth: 1,
-                      borderColor: isMe ? 'rgba(255,255,255,0.3)' : '#E2E8F0',
-                      width: '100%',
-                    }}
-                  >
-                    <View
-                      style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 8,
-                        backgroundColor: isMe ? 'rgba(255,255,255,0.95)' : fileMeta.bg,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Feather
-                        name={fileMeta.icon}
-                        size={18}
-                        color={isMe ? BrandColors.primary : fileMeta.color}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        numberOfLines={2}
-                        style={{
-                          fontSize: 13,
-                          fontWeight: '600',
-                          color: isMe ? '#FFFFFF' : '#0F172A',
-                          lineHeight: 18,
-                        }}
-                      >
-                        {att.name || `Tệp đính kèm ${idx + 1}`}
-                      </Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                        <Text
-                          style={{
-                            fontSize: 10,
-                            fontWeight: '700',
-                            color: isMe ? 'rgba(255,255,255,0.9)' : fileMeta.color,
-                          }}
-                        >
-                          {fileMeta.label}
-                        </Text>
-                        <Text
-                          style={{
-                            fontSize: 10,
-                            color: isMe ? 'rgba(255,255,255,0.75)' : '#64748B',
-                          }}
-                        >
-                          • Mở tệp
-                        </Text>
-                      </View>
-                    </View>
-                    <Feather
-                      name="external-link"
-                      size={14}
-                      color={isMe ? 'rgba(255,255,255,0.85)' : '#94A3B8'}
-                    />
-                  </TouchableOpacity>
+                    file={att}
+                    createdAt={message.createdAt}
+                    isMe={isMe}
+                    formatTime={formatTime}
+                  />
                 );
               })}
             </View>
           )}
 
-          {/* Time & status */}
+        </TouchableOpacity>
+
+        {/* Messenger-style Timestamp xuất hiện khi chạm vào tin nhắn */}
+        {showTimestamp && (
           <View
             style={{
+              alignSelf: isMe ? 'flex-end' : 'flex-start',
+              marginTop: 3,
+              marginBottom: 3,
+              paddingHorizontal: 4,
               flexDirection: 'row',
               alignItems: 'center',
-              justifyContent: 'flex-end',
-              alignSelf: 'flex-end',
-              gap: 3,
-              marginTop: 2,
-              marginLeft: 6,
+              gap: 4,
             }}
           >
             <Text
               style={{
-                fontSize: 10,
-                color: isMe ? 'rgba(255,255,255,0.8)' : '#94A3B8',
+                fontSize: 11,
+                color: '#94A3B8',
+                fontWeight: '500',
               }}
             >
-              {formatTime(message.createdAt)}
+              {formatTime ? formatTime(message.createdAt) : ''}
+              {isMe && (message.isOptimistic ? ' • Đang gửi...' : ' • Đã gửi')}
             </Text>
-            {message.isOptimistic && (
-              <Feather name="clock" size={10} color={isMe ? '#FFFFFF' : '#94A3B8'} />
+            {isMe && message.isOptimistic && (
+              <Feather name="clock" size={10} color="#94A3B8" />
             )}
           </View>
-        </TouchableOpacity>
+        )}
 
         {/* Reactions Badge */}
         <ChatMessageReactionsBadge
