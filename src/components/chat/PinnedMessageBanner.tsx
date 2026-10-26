@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { ChatMessage } from '@/services/chatService';
 import { BrandColors } from '@/constants/colors';
@@ -32,7 +32,7 @@ export const PinnedMessageBanner: React.FC<PinnedMessageBannerProps> = ({
         }}
       >
         <View style={styles.iconWrap}>
-          <Feather name="bookmark" size={14} color={BrandColors.primary} />
+          <MaterialCommunityIcons name="pin" size={15} color={BrandColors.primary} />
         </View>
         <View style={styles.textWrap}>
           <Text style={styles.title}>

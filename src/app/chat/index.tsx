@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather, MaterialIcons } from '@expo/vector-icons';
+import { Feather, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useChatStore } from '@/stores/useChatStore';
 import { useAuth } from '@/context/AuthContext';
@@ -246,7 +246,7 @@ export default function ChatRoomsScreen() {
                     fontWeight: '600',
                   }}
                 >
-                  {isConnected ? 'Thời gian thực' : 'Đang kết nối...'}
+                  {isConnected ? 'Đang trực tuyến' : 'Đang kết nối...'}
                 </Text>
               </View>
             </View>
@@ -415,20 +415,20 @@ export default function ChatRoomsScreen() {
                       }}
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 5 }}>
-                        {room.isPinned && (
-                          <Feather name="bookmark" size={13} color={BrandColors.primary} />
-                        )}
                         <Text
                           numberOfLines={1}
                           style={{
                             fontSize: 15,
                             fontWeight: hasUnread ? '800' : '600',
                             color: '#0F172A',
-                            flex: 1,
+                            flexShrink: 1,
                           }}
                         >
                           {title}
                         </Text>
+                        {room.isPinned && (
+                          <MaterialCommunityIcons name="pin" size={14} color="#F38820" />
+                        )}
                       </View>
 
                       <Text

@@ -8,7 +8,7 @@ import {
   StyleSheet,
   Alert,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { ChatMessage } from '@/services/chatService';
 import { BrandColors } from '@/constants/colors';
@@ -55,7 +55,7 @@ export const PinnedMessagesModal: React.FC<PinnedMessagesModalProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.iconCircle}>
-              <Feather name="bookmark" size={18} color={BrandColors.primary} />
+              <MaterialCommunityIcons name="pin" size={18} color={BrandColors.primary} />
             </View>
             <Text style={styles.title}>Tin nhắn đã ghim ({pinnedMessages.length})</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -65,7 +65,7 @@ export const PinnedMessagesModal: React.FC<PinnedMessagesModalProps> = ({
 
           {pinnedMessages.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Feather name="bookmark" size={40} color="#CBD5E1" />
+              <MaterialCommunityIcons name="pin-outline" size={40} color="#CBD5E1" />
               <Text style={styles.emptyText}>Chưa có tin nhắn nào được ghim trong phòng này</Text>
             </View>
           ) : (

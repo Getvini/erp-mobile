@@ -10,10 +10,11 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather, MaterialIcons } from '@expo/vector-icons';
+import { Feather, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useChatStore } from '@/stores/useChatStore';
@@ -46,42 +47,62 @@ export default function ChatRoomInfoScreen() {
 
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [addMembersModalVisible, setAddMembersModalVisible] = useState(false);
+  const [selectedActionParticipant, setSelectedActionParticipant] = useState<ChatParticipant | null>(null);
   const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
   const [isMuting, setIsMuting] = useState(false);
   const [isPinning, setIsPinning] = useState(false);
+  const [isOpeningDM, setIsOpeningDM] = useState(false);
 
-  // Người dùng hiện tại có phải là Quản trị viên (Admin) không
-  const isCurrentUserAdmin = useMemo(() => {
-    if (!room || !currentUser) return false;
-    const me = room.participants.find((p) => String(p.userId) === String(currentUser.id));
-    return me?.role === 'ADMIN' || !room.isGroup;
+  // Người dùng hiện tại
+  const myParticipant = useMemo(() => {
+    if (!room || !currentUser) return null;
+    return room.participants.find((p) => String(p.userId) === String(currentUser.id));
   }, [room, currentUser]);
+
+  const myRole = myParticipant?.role || (room?.isGroup ? 'MEMBER' : 'ADMIN');
+  const isCurrentUserAdmin = myRole === 'ADMIN' || !room?.isGroup;
+  const isCurrentUserDeputy = myRole === 'DEPUTY';
+
+  // Sắp xếp danh sách thành viên: Bạn (top 1) -> Trưởng nhóm -> Phó nhóm -> Thành viên -> Alphabet A-Z
+  const sortedParticipants = useMemo(() => {
+    if (!room?.participants) return [];
+    const meId = String(currentUser?.id);
+
+    return [...room.participants].sort((a, b) => {
+      const aIsMe = String(a.userId) === meId;
+      const bIsMe = String(b.userId) === meId;
+      if (aIsMe) return -1;
+      if (bIsMe) return 1;
+
+      const getRoleRank = (role?: string) => {
+        if (role === 'ADMIN') return 1;
+        if (role === 'DEPUTY') return 2;
+        return 3;
+      };
+
+      const rankA = getRoleRank(a.role);
+      const rankB = getRoleRank(b.role);
+      if (rankA !== rankB) return rankA - rankB;
+
+      const nameA = a.user?.fullName || a.user?.username || '';
+      const nameB = b.user?.fullName || b.user?.username || '';
+      return nameA.localeCompare(nameB, 'vi');
+    });
+  }, [room?.participants, currentUser?.id]);
 
   // Cấu hình thông báo & ghim
   const myPreference = useMemo(() => {
-    if (!room || !currentUser) return { isMuted: false, isPinned: false };
-    const me = room.participants.find((p) => String(p.userId) === String(currentUser.id));
     return {
-      isMuted: !!me?.isMuted,
-      isPinned: !!me?.isPinned,
+      isMuted: !!myParticipant?.isMuted,
+      isPinned: !!myParticipant?.isPinned,
     };
-  }, [room, currentUser]);
+  }, [myParticipant]);
 
   const getRoomName = () => {
     if (!room) return 'Cuộc trò chuyện';
     if (room.isGroup) return room.name || 'Nhóm trò chuyện';
     const other = room.participants.find((p) => String(p.userId) !== String(currentUser?.id));
     return other?.user?.fullName || room.name || 'Người dùng';
-  };
-
-  const getRoomAvatar = () => {
-    if (!room) return null;
-    if (room.avatarUrl) return room.avatarUrl;
-    if (!room.isGroup) {
-      const other = room.participants.find((p) => String(p.userId) !== String(currentUser?.id));
-      return other?.user?.avatarUrl || null;
-    }
-    return null;
   };
 
   // Cập nhật Avatar nhóm
@@ -138,7 +159,7 @@ export default function ChatRoomInfoScreen() {
     }
   };
 
-  // Bật/tắt tắt thông báo
+  // Bật/tắt thông báo
   const handleToggleMute = async (value: boolean) => {
     if (!room) return;
     try {
@@ -168,82 +189,74 @@ export default function ChatRoomInfoScreen() {
     }
   };
 
-  // Xử lý thành viên (Đổi quyền / Xóa)
-  const handleMemberActions = (participant: ChatParticipant) => {
-    if (!room?.isGroup || !isCurrentUserAdmin) return;
-    if (String(participant.userId) === String(currentUser?.id)) return; // Không tự thao tác trên mình
-
-    const targetName = participant.user?.fullName || 'thành viên';
-    const isTargetAdmin = participant.role === 'ADMIN';
-
-    Alert.alert(
-      `Quản lý: ${targetName}`,
-      'Chọn hành động quản trị đối với thành viên này:',
-      [
-        {
-          text: isTargetAdmin ? 'Gỡ quyền Trưởng nhóm' : 'Thăng làm Trưởng nhóm',
-          onPress: async () => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            const newRole = isTargetAdmin ? 'MEMBER' : 'ADMIN';
-            const res = await chatService.updateParticipantRole(roomId, String(participant.userId), newRole);
-            if (res.error) {
-              Alert.alert('Thất bại', res.error);
-            } else {
-              await fetchRooms();
-              Alert.alert('Thành công', `Đã cập nhật vai trò cho ${targetName}`);
-            }
-          },
-        },
-        {
-          text: 'Xoá khỏi nhóm',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Xác nhận xoá',
-              `Bạn có chắc chắn muốn mời ${targetName} rời khỏi cuộc trò chuyện nhóm?`,
-              [
-                { text: 'Hủy', style: 'cancel' },
-                {
-                  text: 'Xoá thành viên',
-                  style: 'destructive',
-                  onPress: async () => {
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                    const res = await chatService.removeParticipant(roomId, String(participant.userId));
-                    if (res.error) {
-                      Alert.alert('Thất bại', res.error);
-                    } else {
-                      await fetchRooms();
-                    }
-                  },
-                },
-              ]
-            );
-          },
-        },
-        { text: 'Đóng', style: 'cancel' },
-      ]
-    );
+  // Mở tin nhắn trực tiếp với thành viên
+  const handleDirectChat = async (participant: ChatParticipant) => {
+    if (!participant.userId) return;
+    setSelectedActionParticipant(null);
+    try {
+      setIsOpeningDM(true);
+      Haptics.selectionAsync();
+      const res = await chatService.getOrCreateDM(String(participant.userId));
+      if (res.data?.id) {
+        router.push(`/chat/${res.data.id}` as any);
+      } else {
+        Alert.alert('Lỗi', res.error || 'Không thể mở cuộc trò chuyện trực tiếp');
+      }
+    } catch (err: any) {
+      Alert.alert('Lỗi', err.message || 'Không thể kết nối trò chuyện');
+    } finally {
+      setIsOpeningDM(false);
+    }
   };
 
-  // Rời khỏi nhóm
-  const handleLeaveGroup = () => {
-    if (!room || !currentUser) return;
+  // Cập nhật vai trò thành viên
+  const handleSetRole = (targetUserId: string, targetName: string, newRole: 'ADMIN' | 'DEPUTY' | 'MEMBER') => {
+    setSelectedActionParticipant(null);
+    let confirmMsg = '';
+    if (newRole === 'ADMIN') {
+      confirmMsg = `Bạn có chắc chắn muốn chuyển quyền Trưởng nhóm cho "${targetName}" không? Bạn sẽ trở thành Phó nhóm.`;
+    } else if (newRole === 'DEPUTY') {
+      confirmMsg = `Bổ nhiệm "${targetName}" làm Phó nhóm?`;
+    } else {
+      confirmMsg = `Hủy quyền Phó nhóm của "${targetName}"?`;
+    }
+
+    Alert.alert('Xác nhận vai trò', confirmMsg, [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Xác nhận',
+        onPress: async () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          const res = await chatService.updateParticipantRole(roomId, targetUserId, newRole);
+          if (res.error) {
+            Alert.alert('Thất bại', res.error);
+          } else {
+            await fetchRooms();
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+        },
+      },
+    ]);
+  };
+
+  // Xóa thành viên khỏi nhóm
+  const handleRemoveMember = (targetUserId: string, targetName: string) => {
+    setSelectedActionParticipant(null);
     Alert.alert(
-      'Rời khỏi nhóm',
-      'Bạn có chắc chắn muốn rời khỏi nhóm này? Bạn sẽ không còn nhận được tin nhắn và thông báo từ nhóm nữa.',
+      'Xác nhận xoá thành viên',
+      `Bạn có chắc chắn muốn mời "${targetName}" rời khỏi cuộc trò chuyện nhóm?`,
       [
-        { text: 'Ở lại', style: 'cancel' },
+        { text: 'Hủy', style: 'cancel' },
         {
-          text: 'Rời nhóm',
+          text: 'Xóa khỏi nhóm',
           style: 'destructive',
           onPress: async () => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            const res = await chatService.removeParticipant(roomId, String(currentUser.id));
+            const res = await chatService.removeParticipant(roomId, targetUserId);
             if (res.error) {
               Alert.alert('Thất bại', res.error);
             } else {
               await fetchRooms();
-              router.replace('/chat');
             }
           },
         },
@@ -261,7 +274,6 @@ export default function ChatRoomInfoScreen() {
   }
 
   const roomName = getRoomName();
-  const avatarUrl = getRoomAvatar();
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -309,6 +321,7 @@ export default function ChatRoomInfoScreen() {
               <TouchableOpacity
                 onPress={() => setRenameModalVisible(true)}
                 style={styles.editNameBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Feather name="edit-2" size={16} color={BrandColors.primary} />
               </TouchableOpacity>
@@ -344,8 +357,17 @@ export default function ChatRoomInfoScreen() {
           <View style={styles.divider} />
 
           <View style={styles.settingRow}>
-            <View style={styles.settingIconWrap}>
-              <Feather name="bookmark" size={18} color="#64748B" />
+            <View
+              style={[
+                styles.settingIconWrap,
+                myPreference.isPinned && { backgroundColor: '#FFF7ED' },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="pin"
+                size={19}
+                color={myPreference.isPinned ? '#F38820' : '#64748B'}
+              />
             </View>
             <View style={styles.settingInfo}>
               <Text style={styles.settingTitle}>Ghim hội thoại</Text>
@@ -364,63 +386,113 @@ export default function ChatRoomInfoScreen() {
         {/* Members Section (Only for groups) */}
         {room.isGroup && (
           <View style={styles.card}>
+            {/* Nút Thêm Thành Viên Nổi Bật Tương Tự Web */}
+            <TouchableOpacity
+              style={styles.addMemberBanner}
+              onPress={() => setAddMembersModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.addMemberIconWrap}>
+                <Feather name="user-plus" size={15} color={BrandColors.primary} />
+              </View>
+              <Text style={styles.addMemberBannerText}>Thêm thành viên vào nhóm</Text>
+            </TouchableOpacity>
+
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>
-                Thành viên nhóm ({room.participants.length})
+                Danh sách thành viên ({sortedParticipants.length})
               </Text>
-              <TouchableOpacity
-                style={styles.addMemberBtn}
-                onPress={() => setAddMembersModalVisible(true)}
-              >
-                <Feather name="user-plus" size={14} color={BrandColors.primary} />
-                <Text style={styles.addMemberText}>Thêm</Text>
-              </TouchableOpacity>
             </View>
 
-            {room.participants.map((p) => {
+            {/* Danh sách từng thành viên */}
+            {sortedParticipants.map((p) => {
               const pUser = p.user;
               const isOnline = onlineUsers.includes(String(p.userId));
               const isMe = String(p.userId) === String(currentUser?.id);
+              const targetRole = p.role || 'MEMBER';
+              const memberName = pUser?.fullName || pUser?.username || 'Thành viên';
+              const canManage = (isCurrentUserAdmin && !isMe) || (isCurrentUserDeputy && targetRole === 'MEMBER' && !isMe);
 
               return (
-                <TouchableOpacity
+                <View
                   key={p.id || p.userId}
-                  style={styles.memberRow}
-                  activeOpacity={isCurrentUserAdmin && !isMe ? 0.7 : 1}
-                  onPress={() => handleMemberActions(p)}
+                  style={[styles.memberRow, isMe && styles.memberRowSelf]}
                 >
+                  {/* Avatar + Status Badge + Role Crown */}
                   <View style={styles.memberAvatarWrap}>
                     {pUser?.avatarUrl ? (
                       <Image source={{ uri: pUser.avatarUrl }} style={styles.memberAvatar} />
                     ) : (
                       <View style={[styles.memberAvatar, styles.memberAvatarPlaceholder]}>
                         <Text style={styles.memberAvatarText}>
-                          {(pUser?.fullName || 'U').charAt(0).toUpperCase()}
+                          {(memberName || 'U').charAt(0).toUpperCase()}
                         </Text>
                       </View>
                     )}
                     {isOnline && <View style={styles.onlineBadge} />}
+
+                    {targetRole === 'ADMIN' && (
+                      <View style={styles.roleBadgeAdmin} pointerEvents="none">
+                        <Text style={styles.roleBadgeIcon}>👑</Text>
+                      </View>
+                    )}
+                    {targetRole === 'DEPUTY' && (
+                      <View style={styles.roleBadgeDeputy} pointerEvents="none">
+                        <Text style={styles.roleBadgeIcon}>🛡️</Text>
+                      </View>
+                    )}
                   </View>
 
+                  {/* Tên & Vai trò */}
                   <View style={styles.memberInfo}>
-                    <Text style={styles.memberName} numberOfLines={1}>
-                      {pUser?.fullName || 'Thành viên'} {isMe && '(Bạn)'}
-                    </Text>
-                    <Text style={styles.memberRole}>
-                      {p.role === 'ADMIN' ? 'Trưởng nhóm' : 'Thành viên'}
+                    <View style={styles.memberNameLine}>
+                      <Text style={styles.memberName} numberOfLines={1}>
+                        {isMe ? 'Bạn' : memberName}
+                      </Text>
+                      {isMe && (
+                        <View style={styles.selfTag}>
+                          <Text style={styles.selfTagText}>Bạn</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <Text style={styles.memberRoleSubtitle}>
+                      {targetRole === 'ADMIN' ? (
+                        <Text style={styles.roleTextAdmin}>Trưởng nhóm</Text>
+                      ) : targetRole === 'DEPUTY' ? (
+                        <Text style={styles.roleTextDeputy}>Phó nhóm</Text>
+                      ) : pUser?.username ? (
+                        `@${pUser.username}`
+                      ) : (
+                        'Thành viên'
+                      )}
                     </Text>
                   </View>
 
-                  {p.role === 'ADMIN' && (
-                    <View style={styles.adminTag}>
-                      <Text style={styles.adminTagText}>Admin</Text>
-                    </View>
-                  )}
+                  {/* Hành động: Nút Nhắn tin + Menu 3 chấm quản lý */}
+                  <View style={styles.memberActionsGroup}>
+                    {!isMe && (
+                      <TouchableOpacity
+                        style={styles.directChatBtn}
+                        onPress={() => handleDirectChat(p)}
+                        activeOpacity={0.7}
+                      >
+                        <Feather name="message-square" size={12} color={BrandColors.primary} />
+                        <Text style={styles.directChatBtnText}>Nhắn tin</Text>
+                      </TouchableOpacity>
+                    )}
 
-                  {isCurrentUserAdmin && !isMe && (
-                    <Feather name="more-vertical" size={18} color="#94A3B8" />
-                  )}
-                </TouchableOpacity>
+                    {canManage && (
+                      <TouchableOpacity
+                        style={styles.memberActionBtn}
+                        onPress={() => setSelectedActionParticipant(p)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Feather name="more-vertical" size={17} color="#94A3B8" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
               );
             })}
           </View>
@@ -432,20 +504,169 @@ export default function ChatRoomInfoScreen() {
         </View>
         <RoomSharedFilesTab messages={messages} />
 
-        {/* Danger Zone: Leave Group */}
-        {room.isGroup && (
-          <TouchableOpacity
-            style={styles.leaveGroupBtn}
-            onPress={handleLeaveGroup}
-            activeOpacity={0.8}
-          >
-            <Feather name="log-out" size={18} color="#EF4444" />
-            <Text style={styles.leaveGroupText}>Rời khỏi nhóm trò chuyện</Text>
-          </TouchableOpacity>
-        )}
-
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Action Sheet Modal Quản lý Thành Viên Thanh Lịch */}
+      <Modal
+        visible={Boolean(selectedActionParticipant)}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setSelectedActionParticipant(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setSelectedActionParticipant(null)}
+        >
+          <View style={styles.actionSheetContent} onStartShouldSetResponder={() => true}>
+            {/* Thanh bar kéo */}
+            <View style={styles.sheetHandle} />
+
+            {/* Thông tin thành viên được chọn */}
+            {selectedActionParticipant && (
+              <>
+                <View style={styles.sheetHeader}>
+                  <View style={styles.sheetAvatarWrap}>
+                    {selectedActionParticipant.user?.avatarUrl ? (
+                      <Image
+                        source={{ uri: selectedActionParticipant.user.avatarUrl }}
+                        style={styles.sheetAvatar}
+                      />
+                    ) : (
+                      <View style={[styles.sheetAvatar, styles.memberAvatarPlaceholder]}>
+                        <Text style={styles.memberAvatarText}>
+                          {(selectedActionParticipant.user?.fullName || 'U').charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.sheetUserInfo}>
+                    <Text style={styles.sheetUserName} numberOfLines={1}>
+                      {selectedActionParticipant.user?.fullName || 'Thành viên'}
+                    </Text>
+                    <Text style={styles.sheetUserRole}>
+                      {selectedActionParticipant.role === 'ADMIN'
+                        ? '👑 Trưởng nhóm'
+                        : selectedActionParticipant.role === 'DEPUTY'
+                        ? '🛡️ Phó nhóm'
+                        : selectedActionParticipant.user?.username
+                        ? `@${selectedActionParticipant.user.username}`
+                        : 'Thành viên'}{' '}
+                      • Phương thức quản trị
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.sheetDivider} />
+
+                {/* Các thao tác */}
+                <View style={styles.sheetActionsList}>
+                  {/* Nhắn tin trực tiếp */}
+                  <TouchableOpacity
+                    style={styles.sheetActionItem}
+                    onPress={() => handleDirectChat(selectedActionParticipant)}
+                  >
+                    <View style={[styles.sheetActionIcon, { backgroundColor: '#FFF7ED' }]}>
+                      <Feather name="message-square" size={17} color={BrandColors.primary} />
+                    </View>
+                    <Text style={styles.sheetActionText}>Gửi tin nhắn trực tiếp</Text>
+                    <Feather name="chevron-right" size={16} color="#CBD5E1" />
+                  </TouchableOpacity>
+
+                  {/* Bổ nhiệm / Hủy Phó nhóm (Chỉ Admin) */}
+                  {isCurrentUserAdmin && selectedActionParticipant.role === 'MEMBER' && (
+                    <TouchableOpacity
+                      style={styles.sheetActionItem}
+                      onPress={() =>
+                        handleSetRole(
+                          String(selectedActionParticipant.userId),
+                          selectedActionParticipant.user?.fullName || 'thành viên',
+                          'DEPUTY'
+                        )
+                      }
+                    >
+                      <View style={[styles.sheetActionIcon, { backgroundColor: '#F0F9FF' }]}>
+                        <Feather name="shield" size={17} color="#0284C7" />
+                      </View>
+                      <Text style={styles.sheetActionText}>Bổ nhiệm làm Phó nhóm</Text>
+                      <Feather name="chevron-right" size={16} color="#CBD5E1" />
+                    </TouchableOpacity>
+                  )}
+
+                  {isCurrentUserAdmin && selectedActionParticipant.role === 'DEPUTY' && (
+                    <TouchableOpacity
+                      style={styles.sheetActionItem}
+                      onPress={() =>
+                        handleSetRole(
+                          String(selectedActionParticipant.userId),
+                          selectedActionParticipant.user?.fullName || 'thành viên',
+                          'MEMBER'
+                        )
+                      }
+                    >
+                      <View style={[styles.sheetActionIcon, { backgroundColor: '#FFF1F2' }]}>
+                        <Feather name="shield-off" size={17} color="#E11D48" />
+                      </View>
+                      <Text style={styles.sheetActionText}>Hủy quyền Phó nhóm</Text>
+                      <Feather name="chevron-right" size={16} color="#CBD5E1" />
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Chuyển quyền Trưởng nhóm (Chỉ Admin) */}
+                  {isCurrentUserAdmin && (
+                    <TouchableOpacity
+                      style={styles.sheetActionItem}
+                      onPress={() =>
+                        handleSetRole(
+                          String(selectedActionParticipant.userId),
+                          selectedActionParticipant.user?.fullName || 'thành viên',
+                          'ADMIN'
+                        )
+                      }
+                    >
+                      <View style={[styles.sheetActionIcon, { backgroundColor: '#FEF3C7' }]}>
+                        <Feather name="award" size={17} color="#D97706" />
+                      </View>
+                      <Text style={styles.sheetActionText}>Chuyển quyền Trưởng nhóm</Text>
+                      <Feather name="chevron-right" size={16} color="#CBD5E1" />
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Xóa khỏi nhóm */}
+                  {((isCurrentUserAdmin) || (isCurrentUserDeputy && selectedActionParticipant.role === 'MEMBER')) && (
+                    <TouchableOpacity
+                      style={[styles.sheetActionItem, styles.sheetActionItemDestructive]}
+                      onPress={() =>
+                        handleRemoveMember(
+                          String(selectedActionParticipant.userId),
+                          selectedActionParticipant.user?.fullName || 'thành viên'
+                        )
+                      }
+                    >
+                      <View style={[styles.sheetActionIcon, { backgroundColor: '#FEF2F2' }]}>
+                        <Feather name="trash-2" size={17} color="#EF4444" />
+                      </View>
+                      <Text style={[styles.sheetActionText, { color: '#EF4444' }]}>
+                        Xóa khỏi nhóm trò chuyện
+                      </Text>
+                      <Feather name="chevron-right" size={16} color="#FCA5A5" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Nút Đóng */}
+                <TouchableOpacity
+                  style={styles.sheetCancelBtn}
+                  onPress={() => setSelectedActionParticipant(null)}
+                >
+                  <Text style={styles.sheetCancelText}>Đóng</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Rename Modal */}
       <ChatRenameModal
@@ -478,9 +699,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   loadingText: {
-    marginTop: 12,
     fontSize: 14,
     color: '#64748B',
+    marginTop: 12,
   },
   header: {
     flexDirection: 'row',
@@ -490,11 +711,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: '#F1F5F9',
   },
   backButton: {
     padding: 6,
-    borderRadius: 8,
+    marginLeft: -6,
   },
   headerTitle: {
     fontSize: 17,
@@ -506,46 +727,25 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+    paddingBottom: 40,
   },
   heroCard: {
-    alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#F1F5F9',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
   avatarWrap: {
     position: 'relative',
-    marginBottom: 14,
-  },
-  avatar: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-  },
-  avatarPlaceholder: {
-    backgroundColor: '#FFF7ED',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FED7AA',
-  },
-  avatarText: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: BrandColors.primary,
+    marginBottom: 12,
   },
   cameraBadge: {
     position: 'absolute',
-    bottom: 2,
-    right: 2,
+    bottom: 0,
+    right: 0,
     width: 26,
     height: 26,
     borderRadius: 13,
@@ -630,18 +830,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0F172A',
   },
-  addMemberBtn: {
+  addMemberBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 8,
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
     backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    marginBottom: 14,
   },
-  addMemberText: {
+  addMemberIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFEDD5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addMemberBannerText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     color: BrandColors.primary,
   },
   memberRow: {
@@ -652,23 +864,29 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F8FAFC',
     gap: 12,
   },
+  memberRowSelf: {
+    backgroundColor: '#FAFAFA',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    marginHorizontal: -8,
+  },
   memberAvatarWrap: {
     position: 'relative',
   },
   memberAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F1F5F9',
   },
   memberAvatarPlaceholder: {
-    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
   },
   memberAvatarText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#64748B',
+    fontWeight: '700',
+    color: BrandColors.primary,
   },
   onlineBadge: {
     position: 'absolute',
@@ -681,47 +899,203 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#FFFFFF',
   },
+  roleBadgeAdmin: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roleBadgeDeputy: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#E0F2FE',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roleBadgeIcon: {
+    fontSize: 10,
+  },
   memberInfo: {
     flex: 1,
+    justifyContent: 'center',
+  },
+  memberNameLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   memberName: {
     fontSize: 14,
     fontWeight: '600',
     color: '#0F172A',
+    maxWidth: 140,
   },
-  memberRole: {
+  selfTag: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  selfTagText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  memberRoleSubtitle: {
     fontSize: 12,
     color: '#94A3B8',
     marginTop: 2,
   },
-  adminTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
+  roleTextAdmin: {
+    color: '#D97706',
+    fontWeight: '600',
+  },
+  roleTextDeputy: {
+    color: '#0284C7',
+    fontWeight: '600',
+  },
+  memberActionsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  directChatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
     backgroundColor: '#FFF7ED',
     borderWidth: 1,
     borderColor: '#FED7AA',
   },
-  adminTagText: {
-    fontSize: 11,
-    fontWeight: '700',
+  directChatBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
     color: BrandColors.primary,
   },
-  leaveGroupBtn: {
-    flexDirection: 'row',
+  memberActionBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FEE2E2',
-    borderRadius: 16,
-    paddingVertical: 14,
-    marginTop: 16,
+    backgroundColor: '#F8FAFC',
   },
-  leaveGroupText: {
-    fontSize: 15,
+
+  // Action Sheet Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'flex-end',
+  },
+  actionSheetContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 20,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingBottom: 14,
+  },
+  sheetAvatarWrap: {
+    position: 'relative',
+  },
+  sheetAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F1F5F9',
+  },
+  sheetUserInfo: {
+    flex: 1,
+  },
+  sheetUserName: {
+    fontSize: 16,
     fontWeight: '700',
-    color: '#EF4444',
+    color: '#0F172A',
+  },
+  sheetUserRole: {
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  sheetDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginBottom: 8,
+  },
+  sheetActionsList: {
+    marginVertical: 4,
+  },
+  sheetActionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+  },
+  sheetActionItemDestructive: {
+    borderBottomWidth: 0,
+    marginTop: 4,
+  },
+  sheetActionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetActionText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  sheetCancelBtn: {
+    marginTop: 14,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetCancelText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#475569',
   },
 });

@@ -8,7 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { ChatMessage } from '@/services/chatService';
 import { copyTextToClipboard } from '@/utils/safeClipboard';
@@ -276,9 +276,9 @@ export const ChatMessageActionSheet: React.FC<ChatMessageActionSheetProps> = ({
                       justifyContent: 'center',
                     }}
                   >
-                    <Feather
-                      name={message.isPinned ? 'slash' : 'bookmark'}
-                      size={17}
+                    <MaterialCommunityIcons
+                      name={message.isPinned ? 'pin-off' : 'pin'}
+                      size={18}
                       color="#EA580C"
                     />
                   </View>

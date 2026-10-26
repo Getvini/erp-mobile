@@ -76,6 +76,8 @@ export interface ChatRoom {
   unreadCount?: number;
   isPinned?: boolean;
   isMuted?: boolean;
+  creatorId?: string;
+  creator?: any;
   createdAt?: string;
   updatedAt: string;
 }
@@ -147,7 +149,7 @@ class ChatService {
   async updateParticipantRole(
     roomId: string,
     userId: string,
-    role: 'ADMIN' | 'MEMBER'
+    role: 'ADMIN' | 'DEPUTY' | 'MEMBER'
   ): Promise<{ data?: ChatRoom; error?: string }> {
     return apiService.patch<ChatRoom>(`/chat-rooms/${roomId}/participants/${userId}/role`, { role });
   }
