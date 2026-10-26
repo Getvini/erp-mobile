@@ -16,11 +16,13 @@ import { getSafeAudio } from '@/utils/safeAudio';
 interface AudioMessagePlayerProps {
   uri: string;
   isMe?: boolean;
+  onLongPress?: () => void;
 }
 
 const AudioMessagePlayerComponent: React.FC<AudioMessagePlayerProps> = ({
   uri,
   isMe = false,
+  onLongPress,
 }) => {
   const soundRef = useRef<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -144,7 +146,12 @@ const AudioMessagePlayerComponent: React.FC<AudioMessagePlayerProps> = ({
         )}
       </TouchableOpacity>
 
-      <View style={styles.waveformWrap}>
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onLongPress={onLongPress}
+        delayLongPress={250}
+        style={styles.waveformWrap}
+      >
         <View style={[styles.trackBar, { backgroundColor: trackBgColor }]}>
           <View
             style={[
@@ -162,7 +169,7 @@ const AudioMessagePlayerComponent: React.FC<AudioMessagePlayerProps> = ({
             {durationMillis > 0 ? formatMillis(durationMillis) : 'Ghi âm'}
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
     </View>
   );
 };

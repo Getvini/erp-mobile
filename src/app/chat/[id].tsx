@@ -46,6 +46,7 @@ import {
 } from '@/utils/chatComposerTokens';
 import { buildRemoteChatAttachment } from '@/utils/chatAttachments';
 import { formatReplyPreview } from '@/utils/chatTokenHelper';
+import { isAudioSupported } from '@/utils/safeAudio';
 import {
   validateChatFile,
   MAX_CHAT_FILE_SIZE_MB,
@@ -1682,6 +1683,13 @@ export default function ChatDetailScreen() {
           <TouchableOpacity
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+              if (!isAudioSupported()) {
+                Alert.alert(
+                  'Ghi âm giọng nói',
+                  'Bản dựng ứng dụng hiện tại chưa tích hợp module ghi âm native (ExponentAV). Bạn có thể gửi file âm thanh (.m4a, .mp3) qua tính năng đính kèm tệp.'
+                );
+                return;
+              }
               setIsRecordingVoice(true);
             }}
             hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}

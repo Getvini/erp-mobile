@@ -65,6 +65,7 @@ interface ChatFileAttachmentCardProps {
   createdAt?: string;
   isMe: boolean;
   formatTime: (date?: string) => string;
+  onLongPress?: () => void;
 }
 
 const ChatFileAttachmentCard: React.FC<ChatFileAttachmentCardProps> = ({
@@ -72,6 +73,7 @@ const ChatFileAttachmentCard: React.FC<ChatFileAttachmentCardProps> = ({
   createdAt,
   isMe,
   formatTime,
+  onLongPress,
 }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rawFile = file as any;
@@ -91,7 +93,11 @@ const ChatFileAttachmentCard: React.FC<ChatFileAttachmentCardProps> = ({
   };
 
   return (
-    <View
+    <TouchableOpacity
+      activeOpacity={0.92}
+      onPress={handleOpen}
+      onLongPress={onLongPress}
+      delayLongPress={250}
       style={{
         width: '100%',
         minWidth: 260,
@@ -106,9 +112,7 @@ const ChatFileAttachmentCard: React.FC<ChatFileAttachmentCardProps> = ({
       {/* Top Row: Folded Badge + Name & Size + 2 Action Buttons */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         {/* Folded Badge */}
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={handleOpen}
+        <View
           style={{
             width: 42,
             height: 46,
@@ -143,14 +147,10 @@ const ChatFileAttachmentCard: React.FC<ChatFileAttachmentCardProps> = ({
           >
             {fileMeta.label}
           </Text>
-        </TouchableOpacity>
+        </View>
 
         {/* File Name & Size */}
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={handleOpen}
-          style={{ flex: 1, minWidth: 90, paddingRight: 4, justifyContent: 'center' }}
-        >
+        <View style={{ flex: 1, minWidth: 90, paddingRight: 4, justifyContent: 'center' }}>
           <Text
             numberOfLines={1}
             ellipsizeMode="middle"
@@ -168,13 +168,14 @@ const ChatFileAttachmentCard: React.FC<ChatFileAttachmentCardProps> = ({
               {sizeText}
             </Text>
           )}
-        </TouchableOpacity>
+        </View>
 
         {/* 2 Action Buttons: Folder & Download */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={handleOpen}
+            onLongPress={onLongPress}
             hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
             style={{
               width: 32,
@@ -190,6 +191,7 @@ const ChatFileAttachmentCard: React.FC<ChatFileAttachmentCardProps> = ({
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={handleOpen}
+            onLongPress={onLongPress}
             hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
             style={{
               width: 32,
@@ -211,7 +213,7 @@ const ChatFileAttachmentCard: React.FC<ChatFileAttachmentCardProps> = ({
           <Text style={{ fontSize: 10.5, color: '#94A3B8' }}>{timeText}</Text>
         </View>
       )}
-    </View>
+    </TouchableOpacity>
   );
 };
 
@@ -584,6 +586,11 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
     }, 150);
   };
 
+  const handleTriggerActionSheet = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setShowActionSheet(true);
+  };
+
   return (
     <Swipeable
       ref={swipeableRef}
@@ -676,10 +683,7 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
             Haptics.selectionAsync().catch(() => {});
             setShowTimestamp((prev) => !prev);
           }}
-          onLongPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            setShowActionSheet(true);
-          }}
+          onLongPress={handleTriggerActionSheet}
           style={{
             alignSelf: isMe ? 'flex-end' : 'flex-start',
             width: isPureAttachment && hasNonImageAttachment ? '100%' : undefined,
@@ -727,6 +731,8 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
                   onJumpToMessage?.(String(targetId));
                 }
               }}
+              onLongPress={handleTriggerActionSheet}
+              delayLongPress={250}
               style={{
                 backgroundColor: (!isPureAttachment && isMe) ? 'rgba(0,0,0,0.12)' : '#F1F5F9',
                 borderLeftWidth: 3,
@@ -784,7 +790,11 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
                 if (isAudio && att.url) {
                   return (
                     <View key={idx} style={{ marginVertical: 2 }}>
-                      <AudioMessagePlayer uri={att.url} isMe={isMe} />
+                      <AudioMessagePlayer
+                        uri={att.url}
+                        isMe={isMe}
+                        onLongPress={handleTriggerActionSheet}
+                      />
                     </View>
                   );
                 }
@@ -799,6 +809,8 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
                       key={idx}
                       activeOpacity={0.85}
                       onPress={() => setPreviewImageUri(att.url)}
+                      onLongPress={handleTriggerActionSheet}
+                      delayLongPress={250}
                       style={{
                         borderRadius: 14,
                         overflow: 'hidden',
@@ -821,6 +833,7 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
                     createdAt={message.createdAt}
                     isMe={isMe}
                     formatTime={formatTime}
+                    onLongPress={handleTriggerActionSheet}
                   />
                 );
               })}
