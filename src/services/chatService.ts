@@ -1,4 +1,5 @@
 import { apiService } from './api';
+import { uploadToCloudinary, PickedFile } from './cloudinaryService';
 
 export interface ChatAttachment {
   url: string;
@@ -102,11 +103,13 @@ class ChatService {
   async sendMessage(
     roomId: string,
     content: string,
-    attachments: any[] = []
+    attachments: any[] = [],
+    replyToId?: string | null
   ): Promise<{ data?: ChatMessage; error?: string }> {
     return apiService.post<ChatMessage>(`/chat-rooms/${roomId}/messages`, {
       content,
       attachments,
+      replyToId: replyToId || undefined,
     });
   }
 
@@ -214,9 +217,17 @@ class ChatService {
   }
 
   async uploadChatAttachment(
-    formData: FormData
+    file: PickedFile,
+    folder: string = 'GETVINI/ERP/chat/attachments',
+    onProgress?: (progressPercent: number) => void
   ): Promise<{ data?: { url: string; secure_url?: string }; error?: string }> {
-    return apiService.postForm<{ url: string; secure_url?: string }>('/assets/upload', formData);
+    try {
+      const uploaded = await uploadToCloudinary(file, folder, onProgress);
+      return { data: { url: uploaded.url, secure_url: uploaded.url } };
+    } catch (err: any) {
+      console.error('[chatService] Lỗi upload tệp lên Cloudinary:', err);
+      return { error: err.message || 'Lỗi khi tải tệp lên Cloudinary' };
+    }
   }
 }
 

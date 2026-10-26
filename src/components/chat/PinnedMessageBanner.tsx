@@ -4,6 +4,7 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { ChatMessage } from '@/services/chatService';
 import { BrandColors } from '@/constants/colors';
+import { formatReplyPreview } from '@/utils/chatTokenHelper';
 
 interface PinnedMessageBannerProps {
   pinnedMessages: ChatMessage[];
@@ -43,7 +44,7 @@ export const PinnedMessageBanner: React.FC<PinnedMessageBannerProps> = ({
             <Text style={styles.sender}>
               {latestPinned.sender?.fullName || 'Thành viên'}:{' '}
             </Text>
-            {latestPinned.content || '[Tệp đính kèm]'}
+            {formatReplyPreview(latestPinned)}
           </Text>
         </View>
       </TouchableOpacity>

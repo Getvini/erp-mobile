@@ -13,6 +13,7 @@ import * as Haptics from 'expo-haptics';
 import { ChatMessage } from '@/services/chatService';
 import { BrandColors } from '@/constants/colors';
 import { formatDateToDDMMYYYY } from '@/utils/formatters';
+import { formatReplyPreview } from '@/utils/chatTokenHelper';
 
 interface PinnedMessagesModalProps {
   visible: boolean;
@@ -93,7 +94,7 @@ export const PinnedMessagesModal: React.FC<PinnedMessagesModalProps> = ({
                       </Text>
                     </View>
                     <Text style={styles.itemContent} numberOfLines={3}>
-                      {item.content || '[Tệp đính kèm]'}
+                      {formatReplyPreview(item)}
                     </Text>
                   </TouchableOpacity>
 

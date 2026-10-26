@@ -132,17 +132,17 @@ export default function ChatRoomInfoScreen() {
         setIsUpdatingAvatar(true);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-        const formData = new FormData();
         const filename = asset.fileName || `avatar_${Date.now()}.jpg`;
         const mimeType = asset.mimeType || 'image/jpeg';
-        // @ts-ignore
-        formData.append('file', {
-          uri: asset.uri,
-          name: filename,
-          type: mimeType,
-        });
 
-        const uploadRes = await chatService.uploadChatAttachment(formData);
+        const uploadRes = await chatService.uploadChatAttachment(
+          {
+            uri: asset.uri,
+            name: filename,
+            mimeType,
+          },
+          'GETVINI/ERP/chat/avatars'
+        );
         if (uploadRes.data?.url) {
           await chatService.updateRoom(roomId, { avatarUrl: uploadRes.data.url });
           await fetchRooms();

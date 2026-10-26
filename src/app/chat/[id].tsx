@@ -45,6 +45,7 @@ import {
   serializeComposerContent,
 } from '@/utils/chatComposerTokens';
 import { buildRemoteChatAttachment } from '@/utils/chatAttachments';
+import { formatReplyPreview } from '@/utils/chatTokenHelper';
 import {
   validateChatFile,
   MAX_CHAT_FILE_SIZE_MB,
@@ -603,44 +604,32 @@ export default function ChatDetailScreen() {
       const attachmentsPayload: any[] = [];
 
       for (const file of toSendFiles) {
-        const formData = new FormData();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (formData as any).append('file', {
-          uri: file.uri,
-          name: file.name,
-          type: file.type || 'application/octet-stream',
-        });
-
-        try {
-          const uploadRes = await chatService.uploadChatAttachment(formData);
-          if (uploadRes.data?.url) {
-            attachmentsPayload.push({
-              url: uploadRes.data.url,
-              name: file.name,
-              type: file.type,
-              size: file.size,
-            });
-          } else {
-            attachmentsPayload.push({
-              url: file.uri,
-              name: file.name,
-              type: file.type,
-              size: file.size,
-            });
-          }
-        } catch {
-          attachmentsPayload.push({
-            url: file.uri,
+        const folder = file.isImage ? 'GETVINI/ERP/chat/images' : 'GETVINI/ERP/chat/attachments';
+        const uploadRes = await chatService.uploadChatAttachment(
+          {
+            uri: file.uri,
             name: file.name,
-            type: file.type,
+            mimeType: file.type || 'application/octet-stream',
             size: file.size,
-          });
+          },
+          folder
+        );
+
+        if (!uploadRes.data?.url) {
+          throw new Error(uploadRes.error || `Tải tệp "${file.name}" lên máy chủ thất bại.`);
         }
+
+        attachmentsPayload.push({
+          url: uploadRes.data.url,
+          name: file.name,
+          type: file.isImage ? 'image' : (file.type || 'file'),
+          size: file.size,
+        });
       }
 
       await sendMessage(id, trimmed, attachmentsPayload, replyingToMessage?.id);
-    } catch {
-      Alert.alert('Lỗi', 'Không thể tải tệp lên hoặc gửi tin nhắn.');
+    } catch (err: any) {
+      Alert.alert('Lỗi gửi tệp', err.message || 'Không thể tải tệp lên hoặc gửi tin nhắn.');
     } finally {
       setIsUploading(false);
     }
@@ -650,8 +639,9 @@ export default function ChatDetailScreen() {
     return id ? pinnedMessagesMap[id] || [] : [];
   }, [pinnedMessagesMap, id]);
 
-  const handleScrollToMessage = (targetMsg: ChatMessage) => {
-    const idx = messages.findIndex((m) => String(m.id) === String(targetMsg.id));
+  const handleScrollToMessage = useCallback((targetMsgOrId: ChatMessage | string) => {
+    const targetId = typeof targetMsgOrId === 'string' ? targetMsgOrId : targetMsgOrId.id;
+    const idx = messages.findIndex((m) => String(m.id) === String(targetId));
     if (idx !== -1 && flatListRef.current) {
       try {
         flatListRef.current.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
@@ -659,29 +649,32 @@ export default function ChatDetailScreen() {
         flatListRef.current.scrollToEnd({ animated: true });
       }
     }
-  };
+  }, [messages]);
 
   const handleSendAudio = async (uri: string, durationSeconds: number) => {
     if (!id) return;
     try {
       setIsUploading(true);
-      const formData = new FormData();
       const filename = `voice_${Date.now()}.m4a`;
-      // @ts-ignore
-      formData.append('file', {
-        uri,
-        name: filename,
-        type: 'audio/m4a',
-      });
+      const uploadRes = await chatService.uploadChatAttachment(
+        {
+          uri,
+          name: filename,
+          mimeType: 'audio/m4a',
+        },
+        'GETVINI/ERP/chat/audio'
+      );
 
-      const res = await chatService.uploadChatAttachment(formData);
-      const audioUrl = res.data?.url || uri;
+      if (!uploadRes.data?.url) {
+        throw new Error(uploadRes.error || 'Tải tin nhắn thoại lên máy chủ thất bại.');
+      }
+
       await sendMessage(
         id,
         '',
         [
           {
-            url: audioUrl,
+            url: uploadRes.data.url,
             name: `Tin nhắn thoại (${durationSeconds}s)`,
             type: 'audio/m4a',
           },
@@ -690,8 +683,8 @@ export default function ChatDetailScreen() {
       );
       setReplyingToMessage(null);
       setIsRecordingVoice(false);
-    } catch {
-      Alert.alert('Lỗi', 'Không thể tải tin nhắn thoại lên.');
+    } catch (err: any) {
+      Alert.alert('Lỗi', err.message || 'Không thể tải tin nhắn thoại lên.');
     } finally {
       setIsUploading(false);
     }
@@ -908,6 +901,7 @@ export default function ChatDetailScreen() {
             onRecall={handleRecallMessage}
             onPin={handlePinMessage}
             onReact={handleReactMessage}
+            onJumpToMessage={handleScrollToMessage}
           />
         </View>
       );
@@ -924,6 +918,7 @@ export default function ChatDetailScreen() {
       handleRecallMessage,
       handlePinMessage,
       handleReactMessage,
+      handleScrollToMessage,
     ]
   );
 
@@ -1597,7 +1592,7 @@ export default function ChatDetailScreen() {
                 Đang trả lời {replyingToMessage.sender?.fullName || replyingToMessage.sender?.username || 'Tin nhắn'}
               </Text>
               <Text numberOfLines={1} style={{ fontSize: 12, color: '#475569' }}>
-                {replyingToMessage.content || (replyingToMessage.attachments?.length ? '[Tệp đính kèm]' : '...')}
+                {formatReplyPreview(replyingToMessage)}
               </Text>
             </View>
           </View>

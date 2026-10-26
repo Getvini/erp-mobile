@@ -15,6 +15,8 @@ import { ChatMessage } from '@/services/chatService';
 import { BrandColors } from '@/constants/colors';
 import {
   parseChatTokens,
+  stripChatTokens,
+  formatReplyPreview,
   formatSystemMessage,
   ChatTokenSegment,
 } from '@/utils/chatTokenHelper';
@@ -238,6 +240,7 @@ interface ChatMessageItemProps {
   onRecall?: (msg: ChatMessage) => void;
   onPin?: (msg: ChatMessage) => void;
   onReact?: (msg: ChatMessage, emoji: string) => void;
+  onJumpToMessage?: (messageId: string) => void;
 }
 
 const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
@@ -255,6 +258,7 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
   onRecall,
   onPin,
   onReact,
+  onJumpToMessage,
 }) => {
   const router = useRouter();
   const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
@@ -521,7 +525,11 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
   const initial = (senderName || 'T').charAt(0).toUpperCase();
   const hasAttachments = Boolean(message.attachments && message.attachments.length > 0);
   const rawContent = (message.content || '').trim();
-  const isPlaceholderText = rawContent === '[Hình ảnh]' || rawContent === '[Tệp đính kèm]';
+  const isPlaceholderText =
+    rawContent === '[Hình ảnh]' ||
+    rawContent === '[Tệp đính kèm]' ||
+    rawContent.toLowerCase() === '[image]' ||
+    rawContent.toLowerCase() === '[attachment]';
   const hasText = Boolean(rawContent && (!hasAttachments || !isPlaceholderText));
   const tokens = parseChatTokens(rawContent);
   const isSingleTagOnly = tokens.length === 1 && (tokens[0].type === 'user' || tokens[0].type === 'task' || tokens[0].type === 'legacy-task');
@@ -676,19 +684,19 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
             alignSelf: isMe ? 'flex-end' : 'flex-start',
             width: isPureAttachment && hasNonImageAttachment ? '100%' : undefined,
             borderRadius: 16,
-            borderBottomRightRadius: isPureAttachment && hasNonImageAttachment ? 16 : (isMe ? 3 : 16),
-            borderBottomLeftRadius: isPureAttachment && hasNonImageAttachment ? 16 : (!isMe ? 3 : 16),
-            backgroundColor: isPureAttachment && hasNonImageAttachment ? 'transparent' : (isMe ? BrandColors.primary : '#FFFFFF'),
-            paddingHorizontal: isPureAttachment && hasNonImageAttachment ? 0 : (isSingleTagOnly ? 8 : 12),
-            paddingTop: isPureAttachment && hasNonImageAttachment ? 0 : 8,
-            paddingBottom: isPureAttachment && hasNonImageAttachment ? 0 : 6,
-            borderWidth: isPureAttachment && hasNonImageAttachment ? 0 : (isMe ? 0 : 1),
+            borderBottomRightRadius: isPureAttachment ? 16 : (isMe ? 3 : 16),
+            borderBottomLeftRadius: isPureAttachment ? 16 : (!isMe ? 3 : 16),
+            backgroundColor: isPureAttachment ? 'transparent' : (isMe ? BrandColors.primary : '#FFFFFF'),
+            paddingHorizontal: isPureAttachment ? 0 : (isSingleTagOnly ? 8 : 12),
+            paddingTop: isPureAttachment ? 0 : 8,
+            paddingBottom: isPureAttachment ? 0 : 6,
+            borderWidth: isPureAttachment ? 0 : (isMe ? 0 : 1),
             borderColor: '#E2E8F0',
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: isPureAttachment && hasNonImageAttachment ? 0 : 0.05,
-            shadowRadius: isPureAttachment && hasNonImageAttachment ? 0 : 2,
-            elevation: isPureAttachment && hasNonImageAttachment ? 0 : 1,
+            shadowOpacity: isPureAttachment ? 0 : 0.05,
+            shadowRadius: isPureAttachment ? 0 : 2,
+            elevation: isPureAttachment ? 0 : 1,
             gap: 4,
           }}
         >
@@ -710,14 +718,24 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
 
           {/* Khối trích dẫn tin nhắn đang trả lời */}
           {message.replyTo && (
-            <View
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => {
+                const targetId = message.replyToId || message.replyTo?.id;
+                if (targetId) {
+                  Haptics.selectionAsync().catch(() => {});
+                  onJumpToMessage?.(String(targetId));
+                }
+              }}
               style={{
-                backgroundColor: isMe ? 'rgba(0,0,0,0.12)' : '#F1F5F9',
+                backgroundColor: (!isPureAttachment && isMe) ? 'rgba(0,0,0,0.12)' : '#F1F5F9',
                 borderLeftWidth: 3,
-                borderLeftColor: isMe ? '#FFFFFF' : BrandColors.primary,
+                borderLeftColor: (!isPureAttachment && isMe) ? '#FFFFFF' : BrandColors.primary,
+                borderWidth: isPureAttachment ? 1 : 0,
+                borderColor: '#E2E8F0',
                 paddingHorizontal: 8,
                 paddingVertical: 5,
-                borderRadius: 6,
+                borderRadius: 8,
                 marginBottom: 4,
               }}
             >
@@ -726,7 +744,7 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
                 style={{
                   fontSize: 11,
                   fontWeight: '700',
-                  color: isMe ? '#FFFFFF' : BrandColors.primary,
+                  color: (!isPureAttachment && isMe) ? '#FFFFFF' : BrandColors.primary,
                 }}
               >
                 {message.replyTo.sender?.fullName || message.replyTo.sender?.username || 'Tin nhắn gốc'}
@@ -735,13 +753,13 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
                 numberOfLines={2}
                 style={{
                   fontSize: 11,
-                  color: isMe ? 'rgba(255,255,255,0.85)' : '#475569',
+                  color: (!isPureAttachment && isMe) ? 'rgba(255,255,255,0.85)' : '#475569',
                   marginTop: 1,
                 }}
               >
-                {message.replyTo.content || (message.replyTo.attachments?.length ? '[Tệp đính kèm]' : '...')}
+                {formatReplyPreview(message.replyTo)}
               </Text>
-            </View>
+            </TouchableOpacity>
           )}
 
           {/* Text Message */}
@@ -749,7 +767,15 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
 
           {/* Attachments (Ảnh hiện trường hoặc tệp) */}
           {hasAttachments && !message.isRecalled && (
-            <View style={{ gap: 6, marginTop: hasText ? 4 : 0 }}>
+            <View
+              style={{
+                gap: 6,
+                marginTop: hasText ? 6 : 0,
+                borderTopWidth: hasText && isMe ? 1 : 0,
+                borderTopColor: 'rgba(255,255,255,0.25)',
+                paddingTop: hasText && isMe ? 4 : 0,
+              }}
+            >
               {message.attachments!.map((att, idx) => {
                 const isAudio =
                   att.type?.includes('audio') ||
@@ -774,14 +800,14 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
                       activeOpacity={0.85}
                       onPress={() => setPreviewImageUri(att.url)}
                       style={{
-                        borderRadius: 10,
+                        borderRadius: 14,
                         overflow: 'hidden',
                         backgroundColor: '#F1F5F9',
                       }}
                     >
                       <Image
                         source={{ uri: att.url }}
-                        style={{ width: 200, height: 150, borderRadius: 10 }}
+                        style={{ width: 220, height: 165, borderRadius: 14 }}
                         resizeMode="cover"
                       />
                     </TouchableOpacity>

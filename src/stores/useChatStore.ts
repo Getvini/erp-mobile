@@ -437,7 +437,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // Fallback gọi REST nếu socket không khả dụng hoặc timeout
     const sendViaRest = async () => {
       try {
-        const res = await chatService.sendMessage(roomId, trimmed, attachments);
+        const res = await chatService.sendMessage(
+          roomId,
+          trimmed,
+          attachments,
+          targetReplyTo
+        );
         if (res.data) {
           set((state) => ({
             messages: {
