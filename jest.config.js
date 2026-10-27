@@ -9,6 +9,8 @@ module.exports = {
     '^react-native$': '<rootDir>/test/__mocks__/react-native.js',
     '^expo-secure-store$': '<rootDir>/test/__mocks__/expo-secure-store.js',
     '^expo-local-authentication$': '<rootDir>/test/__mocks__/expo-local-authentication.js',
+    '^expo-haptics$': '<rootDir>/test/__mocks__/expo-haptics.js',
+    '^@expo/vector-icons$': '<rootDir>/test/__mocks__/expo-vector-icons.js',
     '^@react-native-async-storage/async-storage$': '<rootDir>/test/__mocks__/@react-native-async-storage/async-storage.js',
   },
   transform: {

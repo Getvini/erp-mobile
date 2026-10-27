@@ -19,6 +19,7 @@ import { useLoginMutation } from '@/hooks/queries';
 import { STORAGE_REMEMBER_KEY } from '@/services/api';
 import { privateStorage } from '@/services/secureStorage';
 import { authService, BiometricStatus } from '@/services/authService';
+import { AppButton } from '@/components/common/AppButton';
 
 const bg = require('@/assets/images/bg.jpg');
 const logo = require('@/assets/images/logo.png');
@@ -292,25 +293,16 @@ export default function LoginScreen() {
 
               {/* Submit Button & Biometric Quick Button (Option A) */}
               <View className="mt-1.5 flex-row items-center gap-2.5">
-                <TouchableOpacity
-                  className={`h-[50px] flex-1 items-center justify-center rounded-[10px] bg-primary shadow-md ${
-                    isLoading || isBiometricLoading ? 'opacity-60' : ''
-                  }`}
-                  onPress={handleSubmit}
-                  disabled={isLoading || isBiometricLoading}
-                  activeOpacity={0.9}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: isLoading || isBiometricLoading }}
-                >
-                  {isLoading ? (
-                    <View className="flex-row items-center justify-center gap-2">
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                      <Text className="text-base font-bold text-white">Đang đăng nhập...</Text>
-                    </View>
-                  ) : (
-                    <Text className="text-base font-bold text-white">Đăng nhập</Text>
-                  )}
-                </TouchableOpacity>
+                <View className="flex-1">
+                  <AppButton
+                    title="Đăng nhập"
+                    variant="primary"
+                    size="lg"
+                    loading={isLoading}
+                    disabled={isLoading || isBiometricLoading}
+                    onPress={handleSubmit}
+                  />
+                </View>
 
                 {isBiometricAvailable && (
                   <TouchableOpacity

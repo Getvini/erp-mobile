@@ -48,8 +48,8 @@ export const Step6RequirementsAttachments: React.FC = () => {
   return (
     <View className="bg-white rounded-[14px] p-[16px] border border-slate-200">
       <View className="flex-row items-center mb-[16px] gap-[12px]">
-        <View style={{ backgroundColor: '#EDE9FE' }} className="w-[30px] h-[30px] rounded-[15px] justify-center items-center">
-          <Text style={{ color: '#7C3AED' }} className="text-[14px] font-bold">5</Text>
+        <View style={{ backgroundColor: '#FFF7ED' }} className="w-[30px] h-[30px] rounded-[15px] justify-center items-center border border-[#FDCB9E]">
+          <Text style={{ color: '#F38820' }} className="text-[14px] font-bold">6</Text>
         </View>
         <View>
           <Text className="text-[15px] font-bold text-slate-900">Yêu cầu & Tài liệu</Text>
@@ -63,10 +63,10 @@ export const Step6RequirementsAttachments: React.FC = () => {
         <TouchableOpacity
           onPress={() => addLink()}
           activeOpacity={0.7}
-          className="flex-row items-center px-[8px] py-[5px] rounded-[6px] bg-blue-50 gap-[4px]"
+          className="flex-row items-center px-[8px] py-[5px] rounded-[6px] bg-[#FFF7ED] border border-[#FDCB9E] gap-[4px]"
         >
-          <Feather name="plus" size={14} color={BrandColors.primary} />
-          <Text className="text-[12px] font-semibold text-blue-600">Thêm link</Text>
+          <Feather name="plus" size={14} color="#D97010" />
+          <Text className="text-[12px] font-semibold text-[#D97010]">Thêm link</Text>
         </TouchableOpacity>
       </View>
 

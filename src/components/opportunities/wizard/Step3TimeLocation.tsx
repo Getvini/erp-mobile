@@ -86,8 +86,8 @@ export const Step3TimeLocation: React.FC = () => {
   return (
     <View className="bg-white rounded-[14px] p-[16px] border border-slate-200">
       <View className="flex-row items-center mb-[16px] gap-[12px]">
-        <View style={{ backgroundColor: '#F3E8FF' }} className="w-[30px] h-[30px] rounded-[15px] justify-center items-center">
-          <Text style={{ color: '#9333EA' }} className="text-[14px] font-bold">3</Text>
+        <View style={{ backgroundColor: '#EFF6FF' }} className="w-[30px] h-[30px] rounded-[15px] justify-center items-center">
+          <Text style={{ color: '#3B82F6' }} className="text-[14px] font-bold">3</Text>
         </View>
         <View>
           <Text className="text-[15px] font-bold text-slate-900">Thời gian & Địa điểm</Text>

@@ -9,6 +9,7 @@
     "@react-native-async-storage/async-storage": "2.2.0",
     "@shopify/flash-list": "2.0.2",
     "@tanstack/react-query": "^5.102.8",
+    "decimal.js": "^10.6.0",
     "expo": "~57.0.31",
     "expo-asset": "~57.0.20",
     "expo-audio": "~57.0.5",

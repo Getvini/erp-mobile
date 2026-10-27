@@ -201,6 +201,7 @@ export default function CreateOpportunityScreen() {
         .map((s: any) => ({
           serviceId: s.serviceId || s.service?.id || s.id || '',
           quantity: Number(s.quantity) || 1,
+          budget: Number(s.budget) || 0,
         }));
 
       const mappedPackages = (clonedOpp.packages || []).map((pkg: any) => ({
@@ -216,6 +217,7 @@ export default function CreateOpportunityScreen() {
         services: (pkg.services || pkg.items || []).map((s: any) => ({
           serviceId: s.serviceId || s.service?.id || '',
           quantity: Number(s.quantity) || 1,
+          budget: Number(s.budget) || 0,
           sellingPrice: Number(s.sellingPrice ?? s.service?.costPrice ?? 0),
         })),
       }));
@@ -288,6 +290,7 @@ export default function CreateOpportunityScreen() {
         .map((s: any) => ({
           serviceId: s.serviceId || s.service?.id || s.id || '',
           quantity: Number(s.quantity) || 1,
+          budget: Number(s.budget) || 0,
         }));
 
       const mappedPackages = (oppToEdit.packages || []).map((pkg: any) => ({
@@ -303,6 +306,7 @@ export default function CreateOpportunityScreen() {
         services: (pkg.services || pkg.items || []).map((s: any) => ({
           serviceId: s.serviceId || s.service?.id || '',
           quantity: Number(s.quantity) || 1,
+          budget: Number(s.budget) || 0,
           sellingPrice: Number(s.sellingPrice ?? s.service?.costPrice ?? 0),
         })),
       }));
@@ -507,6 +511,7 @@ export default function CreateOpportunityScreen() {
         .map((s) => ({
           id: s.serviceId,
           quantity: Number(s.quantity) || 1,
+          budget: Number(s.budget || 0),
           jobs: s.jobs || [],
         }));
 
@@ -522,6 +527,7 @@ export default function CreateOpportunityScreen() {
             .map((s) => ({
               serviceId: s.serviceId,
               quantity: Number(s.quantity) || 1,
+              budget: Number(s.budget || 0),
               sellingPrice: s.sellingPrice,
               jobs: s.jobs || [],
             })),
@@ -675,10 +681,10 @@ export default function CreateOpportunityScreen() {
             <TouchableOpacity
               onPress={handleManualSaveDraft}
               activeOpacity={0.7}
-              className="flex-row items-center px-[10px] py-[6px] rounded-[8px] bg-blue-50 gap-[4px]"
+              className="flex-row items-center px-[10px] py-[6px] rounded-[8px] bg-[#FFF7ED] border border-[#FDCB9E] gap-[4px]"
             >
-              <Feather name="save" size={15} color={BrandColors.primary} />
-              <Text className="text-[12px] font-semibold text-blue-600">Lưu nháp</Text>
+              <Feather name="save" size={15} color="#D97010" />
+              <Text className="text-[12px] font-bold text-[#D97010]">Lưu nháp</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -764,10 +770,10 @@ export default function CreateOpportunityScreen() {
             <TouchableOpacity
               onPress={handleManualSaveDraft}
               activeOpacity={0.8}
-              className="flex-1 flex-row items-center justify-center py-[12px] rounded-[10px] bg-slate-100 border border-slate-200 gap-[6px]"
+              className="flex-1 flex-row items-center justify-center py-[12px] rounded-[10px] bg-[#FFF7ED] border border-[#FDCB9E] gap-[6px]"
             >
-              <Feather name="save" size={16} color="#475569" />
-              <Text className="text-[13px] font-semibold text-slate-600">Lưu nháp</Text>
+              <Feather name="save" size={16} color="#D97010" />
+              <Text className="text-[13px] font-bold text-[#D97010]">Lưu nháp</Text>
             </TouchableOpacity>
           )}
 
@@ -776,7 +782,7 @@ export default function CreateOpportunityScreen() {
             disabled={isSaving}
             activeOpacity={0.85}
             className={[
-              'flex-[2] flex-row items-center justify-center py-[12px] rounded-[10px] bg-emerald-600 gap-[6px]',
+              'flex-[2] flex-row items-center justify-center py-[12px] rounded-[10px] bg-[#F38820] gap-[6px]',
               isSaving && 'opacity-[0.6]',
             ]
               .filter(Boolean)

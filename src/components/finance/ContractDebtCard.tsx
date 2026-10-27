@@ -14,6 +14,7 @@ import {
   DEBT_STATUS_LABELS,
 } from '@/services/debtService';
 import { formatVND, formatDateToDDMMYYYY } from '@/utils/formatters';
+import { StatusBadge } from '@/components/common/StatusBadge';
 
 export interface ContractDebtCardProps {
   debt: Debt;
@@ -121,16 +122,7 @@ export const ContractDebtCard: React.FC<ContractDebtCardProps> = ({
           </View>
         </View>
 
-        <View
-          style={[
-            styles.statusBadge,
-            { backgroundColor: statusConfig.bg, borderColor: statusConfig.border },
-          ]}
-        >
-          <Text style={[styles.statusBadgeText, { color: statusConfig.color }]}>
-            {statusLabel}
-          </Text>
-        </View>
+        <StatusBadge domain="debt" status={isOverdue ? 'OVERDUE' : debt.status} size="sm" />
       </View>
 
       {/* 2. Body Card: Số tiền & Progress Bar */}

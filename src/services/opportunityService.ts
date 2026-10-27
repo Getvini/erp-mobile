@@ -217,6 +217,7 @@ export interface CreateOpportunityPayload {
   services?: Array<{
     id: string;
     quantity: number;
+    budget?: number;
     jobs?: Array<{
       jobId: string;
       name?: string;
@@ -234,6 +235,7 @@ export interface CreateOpportunityPayload {
       serviceId: string;
       quantity: number;
       sellingPrice?: number;
+      budget?: number;
       jobs?: Array<{
         jobId: string;
         name?: string;
