@@ -28,7 +28,7 @@ import {
 import {
   QuotationDetailResponse,
 } from '@/services/quotationService';
-import { OpportunityItem } from '@/services/opportunityService';
+import { OpportunityItem, getServiceTheme } from '@/services/opportunityService';
 import {
   formatNumber,
   formatNumberInput,
@@ -151,6 +151,7 @@ export default function QuotationCreateEditScreen() {
     if (!isEditMode && !servicesRes) return;
 
     const srvList = Array.isArray(allServicesRes) ? allServicesRes : (allServicesRes as any)?.data || [];
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAvailableServices(srvList);
 
     const pkgList = Array.isArray(pkgTemplatesRes) ? pkgTemplatesRes : (pkgTemplatesRes as any)?.data || [];
@@ -338,40 +339,39 @@ export default function QuotationCreateEditScreen() {
   // Handle custom price change for a PACKAGE (proportional redistribution)
   const handlePackageCustomPriceChange = (packageKey: string, valStr: string) => {
     const totalPrice = parseNumberInput(valStr);
-    setItems((prev) =>
-      {
-        const indexes = prev.reduce<number[]>((result, item, index) => (
-          String(item.packageKey || item.servicePackageId || item.packageName) === String(packageKey)
-            ? [...result, index]
-            : result
-        ), []);
-        if (indexes.length === 0) return prev;
-        const weights = indexes.map((index) => {
-          const item = prev[index];
-          return Number(item.recommendedPrice || item.costPrice || 1) * Number(item.norm || 1);
-        });
-        const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
-        let allocated = 0;
+    setItems((prev) => {
+      const indexes = prev.reduce<number[]>((result, item, index) => (
+        String(item.packageKey || item.servicePackageId || item.packageName) === String(packageKey)
+          ? [...result, index]
+          : result
+      ), []);
+      if (indexes.length === 0) return prev;
+      const weights = indexes.map((index) => {
+        const item = prev[index];
+        return Number(item.recommendedPrice || item.costPrice || 1) * Number(item.norm || 1);
+      });
+      const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+      let allocated = 0;
 
-        return prev.map((item, index) => {
-          const position = indexes.indexOf(index);
-          if (position < 0) return item;
-          const linePrice = position === indexes.length - 1
-            ? Math.max(0, totalPrice - allocated)
-            : Math.round(totalPrice * (totalWeight > 0 ? weights[position] / totalWeight : 1 / indexes.length));
-          allocated += linePrice;
-          const newCustomPrice = linePrice / Number(item.norm || 1);
-          return {
-            ...item,
-            customPrice: newCustomPrice,
-            selectedPrice: priceType === 'custom' ? newCustomPrice : item.selectedPrice,
-            profitMargin:
-              priceType === 'custom'
-                ? calculateProfitMargin(newCustomPrice, item.costPrice, item.budget)
-                : item.profitMargin,
-          };
-        });
-      }
+      return prev.map((item, index) => {
+        const position = indexes.indexOf(index);
+        if (position < 0) return item;
+        const linePrice = position === indexes.length - 1
+          ? Math.max(0, totalPrice - allocated)
+          : Math.round(totalPrice * (totalWeight > 0 ? weights[position] / totalWeight : 1 / indexes.length));
+        allocated += linePrice;
+        const newCustomPrice = linePrice / Number(item.norm || 1);
+        return {
+          ...item,
+          customPrice: newCustomPrice,
+          selectedPrice: priceType === 'custom' ? newCustomPrice : item.selectedPrice,
+          profitMargin:
+            priceType === 'custom'
+              ? calculateProfitMargin(newCustomPrice, item.costPrice, item.budget)
+              : item.profitMargin,
+        };
+      });
+    }
     );
   };
 
@@ -717,13 +717,13 @@ export default function QuotationCreateEditScreen() {
                 style={
                   priceType === 'minimum'
                     ? {
-                        backgroundColor: '#FFFFFF',
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 1 },
-                        shadowOpacity: 0.08,
-                        shadowRadius: 2,
-                        elevation: 2,
-                      }
+                      backgroundColor: '#FFFFFF',
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowOpacity: 0.08,
+                      shadowRadius: 2,
+                      elevation: 2,
+                    }
                     : undefined
                 }
                 onPress={() => handlePriceTypeChange('minimum')}
@@ -744,13 +744,13 @@ export default function QuotationCreateEditScreen() {
                 style={
                   priceType === 'recommended'
                     ? {
-                        backgroundColor: '#FFFFFF',
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 1 },
-                        shadowOpacity: 0.08,
-                        shadowRadius: 2,
-                        elevation: 2,
-                      }
+                      backgroundColor: '#FFFFFF',
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowOpacity: 0.08,
+                      shadowRadius: 2,
+                      elevation: 2,
+                    }
                     : undefined
                 }
                 onPress={() => handlePriceTypeChange('recommended')}
@@ -771,13 +771,13 @@ export default function QuotationCreateEditScreen() {
                 style={
                   priceType === 'custom'
                     ? {
-                        backgroundColor: '#FFFFFF',
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 1 },
-                        shadowOpacity: 0.08,
-                        shadowRadius: 2,
-                        elevation: 2,
-                      }
+                      backgroundColor: '#FFFFFF',
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowOpacity: 0.08,
+                      shadowRadius: 2,
+                      elevation: 2,
+                    }
                     : undefined
                 }
                 onPress={() => handlePriceTypeChange('custom')}
@@ -796,13 +796,13 @@ export default function QuotationCreateEditScreen() {
           {displayGroups.packages.map((pkg) => {
             const isExpanded = !!expandedPackages[pkg.key];
             return (
-              <View key={pkg.key} className="mb-3 rounded-[14px] border border-slate-200 bg-white p-3.5">
+              <View key={pkg.key} className="mb-3 rounded-[14px] border border-[#FDCB9E]/80 bg-white p-3.5 shadow-xs">
                 <View className="mb-2.5 flex-row items-start justify-between">
                   <View className="flex-1">
                     <View className="gap-1">
-                      <View className="self-start flex-row items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5">
-                        <Feather name="package" size={12} color="#2563EB" />
-                        <Text className="text-[10px] font-extrabold text-blue-600">GÓI DỊCH VỤ</Text>
+                      <View className="self-start flex-row items-center gap-1 rounded-md bg-[#FFF7ED] border border-[#FDCB9E] px-2 py-0.5">
+                        <Feather name="package" size={12} color="#D97010" />
+                        <Text className="text-[10px] font-extrabold text-[#D97010]">GÓI DỊCH VỤ</Text>
                       </View>
                       <Text className="text-[15px] font-bold text-slate-900">{pkg.name}</Text>
                     </View>
@@ -840,7 +840,7 @@ export default function QuotationCreateEditScreen() {
 
                 {/* Package Unit Price */}
                 <View className="flex-row items-center justify-between border-t border-slate-100 py-2">
-                  <Text className="text-[13px] font-semibold text-slate-600">Đơn giá gói (VNĐ):</Text>
+                  <Text className="text-[13px] font-semibold text-slate-600">Giá bán gói (VNĐ):</Text>
                   {priceType === 'custom' ? (
                     <TextInput
                       className="min-w-[140px] rounded-lg border border-orange-500 bg-orange-50 px-2.5 py-1.5 text-right text-sm font-bold text-slate-900"
@@ -879,9 +879,7 @@ export default function QuotationCreateEditScreen() {
                       Đang áp dụng: {formatNumber(pkg.selectedPrice)} ₫
                     </Text>
                     <Text
-                      className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
-                        pkg.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                      }`}
+                      className="rounded-md px-2 py-0.5 text-[11px] font-bold bg-[#FFF7ED] text-[#D97010] border border-[#FDCB9E]"
                     >
                       Tỉ suất lợi nhuận: {pkg.profitMargin.toFixed(0)}%
                     </Text>
@@ -896,7 +894,7 @@ export default function QuotationCreateEditScreen() {
 
                 {/* Toggle Accordion Sub-items */}
                 <TouchableOpacity
-                  className="mt-1.5 flex-row items-center justify-center gap-1 rounded-lg bg-slate-50 py-2"
+                  className="mt-2 flex-row items-center justify-center gap-1.5 rounded-xl bg-[#FFF7ED] border border-[#FDCB9E] py-2.5"
                   onPress={() =>
                     setExpandedPackages((prev) => ({
                       ...prev,
@@ -905,77 +903,92 @@ export default function QuotationCreateEditScreen() {
                   }
                   activeOpacity={0.7}
                 >
-                  <Text className="text-xs font-semibold text-emerald-600">
+                  <Text className="text-xs font-bold text-[#D97010]">
                     {isExpanded ? 'Thu gọn dịch vụ con' : `Xem ${pkg.items.length} dịch vụ con`}
                   </Text>
                   <Feather
                     name={isExpanded ? 'chevron-up' : 'chevron-down'}
                     size={16}
-                    color="#059669"
+                    color="#D97010"
                   />
                 </TouchableOpacity>
 
                 {isExpanded && (
-                  <View className="mt-2 gap-1.5 rounded-lg bg-slate-50 p-2">
-                    {pkg.items.map((sub: any, sIdx: number) => (
-                      <View key={sub.serviceId || sIdx} className="rounded-md border border-slate-200 bg-white p-2">
-                        <Text className="text-xs font-bold text-slate-800">{sub.serviceName}</Text>
-                        <Text className="mt-0.5 text-[11px] text-slate-500">
-                          Định mức: {formatNumber(sub.norm)} {sub.unit || 'lần'} / gói | Số lượng tổng: {formatNumber(sub.quantity)}
-                        </Text>
-                        <View className="mt-2 gap-1.5 border-t border-slate-100 pt-2">
-                          <View className="flex-row items-center justify-between gap-2">
-                            <Text className="text-xs text-slate-500">
-                              Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(sub.costPrice * (sub.norm || 1))} ₫</Text>
-                            </Text>
-                            <Text
-                              className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
-                                sub.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                              }`}
+                  <View className="mt-2.5 gap-2 rounded-xl bg-[#FFF7ED]/50 border border-[#FDCB9E]/50 p-2.5">
+                    {pkg.items.map((sub: any, sIdx: number) => {
+                      const theme = getServiceTheme(sub.serviceName);
+                      return (
+                        <View key={sub.serviceId || sIdx} className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+                          <View className="flex-row items-center gap-2">
+                            <View
+                              style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+                              className="w-5 h-5 rounded-md border items-center justify-center"
                             >
-                              Tỉ suất lợi nhuận: {sub.profitMargin.toFixed(0)}%
-                            </Text>
+                              <Feather name="box" size={10} color={theme.color} />
+                            </View>
+                            <Text className="text-xs font-bold text-slate-800 flex-1">{sub.serviceName}</Text>
                           </View>
-                          <View className="flex-row items-center justify-between">
-                            <Text className="text-xs font-semibold text-slate-600">Ngân sách:</Text>
-                            {servicesById.get(String(sub.serviceId))?.isBudget === true ? (
-                              <TextInput
-                                className="w-[140px] rounded-md border border-slate-300 bg-white px-2 py-1 text-right text-[13px] font-semibold text-slate-900"
-                                keyboardType="numeric"
-                                value={formatNumberInput(sub.budget)}
-                                onChangeText={(val) => handleBudgetChange(sub.originalIndex, val)}
-                              />
-                            ) : (
-                              <View className="flex-row items-center gap-1">
-                                <Feather name="lock" size={11} color="#64748B" />
-                                <Text className="text-xs font-semibold text-slate-600">{formatNumber(sub.budget)} ₫</Text>
-                              </View>
-                            )}
-                          </View>
-                          <View className="flex-row items-center justify-between">
-                            <Text className="text-[11px] text-slate-500">Tối thiểu: {formatNumber(sub.minPrice * (sub.norm || 1))} ₫</Text>
-                            <Text className="text-[11px] text-slate-500">Đề xuất: {formatNumber(sub.recommendedPrice * (sub.norm || 1))} ₫</Text>
-                          </View>
-                          <View className="flex-row items-center justify-between">
-                            <Text className="text-xs font-semibold text-slate-600">Giá bán trong 1 gói:</Text>
-                            {priceType === 'custom' ? (
-                              <TextInput
-                                className="w-[140px] rounded-md border border-orange-500 bg-orange-50 px-2 py-1 text-right text-[13px] font-bold text-slate-900"
-                                keyboardType="numeric"
-                                value={formatNumberInput(sub.customPrice * (sub.norm || 1))}
-                                onChangeText={(val) => handleCustomPriceChange(sub.originalIndex, val, true)}
-                                placeholder="0"
-                                placeholderTextColor="#94A3B8"
-                              />
-                            ) : (
-                              <Text className="text-xs font-bold text-slate-900">
-                                {formatNumber(sub.selectedPrice * (sub.norm || 1))} ₫
+                          <Text className="mt-1 text-[11px] text-slate-500">
+                            Định mức: {formatNumber(sub.norm)} {sub.unit || 'lần'} / gói | Số lượng tổng: {formatNumber(sub.quantity)}
+                          </Text>
+                          <View className="mt-2 gap-1.5 border-t border-slate-100 pt-2">
+                            <View className="flex-row items-center justify-between gap-2">
+                              <Text className="text-xs text-slate-500">
+                                Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(sub.costPrice * (sub.norm || 1))} ₫</Text>
                               </Text>
-                            )}
+                              <Text
+                                className="rounded-md px-2 py-0.5 text-[11px] font-bold bg-[#FFF7ED] text-[#D97010] border border-[#FDCB9E]"
+                              >
+                                Tỉ suất lợi nhuận: {sub.profitMargin.toFixed(0)}%
+                              </Text>
+                            </View>
+                            <View className="flex-row items-center justify-between">
+                              <Text className="text-xs font-semibold text-slate-600">Ngân sách:</Text>
+                              {servicesById.get(String(sub.serviceId))?.isBudget === true ? (
+                                <TextInput
+                                  className="w-[140px] rounded-md border border-slate-300 bg-white px-2 py-1 text-right text-[13px] font-semibold text-slate-900"
+                                  keyboardType="numeric"
+                                  value={formatNumberInput(sub.budget)}
+                                  onChangeText={(val) => handleBudgetChange(sub.originalIndex, val)}
+                                />
+                              ) : (
+                                <View className="flex-row items-center gap-1">
+                                  <Feather name="lock" size={11} color="#64748B" />
+                                  <Text className="text-xs font-semibold text-slate-600">{formatNumber(sub.budget)} ₫</Text>
+                                </View>
+                              )}
+                            </View>
+                            <View className="flex-row items-center justify-between">
+                              <Text className="text-[11px] text-slate-500">Tối thiểu: {formatNumber(sub.minPrice * (sub.norm || 1))} ₫</Text>
+                              <Text className="text-[11px] text-slate-500">Đề xuất: {formatNumber(sub.recommendedPrice * (sub.norm || 1))} ₫</Text>
+                            </View>
+                            <View className="flex-row items-center justify-between">
+                              <Text className="text-xs font-semibold text-slate-600">Giá bán trong 1 gói:</Text>
+                              {priceType === 'custom' ? (
+                                <TextInput
+                                  className="w-[140px] rounded-md border border-orange-500 bg-orange-50 px-2 py-1 text-right text-[13px] font-bold text-slate-900"
+                                  keyboardType="numeric"
+                                  value={formatNumberInput(sub.customPrice * (sub.norm || 1))}
+                                  onChangeText={(val) => handleCustomPriceChange(sub.originalIndex, val, true)}
+                                  placeholder="0"
+                                  placeholderTextColor="#94A3B8"
+                                />
+                              ) : (
+                                <Text className="text-xs font-bold text-slate-900">
+                                  {formatNumber(sub.selectedPrice * (sub.norm || 1))} ₫
+                                </Text>
+                              )}
+                            </View>
                           </View>
+
+                          {/* Hạng mục công việc trong dịch vụ con của gói */}
+                          <ServiceJobAccordion
+                            jobs={sub.jobs}
+                            mode="quotation_edit"
+                          />
                         </View>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </View>
                 )}
               </View>
@@ -983,135 +996,144 @@ export default function QuotationCreateEditScreen() {
           })}
 
           {/* Standalone Services Section */}
-          {displayGroups.standalone.map((item) => (
-            <View key={item.originalIndex} className="mb-3 rounded-[14px] border border-slate-200 bg-white p-3.5">
-              <View className="mb-2.5 flex-row items-start justify-between">
-                <View style={{ flex: 1 }}>
-                  <Text className="text-[15px] font-bold text-slate-900">{item.serviceName}</Text>
-                  <Text className="mt-0.5 text-xs text-slate-500">Đơn vị: {item.unit || 'gói'}</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => handleDeleteStandaloneItem(item.originalIndex)}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <Feather name="trash-2" size={18} color="#DC2626" />
-                </TouchableOpacity>
-              </View>
-
-              {/* Quantity Stepper */}
-              <View className="flex-row items-center justify-between border-t border-slate-100 py-2">
-                <Text className="text-[13px] font-semibold text-slate-600">Số lượng:</Text>
-                <View className="flex-row items-center rounded-lg border border-slate-300 bg-slate-50">
-                  <TouchableOpacity
-                    className="px-3 py-1.5"
-                    onPress={() => handleStandaloneQuantityChange(item.originalIndex, -1)}
-                    activeOpacity={0.7}
-                  >
-                    <Feather name="minus" size={16} color="#334155" />
-                  </TouchableOpacity>
-                  <Text className="min-w-7 text-center text-sm font-bold text-slate-900">{formatNumber(item.quantity)}</Text>
-                  <TouchableOpacity
-                    className="px-3 py-1.5"
-                    onPress={() => handleStandaloneQuantityChange(item.originalIndex, 1)}
-                    activeOpacity={0.7}
-                  >
-                    <Feather name="plus" size={16} color="#334155" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Price input */}
-              <View className="flex-row items-center justify-between border-t border-slate-100 py-2">
-                <Text className="text-[13px] font-semibold text-slate-600">Đơn giá (VNĐ):</Text>
-                {priceType === 'custom' ? (
-                  <TextInput
-                    className="min-w-[130px] rounded-lg border border-emerald-600 bg-emerald-50 px-2.5 py-1.5 text-right text-sm font-bold text-slate-900"
-                    keyboardType="numeric"
-                    value={formatNumberInput(item.customPrice)}
-                    onChangeText={(val) =>
-                      handleCustomPriceChange(item.originalIndex, val)
-                    }
-                  />
-                ) : (
-                  <Text className="text-sm font-bold text-slate-900">
-                    {formatNumber(item.selectedPrice)} ₫
-                  </Text>
-                )}
-              </View>
-
-              <View className="flex-row items-center justify-between border-t border-slate-100 py-2">
-                <Text className="text-[13px] font-semibold text-slate-600">Ngân sách:</Text>
-                {servicesById.get(String(item.serviceId))?.isBudget === true ? (
-                  <TextInput
-                    className="min-w-[130px] rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-right text-sm font-bold text-slate-900"
-                    keyboardType="numeric"
-                    value={formatNumberInput(item.budget)}
-                    onChangeText={(val) => handleBudgetChange(item.originalIndex, val)}
-                  />
-                ) : (
-                  <View className="flex-row items-center gap-1">
-                    <Feather name="lock" size={12} color="#64748B" />
-                    <Text className="text-sm font-semibold text-slate-700">{formatNumber(item.budget)} ₫</Text>
+          {displayGroups.standalone.map((item) => {
+            const theme = getServiceTheme(item.serviceName);
+            return (
+              <View key={item.originalIndex} className="mb-3 rounded-[14px] border border-[#FDCB9E]/80 bg-white p-3.5 shadow-xs">
+                <View className="mb-2.5 flex-row items-start justify-between">
+                  <View className="flex-row items-center gap-2 flex-1 mr-2">
+                    <View
+                      style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+                      className="w-7 h-7 rounded-lg border items-center justify-center"
+                    >
+                      <Feather name="layers" size={13} color={theme.color} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text className="text-[14px] font-bold text-slate-900">{item.serviceName}</Text>
+                      <Text className="mt-0.5 text-xs text-slate-500">Đơn vị: {item.unit || 'gói'}</Text>
+                    </View>
                   </View>
-                )}
-              </View>
-
-              {/* Standalone Financial info */}
-              <View className="mt-1 border-t border-slate-100 pt-2 gap-1.5">
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-xs text-slate-500">
-                    Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(item.costPrice)} ₫</Text>
-                  </Text>
-                  <Text
-                    className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
-                      item.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                    }`}
+                  <TouchableOpacity
+                    onPress={() => handleDeleteStandaloneItem(item.originalIndex)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
-                    Tỉ suất lợi nhuận: {item.profitMargin.toFixed(0)}%
-                  </Text>
+                    <Feather name="trash-2" size={18} color="#DC2626" />
+                  </TouchableOpacity>
                 </View>
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-xs text-slate-500">Tối thiểu: <Text className="font-semibold">{formatNumber(item.minPrice)} ₫</Text></Text>
-                  <Text className="text-xs text-slate-500">Đề xuất: <Text className="font-semibold">{formatNumber(item.recommendedPrice)} ₫</Text></Text>
-                </View>
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-xs font-semibold text-slate-600">Giá đang áp dụng:</Text>
-                  <Text className="text-xs font-bold text-slate-900">{formatNumber(item.selectedPrice)} ₫</Text>
-                </View>
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-[13px] font-bold text-slate-700">Thành tiền:</Text>
-                  <Text className="text-sm font-extrabold text-blue-600">
-                    {formatNumber(item.selectedPrice * item.quantity)} ₫
-                  </Text>
-                </View>
-              </View>
 
-              {/* Hạng mục con lồng trong dịch vụ lẻ */}
-              <ServiceJobAccordion
-                jobs={item.jobs}
-                mode="quotation_edit"
-              />
-            </View>
-          ))}
+                {/* Quantity Stepper */}
+                <View className="flex-row items-center justify-between border-t border-slate-100 py-2">
+                  <Text className="text-[13px] font-semibold text-slate-600">Số lượng:</Text>
+                  <View className="flex-row items-center rounded-lg border border-slate-300 bg-slate-50">
+                    <TouchableOpacity
+                      className="px-3 py-1.5"
+                      onPress={() => handleStandaloneQuantityChange(item.originalIndex, -1)}
+                      activeOpacity={0.7}
+                    >
+                      <Feather name="minus" size={16} color="#334155" />
+                    </TouchableOpacity>
+                    <Text className="min-w-7 text-center text-sm font-bold text-slate-900">{formatNumber(item.quantity)}</Text>
+                    <TouchableOpacity
+                      className="px-3 py-1.5"
+                      onPress={() => handleStandaloneQuantityChange(item.originalIndex, 1)}
+                      activeOpacity={0.7}
+                    >
+                      <Feather name="plus" size={16} color="#334155" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Price input */}
+                <View className="flex-row items-center justify-between border-t border-slate-100 py-2">
+                  <Text className="text-[13px] font-semibold text-slate-600">Giá bán (VNĐ):</Text>
+                  {priceType === 'custom' ? (
+                    <TextInput
+                      className="min-w-[130px] rounded-lg border border-orange-400 bg-orange-50 px-2.5 py-1.5 text-right text-sm font-bold text-slate-900"
+                      keyboardType="numeric"
+                      value={formatNumberInput(item.customPrice)}
+                      onChangeText={(val) =>
+                        handleCustomPriceChange(item.originalIndex, val)
+                      }
+                    />
+                  ) : (
+                    <Text className="text-sm font-bold text-slate-900">
+                      {formatNumber(item.selectedPrice)} ₫
+                    </Text>
+                  )}
+                </View>
+
+                <View className="flex-row items-center justify-between border-t border-slate-100 py-2">
+                  <Text className="text-[13px] font-semibold text-slate-600">Ngân sách:</Text>
+                  {servicesById.get(String(item.serviceId))?.isBudget === true ? (
+                    <TextInput
+                      className="min-w-[130px] rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-right text-sm font-bold text-slate-900"
+                      keyboardType="numeric"
+                      value={formatNumberInput(item.budget)}
+                      onChangeText={(val) => handleBudgetChange(item.originalIndex, val)}
+                    />
+                  ) : (
+                    <View className="flex-row items-center gap-1">
+                      <Feather name="lock" size={12} color="#64748B" />
+                      <Text className="text-sm font-semibold text-slate-700">{formatNumber(item.budget)} ₫</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Standalone Financial info */}
+                <View className="mt-1 border-t border-slate-100 pt-2 gap-1.5">
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs text-slate-500">
+                      Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(item.costPrice)} ₫</Text>
+                    </Text>
+                    <Text
+                      className="rounded-md px-2 py-0.5 text-[11px] font-bold bg-[#FFF7ED] text-[#D97010] border border-[#FDCB9E]"
+                    >
+                      Tỉ suất lợi nhuận: {item.profitMargin.toFixed(0)}%
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs text-slate-500">Tối thiểu: <Text className="font-semibold">{formatNumber(item.minPrice)} ₫</Text></Text>
+                    <Text className="text-xs text-slate-500">Đề xuất: <Text className="font-semibold">{formatNumber(item.recommendedPrice)} ₫</Text></Text>
+                  </View>
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs font-semibold text-slate-600">Giá đang áp dụng:</Text>
+                    <Text className="text-xs font-bold text-slate-900">{formatNumber(item.selectedPrice)} ₫</Text>
+                  </View>
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-[13px] font-bold text-slate-700">Thành tiền:</Text>
+                    <Text className="text-sm font-extrabold text-blue-600">
+                      {formatNumber(item.selectedPrice * item.quantity)} ₫
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Hạng mục con lồng trong dịch vụ lẻ */}
+                <ServiceJobAccordion
+                  jobs={item.jobs}
+                  mode="quotation_edit"
+                />
+              </View>
+            );
+          })}
 
           {/* Action Buttons to Add Service / Package */}
           <View className="mb-3.5 flex-row gap-2.5">
             <TouchableOpacity
-              className="flex-1 flex-row items-center justify-center gap-1.5 rounded-[10px] border border-emerald-200 bg-emerald-50 py-3"
+              className="flex-1 flex-row items-center justify-center gap-1.5 rounded-[10px] border border-indigo-200 bg-indigo-50 py-3"
               onPress={() => setShowAddServiceModal(true)}
               activeOpacity={0.8}
             >
-              <Feather name="plus-circle" size={16} color="#059669" />
-              <Text className="text-[13px] font-bold text-emerald-600">Thêm dịch vụ lẻ</Text>
+              <Feather name="plus-circle" size={16} color="#4338CA" />
+              <Text className="text-[13px] font-bold text-indigo-700">Thêm dịch vụ lẻ</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              className="flex-1 flex-row items-center justify-center gap-1.5 rounded-[10px] border border-blue-200 bg-blue-50 py-3"
+              className="flex-1 flex-row items-center justify-center gap-1.5 rounded-[10px] border border-amber-200 bg-amber-50 py-3"
               onPress={() => setShowAddPackageModal(true)}
               activeOpacity={0.8}
             >
-              <Feather name="package" size={16} color="#2563EB" />
-              <Text className="text-[13px] font-bold text-blue-600">Thêm gói dịch vụ</Text>
+              <Feather name="package" size={16} color="#B45309" />
+              <Text className="text-[13px] font-bold text-amber-800">Thêm gói dịch vụ</Text>
             </TouchableOpacity>
           </View>
 
@@ -1155,15 +1177,14 @@ export default function QuotationCreateEditScreen() {
           <View className="flex-row items-center justify-between">
             <View>
               <Text className="text-xs font-semibold text-slate-500">Tổng thanh toán:</Text>
-              <Text className="text-lg font-extrabold text-emerald-600">
+              <Text className="text-lg font-extrabold text-slate-900">
                 {formatNumber(totals.totalWithVat)} ₫
               </Text>
             </View>
 
             <TouchableOpacity
-              className={`flex-row items-center gap-1.5 rounded-[10px] bg-emerald-600 px-[18px] py-[11px] ${
-                isSubmitting ? 'opacity-60' : ''
-              }`}
+              className={`flex-row items-center gap-1.5 rounded-[10px] bg-[#F38820] px-[18px] py-[11px] ${isSubmitting ? 'opacity-60' : ''
+                }`}
               onPress={handleSubmit}
               disabled={isSubmitting}
               activeOpacity={0.85}

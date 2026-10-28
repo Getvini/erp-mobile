@@ -108,7 +108,7 @@ export default function QuotationDetailScreen() {
     if (!quotation?.details || quotation.details.length === 0) {
       return {
         aggregatedItems: { packages: [], standalone: [] },
-        totals: { revenue: 0, cost: 0, vat: 0, totalWithVat: 0, margin: 0 },
+        totals: { revenue: 0, cost: 0, rawCost: 0, budget: 0, vat: 0, totalWithVat: 0, margin: 0 },
       };
     }
 
@@ -116,13 +116,18 @@ export default function QuotationDetailScreen() {
     const standalone: any[] = [];
     let runningRevenue = 0;
     let runningCost = 0;
+    let runningRawCost = 0;
+    let runningBudget = 0;
 
     quotation.details.forEach((detail: any) => {
       const sellingPrice = parseFloat(String(detail.sellingPrice || 0));
       const costAtSale = parseFloat(String(detail.costAtSale || 0));
+      const budget = parseFloat(String(detail.budget || 0));
       const quantity = detail.quantity || 0;
       const itemRevenue = sellingPrice * quantity;
-      const itemCost = costAtSale * quantity;
+      const itemRawCost = costAtSale * quantity;
+      const itemBudget = budget * quantity;
+      const itemCost = itemRawCost + itemBudget;
       const itemVat = itemRevenue * 0.08;
 
       const sId = String(detail.serviceId || detail.service?.id || '');
@@ -135,12 +140,16 @@ export default function QuotationDetailScreen() {
 
       runningRevenue += itemRevenue;
       runningCost += itemCost;
+      runningRawCost += itemRawCost;
+      runningBudget += itemBudget;
 
       const groupKey = detail.packageName || 'STANDALONE';
 
       if (groupKey === 'STANDALONE') {
         standalone.push({
           ...detail,
+          costAtSale,
+          budget,
           jobs,
           revenue: itemRevenue,
           cost: itemCost,
@@ -159,6 +168,8 @@ export default function QuotationDetailScreen() {
           quantity: pkgQty,
           sellingPrice: 0,
           costAtSale: 0,
+          rawCostPrice: 0,
+          budget: 0,
           revenue: 0,
           cost: 0,
           vat: 0,
@@ -170,13 +181,17 @@ export default function QuotationDetailScreen() {
       const norm = detail.packageQuantity ? quantity / detail.packageQuantity : quantity;
 
       packages[groupKey].sellingPrice += sellingPrice * norm;
-      packages[groupKey].costAtSale += costAtSale * norm;
+      packages[groupKey].costAtSale += (costAtSale + budget) * norm;
+      packages[groupKey].rawCostPrice += costAtSale * norm;
+      packages[groupKey].budget += budget * norm;
       packages[groupKey].revenue += itemRevenue;
       packages[groupKey].cost += itemCost;
       packages[groupKey].vat += itemVat;
       packages[groupKey].totalWithVat += itemRevenue + itemVat;
       packages[groupKey].items.push({
         ...detail,
+        costAtSale,
+        budget,
         jobs,
         norm,
         revenue: itemRevenue,
@@ -197,6 +212,8 @@ export default function QuotationDetailScreen() {
       totals: {
         revenue: runningRevenue,
         cost: runningCost,
+        rawCost: runningRawCost,
+        budget: runningBudget,
         vat,
         totalWithVat,
         margin,
@@ -264,21 +281,57 @@ export default function QuotationDetailScreen() {
   };
 
   const handleApprove = async () => {
-    Alert.alert('Xác nhận duyệt', 'Bạn có chắc chắn muốn duyệt báo giá này không?', [
-      { text: 'Hủy', style: 'cancel' },
-      {
-        text: 'Duyệt',
-        style: 'default',
-        onPress: async () => {
-          try {
-            await approveMutation.mutateAsync(quotId);
-            Alert.alert('Thành công', 'Đã duyệt báo giá và cập nhật cơ hội kinh doanh');
-          } catch (err: any) {
-            Alert.alert('Lỗi', err?.message || 'Có lỗi xảy ra khi duyệt báo giá');
-          }
+    Alert.alert(
+      'Xác nhận duyệt',
+      'Bạn có chắc chắn muốn duyệt báo giá này không? Sau khi duyệt, hệ thống sẽ tự động tạo Hợp đồng tương ứng.',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Duyệt',
+          style: 'default',
+          onPress: async () => {
+            try {
+              const res: any = await approveMutation.mutateAsync(quotId);
+              const contractId =
+                res?.contractId ||
+                res?.contract?.id ||
+                res?.data?.contractId ||
+                res?.data?.contract?.id;
+
+              if (contractId) {
+                Alert.alert(
+                  'Thành công',
+                  'Đã duyệt báo giá và tự động tạo Hợp đồng kinh tế thành công!',
+                  [
+                    {
+                      text: 'Xem hợp đồng',
+                      onPress: () => {
+                        router.replace({
+                          pathname: '/contracts/[id]',
+                          params: { id: contractId },
+                        } as any);
+                      },
+                    },
+                    {
+                      text: 'Đóng',
+                      style: 'cancel',
+                      onPress: () => {
+                        refetch();
+                      },
+                    },
+                  ]
+                );
+              } else {
+                Alert.alert('Thành công', 'Đã duyệt báo giá và cập nhật cơ hội kinh doanh');
+                refetch();
+              }
+            } catch (err: any) {
+              Alert.alert('Lỗi', err?.message || 'Có lỗi xảy ra khi duyệt báo giá');
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   const handleConfirmReject = async () => {
@@ -442,8 +495,15 @@ export default function QuotationDetailScreen() {
 
             <View className="flex-row items-center justify-between">
               <Text className="text-[13px] text-slate-500">Chi phí giá vốn:</Text>
-              <Text className="text-[13px] font-semibold text-slate-600">{formatMoney(totals.cost)}</Text>
+              <Text className="text-[13px] font-semibold text-slate-600">{formatMoney(totals.rawCost)}</Text>
             </View>
+
+            {totals.budget > 0 && (
+              <View className="flex-row items-center justify-between">
+                <Text className="text-[13px] text-slate-500">Ngân sách thực thi:</Text>
+                <Text className="text-[13px] font-semibold text-slate-600">{formatMoney(totals.budget)}</Text>
+              </View>
+            )}
 
             <View className="flex-row items-center justify-between">
               <Text className="text-[13px] text-slate-500">Thuế VAT (8%):</Text>
@@ -514,12 +574,21 @@ export default function QuotationDetailScreen() {
                   {/* Package Financial Bar */}
                   <View className="mt-2 flex-row justify-between border-t border-slate-100 pt-2">
                     <Text className="text-xs text-slate-500">
-                      Đơn giá gói: <Text className="font-bold text-slate-800">{formatMoney(pkg.sellingPrice)}</Text>
+                      Giá bán gói: <Text className="font-bold text-slate-800">{formatMoney(pkg.sellingPrice)}</Text>
                     </Text>
                     <Text className="text-xs text-slate-500">
                       Biên LN: <Text className="font-bold" style={{ color: pkgMargin >= 20 ? '#059669' : '#D97706' }}>
                         {pkgMargin.toFixed(0)}%
                       </Text>
+                    </Text>
+                  </View>
+
+                  <View className="mt-1 flex-row items-center justify-between">
+                    <Text className="text-xs text-slate-500">
+                      Giá vốn: <Text className="font-semibold text-slate-700">{formatMoney(pkg.rawCostPrice)}</Text>
+                    </Text>
+                    <Text className="text-xs text-slate-500">
+                      Ngân sách: <Text className="font-semibold text-slate-700">{formatMoney(pkg.budget)}</Text>
                     </Text>
                   </View>
 
@@ -535,8 +604,18 @@ export default function QuotationDetailScreen() {
                                 {item.name || item.service?.name || 'Dịch vụ'}
                               </Text>
                               <Text className="mt-0.5 text-[11px] text-slate-500">
-                                Định mức: {formatNumber(item.norm)} {item.service?.unit || item.unit || 'lần'} / gói | Đơn giá: {formatMoney(item.sellingPrice)}
+                                Định mức: {formatNumber(item.norm)} {item.service?.unit || item.unit || 'lần'} / gói | Giá bán: {formatMoney(item.sellingPrice)}
                               </Text>
+                              <View className="mt-1 flex-row items-center gap-3">
+                                <Text className="text-[11px] text-slate-500">
+                                  Giá vốn: <Text className="font-medium text-slate-700">{formatMoney(item.costAtSale)}</Text>
+                                </Text>
+                                {Number(item.budget || 0) > 0 && (
+                                  <Text className="text-[11px] text-slate-500">
+                                    Ngân sách: <Text className="font-medium text-slate-700">{formatMoney(item.budget)}</Text>
+                                  </Text>
+                                )}
+                              </View>
                               {Boolean(item.service?.description || item.description) && (
                                 <Text className="mt-1 text-[11px] italic text-slate-500 leading-4">
                                   {item.service?.description || item.description}
@@ -591,12 +670,21 @@ export default function QuotationDetailScreen() {
                     Số lượng: <Text className="font-bold text-slate-800">{formatNumber(item.quantity)} {item.service?.unit || item.unit || 'gói'}</Text>
                   </Text>
                   <Text className="text-xs text-slate-500">
-                    Đơn giá: <Text className="font-bold text-slate-800">{formatMoney(item.sellingPrice)}</Text>
+                    Giá bán: <Text className="font-bold text-slate-800">{formatMoney(item.sellingPrice)}</Text>
                   </Text>
                   <Text className="text-xs text-slate-500">
                     Biên LN: <Text className="font-bold" style={{ color: (item.profitMargin || 0) >= 20 ? '#059669' : '#D97706' }}>
                       {(item.profitMargin || 0).toFixed(0)}%
                     </Text>
+                  </Text>
+                </View>
+
+                <View className="mt-1 flex-row items-center justify-between">
+                  <Text className="text-xs text-slate-500">
+                    Giá vốn: <Text className="font-semibold text-slate-700">{formatMoney(item.costAtSale)}</Text>
+                  </Text>
+                  <Text className="text-xs text-slate-500">
+                    Ngân sách: <Text className="font-semibold text-slate-700">{formatMoney(item.budget)}</Text>
                   </Text>
                 </View>
 

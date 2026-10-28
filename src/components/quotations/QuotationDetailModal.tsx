@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -69,38 +69,124 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
   const [rejectReason, setRejectReason] = useState('');
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+  const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (quotation?.details) {
+      const initial: Record<string, boolean> = {};
+      quotation.details.forEach((d: any) => {
+        if (d.packageName && d.packageName !== 'STANDALONE') {
+          initial[d.packageName] = true;
+        }
+      });
+      setExpandedPackages((prev) => ({ ...initial, ...prev }));
+    }
+  }, [quotation]);
+
+  const togglePackage = (pkgName: string) => {
+    setExpandedPackages((prev) => ({
+      ...prev,
+      [pkgName]: prev[pkgName] === undefined ? false : !prev[pkgName],
+    }));
+  };
 
   // Group items by Package / Standalone
-  const { packageGroups, standaloneItems, subtotal, vatTotal, finalTotal } = useMemo(() => {
+  const { packageGroups, standaloneItems, subtotal, totalCost, totalBudget, overallMargin, vatTotal, finalTotal } = useMemo(() => {
     if (!quotation?.details) {
-      return { packageGroups: [], standaloneItems: [], subtotal: 0, vatTotal: 0, finalTotal: 0 };
+      return { packageGroups: [], standaloneItems: [], subtotal: 0, totalCost: 0, totalBudget: 0, overallMargin: 0, vatTotal: 0, finalTotal: 0 };
     }
 
-    const groups: Record<string, any[]> = {};
+    const groups: Record<string, {
+      name: string;
+      quantity: number;
+      sellingPrice: number;
+      costPrice: number;
+      budget: number;
+      revenue: number;
+      cost: number;
+      margin: number;
+      items: any[];
+    }> = {};
     const standalone: any[] = [];
     let sub = 0;
+    let runningBudget = 0;
+    let runningRawCost = 0;
+    let runningTotalCost = 0;
 
     quotation.details.forEach((d: any) => {
       const price = Math.round(Number(d.sellingPrice || 0));
+      const costAtSale = Math.round(Number(d.costAtSale ?? d.service?.costPrice ?? 0));
+      const budget = Math.round(Number(d.budget || 0));
       const qty = Number(d.quantity || 1);
+      const pkgQty = Number(d.packageQuantity || 1);
+      const norm = d.packageQuantity ? qty / pkgQty : qty;
       const lineTotal = price * qty;
+      const lineRawCost = costAtSale * qty;
+      const lineBudget = budget * qty;
+      const lineCost = lineRawCost + lineBudget;
+
       sub += lineTotal;
+      runningRawCost += lineRawCost;
+      runningBudget += lineBudget;
+      runningTotalCost += lineCost;
+
+      const itemProfitMargin = lineTotal > 0
+        ? ((lineTotal - lineCost) / lineTotal) * 100
+        : 0;
+
+      const itemData = {
+        ...d,
+        sellingPrice: price,
+        costAtSale,
+        budget,
+        quantity: qty,
+        packageQuantity: pkgQty,
+        norm,
+        lineTotal,
+        lineCost,
+        profitMargin: itemProfitMargin,
+      };
 
       if (d.packageName && d.packageName !== 'STANDALONE') {
-        if (!groups[d.packageName]) groups[d.packageName] = [];
-        groups[d.packageName].push({ ...d, lineTotal });
+        if (!groups[d.packageName]) {
+          groups[d.packageName] = {
+            name: d.packageName,
+            quantity: pkgQty,
+            sellingPrice: 0,
+            costPrice: 0,
+            budget: 0,
+            revenue: 0,
+            cost: 0,
+            margin: 0,
+            items: [],
+          };
+        }
+        groups[d.packageName].sellingPrice += price * norm;
+        groups[d.packageName].costPrice += costAtSale * norm;
+        groups[d.packageName].budget += budget * norm;
+        groups[d.packageName].revenue += lineTotal;
+        groups[d.packageName].cost += lineCost;
+        groups[d.packageName].items.push(itemData);
       } else {
-        standalone.push({ ...d, lineTotal });
+        standalone.push(itemData);
       }
+    });
+
+    Object.values(groups).forEach((pkg) => {
+      pkg.margin = pkg.revenue > 0 ? ((pkg.revenue - pkg.cost) / pkg.revenue) * 100 : 0;
     });
 
     const vat = sub * 0.08;
     const total = sub + vat;
+    const margin = sub > 0 ? ((sub - runningTotalCost) / sub) * 100 : 0;
 
     return {
-      packageGroups: Object.entries(groups).map(([name, items]) => ({ name, items })),
+      packageGroups: Object.values(groups),
       standaloneItems: standalone,
       subtotal: sub,
+      totalCost: runningRawCost,
+      totalBudget: runningBudget,
+      overallMargin: margin,
       vatTotal: vat,
       finalTotal: total,
     };
@@ -217,8 +303,8 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
                   isApproved
                     ? styles.statusApproved
                     : status === 'REJECTED'
-                    ? styles.statusRejected
-                    : styles.statusPending,
+                      ? styles.statusRejected
+                      : styles.statusPending,
                 ]}
               >
                 <Text
@@ -227,17 +313,17 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
                     isApproved
                       ? styles.statusTextApproved
                       : status === 'REJECTED'
-                      ? styles.statusTextRejected
-                      : styles.statusTextPending,
+                        ? styles.statusTextRejected
+                        : styles.statusTextPending,
                   ]}
                 >
                   {isApproved
                     ? 'Đã duyệt'
                     : status === 'REJECTED'
-                    ? 'Từ chối'
-                    : status === 'SENT'
-                    ? 'Đã gửi'
-                    : 'Đang đợi duyệt'}
+                      ? 'Từ chối'
+                      : status === 'SENT'
+                        ? 'Đã gửi'
+                        : 'Đang đợi duyệt'}
                 </Text>
               </View>
 
@@ -299,83 +385,178 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
               )}
 
               {/* 1. Gói dịch vụ */}
-              {packageGroups.map((pkg, pIdx) => (
-                <View key={pIdx} style={styles.sectionCard}>
-                  <View style={styles.pkgHeader}>
-                    <MaterialCommunityIcons name="package-variant" size={16} color="#2563EB" />
-                    <Text style={styles.pkgTitle}>{pkg.name}</Text>
-                  </View>
+              {packageGroups.map((pkg, pIdx) => {
+                const isPkgExpanded = expandedPackages[pkg.name] !== false;
 
-                  <View style={styles.itemsTable}>
-                    {pkg.items.map((it: any, itIdx: number) => {
-                      const desc = it.service?.description || it.description;
-                      const itemKey = `pkg-${pIdx}-${it.id || itIdx}`;
-                      const isExpanded = !!expandedItems[itemKey];
-
-                      return (
-                        <View key={it.id || itIdx} style={styles.tableRowContainer}>
-                          <TouchableOpacity
-                            style={styles.tableRow}
-                            activeOpacity={desc ? 0.7 : 1}
-                            onPress={() => {
-                              if (desc) {
-                                setExpandedItems((prev) => ({ ...prev, [itemKey]: !prev[itemKey] }));
-                              }
+                return (
+                  <View key={pIdx} style={styles.sectionCard}>
+                    {/* Header gói có nút toggle đóng/mở */}
+                    <TouchableOpacity
+                      style={styles.pkgHeader}
+                      activeOpacity={0.7}
+                      onPress={() => togglePackage(pkg.name)}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <MaterialCommunityIcons name="package-variant" size={17} color="#2563EB" />
+                          <Text style={styles.pkgTitle}>{pkg.name}</Text>
+                        </View>
+                        <Text style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+                          Số lượng: <Text style={{ fontWeight: '700', color: '#1E293B' }}>x{pkg.quantity}</Text> • {pkg.items.length} dịch vụ con
+                        </Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <View style={{ alignItems: 'flex-end' }}>
+                          <Text style={{ fontSize: 14, fontWeight: '800', color: '#2563EB' }}>
+                            {formatVND(pkg.revenue)}
+                          </Text>
+                          <View
+                            style={{
+                              marginTop: 3,
+                              paddingHorizontal: 6,
+                              paddingVertical: 1.5,
+                              borderRadius: 4,
+                              backgroundColor: pkg.margin >= 20 ? '#DCFCE7' : '#FEF3C7',
                             }}
                           >
-                            <View style={{ flex: 1 }}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                                {desc && (
-                                  <Feather
-                                    name={isExpanded ? 'chevron-down' : 'chevron-right'}
-                                    size={13}
-                                    color="#64748B"
-                                  />
-                                )}
-                                <Text style={styles.rowName}>
-                                  {it.service?.name || it.name || 'Dịch vụ'}
-                                </Text>
-                              </View>
-                              <Text style={styles.rowQty}>
-                                SL: {it.quantity} {it.unit || ''} • Đơn giá:{' '}
-                                {formatVND(it.sellingPrice)}
-                              </Text>
-                            </View>
-                            <Text style={styles.rowPrice}>{formatVND(it.lineTotal)}</Text>
-                          </TouchableOpacity>
-
-                          {Boolean(desc) && (
-                            <View style={styles.descBox}>
-                              <Text style={styles.descText} numberOfLines={isExpanded ? undefined : 2}>
-                                {desc}
-                              </Text>
-                            </View>
-                          )}
-
-                          {/* Hạng mục con lồng trong dịch vụ */}
-                          <ServiceJobAccordion
-                            jobs={
-                              (it.jobs && it.jobs.length > 0 ? it.jobs : null) ||
-                              (it.serviceJobs && it.serviceJobs.length > 0 ? it.serviceJobs : null) ||
-                              (it.service?.serviceJobs && it.service?.serviceJobs.length > 0 ? it.service.serviceJobs : null) ||
-                              servicesById.get(String(it.serviceId || it.service?.id))?.serviceJobs ||
-                              []
-                            }
-                            mode="quotation_view"
-                          />
+                            <Text
+                              style={{
+                                fontSize: 10,
+                                fontWeight: '800',
+                                color: pkg.margin >= 20 ? '#15803D' : '#B45309',
+                              }}
+                            >
+                              LN: {pkg.margin.toFixed(0)}%
+                            </Text>
+                          </View>
                         </View>
-                      );
-                    })}
+                        <Feather
+                          name={isPkgExpanded ? 'chevron-up' : 'chevron-down'}
+                          size={18}
+                          color="#64748B"
+                        />
+                      </View>
+                    </TouchableOpacity>
+
+                    {/* Thanh tài chính của gói: Giá bán gói, Giá vốn, Ngân sách */}
+                    <View
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        borderBottomWidth: isPkgExpanded ? 1 : 0,
+                        borderBottomColor: '#E2E8F0',
+                        gap: 4,
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={{ fontSize: 11, color: '#64748B' }}>
+                          Giá bán gói: <Text style={{ fontWeight: '700', color: '#0F172A' }}>{formatVND(pkg.sellingPrice)}</Text>
+                        </Text>
+                        <Text style={{ fontSize: 11, color: '#64748B' }}>
+                          Giá vốn: <Text style={{ fontWeight: '700', color: '#0F172A' }}>{formatVND(pkg.costPrice)}</Text>
+                        </Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={{ fontSize: 11, color: '#64748B' }}>
+                          Ngân sách: <Text style={{ fontWeight: '700', color: '#0F172A' }}>{formatVND(pkg.budget)}</Text>
+                        </Text>
+                        <Text style={{ fontSize: 11, color: '#64748B' }}>
+                          Tổng chi phí: <Text style={{ fontWeight: '700', color: '#D97706' }}>{formatVND(pkg.costPrice + pkg.budget)}</Text>
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Chi tiết từng dịch vụ con trong gói (Thu gọn/Mở rộng) */}
+                    {isPkgExpanded && (
+                      <View style={styles.itemsTable}>
+                        {pkg.items.map((it: any, itIdx: number) => {
+                          const desc = it.service?.description || it.description;
+                          const itemKey = `pkg-${pIdx}-${it.id || itIdx}`;
+                          const isExpanded = !!expandedItems[itemKey];
+
+                          return (
+                            <View key={it.id || itIdx} style={styles.tableRowContainer}>
+                              <TouchableOpacity
+                                style={styles.tableRow}
+                                activeOpacity={desc ? 0.7 : 1}
+                                onPress={() => {
+                                  if (desc) {
+                                    setExpandedItems((prev) => ({ ...prev, [itemKey]: !prev[itemKey] }));
+                                  }
+                                }}
+                              >
+                                <View style={{ flex: 1 }}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                                    {desc && (
+                                      <Feather
+                                        name={isExpanded ? 'chevron-down' : 'chevron-right'}
+                                        size={13}
+                                        color="#64748B"
+                                      />
+                                    )}
+                                    <Text style={styles.rowName}>
+                                      {it.service?.name || it.name || 'Dịch vụ'}
+                                    </Text>
+                                  </View>
+                                  <Text style={styles.rowQty}>
+                                    Định mức: {it.norm} {it.unit || it.service?.unit || 'lần'} • Giá bán: {formatVND(it.sellingPrice)}
+                                  </Text>
+                                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 3 }}>
+                                    <Text style={{ fontSize: 11, color: '#64748B' }}>
+                                      Giá vốn: <Text style={{ fontWeight: '600', color: '#334155' }}>{formatVND(it.costAtSale)}</Text>
+                                    </Text>
+                                    <Text style={{ fontSize: 11, color: '#64748B' }}>
+                                      Ngân sách: <Text style={{ fontWeight: '600', color: '#334155' }}>{formatVND(it.budget)}</Text>
+                                    </Text>
+                                    <Text
+                                      style={{
+                                        fontSize: 11,
+                                        color: it.profitMargin >= 20 ? '#15803D' : '#B45309',
+                                        fontWeight: '700',
+                                      }}
+                                    >
+                                      LN: {it.profitMargin.toFixed(0)}%
+                                    </Text>
+                                  </View>
+                                </View>
+                                <Text style={styles.rowPrice}>{formatVND(it.lineTotal)}</Text>
+                              </TouchableOpacity>
+
+                              {Boolean(desc) && (
+                                <View style={styles.descBox}>
+                                  <Text style={styles.descText} numberOfLines={isExpanded ? undefined : 2}>
+                                    {desc}
+                                  </Text>
+                                </View>
+                              )}
+
+                              {/* Hạng mục con lồng trong dịch vụ */}
+                              <ServiceJobAccordion
+                                jobs={
+                                  (it.jobs && it.jobs.length > 0 ? it.jobs : null) ||
+                                  (it.serviceJobs && it.serviceJobs.length > 0 ? it.serviceJobs : null) ||
+                                  (it.service?.serviceJobs && it.service?.serviceJobs.length > 0 ? it.service.serviceJobs : null) ||
+                                  servicesById.get(String(it.serviceId || it.service?.id))?.serviceJobs ||
+                                  []
+                                }
+                                mode="quotation_view"
+                              />
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
                   </View>
-                </View>
-              ))}
+                );
+              })}
 
               {/* 2. Dịch vụ đơn lẻ */}
               {standaloneItems.length > 0 && (
                 <View style={styles.sectionCard}>
                   <View style={styles.pkgHeader}>
                     <Feather name="layers" size={16} color="#16A34A" />
-                    <Text style={styles.pkgTitle}>Dịch vụ đơn lẻ</Text>
+                    <Text style={styles.pkgTitle}>Dịch vụ đơn lẻ ({standaloneItems.length})</Text>
                   </View>
 
                   <View style={styles.itemsTable}>
@@ -408,9 +589,25 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
                                 </Text>
                               </View>
                               <Text style={styles.rowQty}>
-                                SL: {it.quantity} {it.unit || ''} • Đơn giá:{' '}
-                                {formatVND(it.sellingPrice)}
+                                SL: {it.quantity} {it.unit || it.service?.unit || ''} • Giá bán: {formatVND(it.sellingPrice)}
                               </Text>
+                              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 3 }}>
+                                <Text style={{ fontSize: 11, color: '#64748B' }}>
+                                  Giá vốn: <Text style={{ fontWeight: '600', color: '#334155' }}>{formatVND(it.costAtSale)}</Text>
+                                </Text>
+                                <Text style={{ fontSize: 11, color: '#64748B' }}>
+                                  Ngân sách: <Text style={{ fontWeight: '600', color: '#334155' }}>{formatVND(it.budget)}</Text>
+                                </Text>
+                                <Text
+                                  style={{
+                                    fontSize: 11,
+                                    color: it.profitMargin >= 20 ? '#15803D' : '#B45309',
+                                    fontWeight: '700',
+                                  }}
+                                >
+                                  LN: {it.profitMargin.toFixed(0)}%
+                                </Text>
+                              </View>
                             </View>
                             <Text style={styles.rowPrice}>{formatVND(it.lineTotal)}</Text>
                           </TouchableOpacity>
@@ -444,8 +641,24 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
               {/* 3. Bảng tổng kết số tiền */}
               <View style={styles.summaryCard}>
                 <View style={styles.summaryLine}>
-                  <Text style={styles.summaryLabel}>Tổng tạm tính:</Text>
+                  <Text style={styles.summaryLabel}>Doanh thu trước VAT:</Text>
                   <Text style={styles.summaryVal}>{formatVND(subtotal)}</Text>
+                </View>
+                <View style={styles.summaryLine}>
+                  <Text style={styles.summaryLabel}>Chi phí giá vốn:</Text>
+                  <Text style={styles.summaryVal}>{formatVND(totalCost)}</Text>
+                </View>
+                {totalBudget > 0 && (
+                  <View style={styles.summaryLine}>
+                    <Text style={styles.summaryLabel}>Ngân sách thực thi:</Text>
+                    <Text style={styles.summaryVal}>{formatVND(totalBudget)}</Text>
+                  </View>
+                )}
+                <View style={styles.summaryLine}>
+                  <Text style={styles.summaryLabel}>Biên lợi nhuận gộp:</Text>
+                  <Text style={[styles.summaryVal, { color: overallMargin >= 20 ? '#15803D' : '#D97706', fontWeight: '800' }]}>
+                    {overallMargin.toFixed(0)}%
+                  </Text>
                 </View>
                 <View style={styles.summaryLine}>
                   <Text style={styles.summaryLabel}>Thuế VAT (8%):</Text>

@@ -76,6 +76,7 @@ export function useCreateQuotationMutation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.quotations.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
     },
   });
 }
@@ -141,6 +142,7 @@ export function useApproveQuotationMutation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.quotations.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
     },
   });
 }
@@ -159,6 +161,7 @@ export function useRejectQuotationMutation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.quotations.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
     },
   });
 }
@@ -177,6 +180,7 @@ export function useDeleteQuotationMutation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.quotations.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
     },
   });
 }
@@ -195,6 +199,7 @@ export function useCreateAddendumQuotationMutation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.quotations.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
     },
   });
 }

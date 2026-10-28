@@ -1,38 +1,69 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { formatVND } from '@/utils/formatters';
+
+export interface ServiceJobTaskItem {
+  id: string;
+  status: string;
+  customerDecision?: 'APPROVED' | 'NOT_PURCHASED' | null;
+  result?: {
+    url?: string;
+    name?: string;
+    note?: string;
+  };
+  nickname?: string;
+  name?: string;
+}
 
 export interface ServiceJobItem {
   id?: string;
   jobId?: string;
+  serviceId?: string;
   name?: string;
-  quantity?: number;
-  unit?: string;
-  costPrice?: number;
-  costAtSale?: number;
+  quantity?: number | string | null;
+  unit?: string | null;
+  costPrice?: number | string | null;
+  costAtSale?: number | string | null;
   isBriefVideo?: boolean;
   isQuotationItem?: boolean;
+  isOutput?: boolean;
   included?: boolean;
   briefVideo?: string;
+  tasks?: ServiceJobTaskItem[];
   job?: {
     id?: string;
-    name?: string;
-    unit?: string;
-    costPrice?: number;
+    name?: string | null;
+    code?: string | null;
+    unit?: string | null;
+    costPrice?: number | string | null;
     isBriefVideo?: boolean;
-  };
+  } | null;
 }
 
-export type ServiceJobAccordionMode = 'opportunity_create' | 'quotation_edit' | 'quotation_view';
+export type ServiceJobAccordionMode =
+  | 'opportunity_create'
+  | 'opportunity_view'
+  | 'quotation_edit'
+  | 'quotation_view'
+  | 'contract_view'
+  | 'catalog_view';
 
-interface ServiceJobAccordionProps {
+export interface ServiceJobAccordionProps {
   jobs?: ServiceJobItem[];
   mode?: ServiceJobAccordionMode;
   serviceIndex?: number;
   onJobIncludedChange?: (jobId: string, included: boolean) => void;
   onJobBriefChange?: (jobId: string, briefVideo: string) => void;
   defaultExpanded?: boolean;
+  canHandleDemo?: boolean;
+  onPreviewVideo?: (url: string, name?: string) => void;
+  onApproveDemo?: (taskId: string) => void;
+  onRejectDemo?: (taskId: string) => void;
+  onRequestRework?: (task: ServiceJobTaskItem) => void;
+  isApprovingDemo?: boolean;
+  isRejectingDemo?: boolean;
 }
 
 export const ServiceJobAccordion: React.FC<ServiceJobAccordionProps> = ({
@@ -41,6 +72,13 @@ export const ServiceJobAccordion: React.FC<ServiceJobAccordionProps> = ({
   onJobIncludedChange,
   onJobBriefChange,
   defaultExpanded = false,
+  canHandleDemo = false,
+  onPreviewVideo,
+  onApproveDemo,
+  onRejectDemo,
+  onRequestRework,
+  isApprovingDemo = false,
+  isRejectingDemo = false,
 }) => {
   const [isOpen, setIsOpen] = useState(defaultExpanded);
 
@@ -48,12 +86,23 @@ export const ServiceJobAccordion: React.FC<ServiceJobAccordionProps> = ({
     return null;
   }
 
+  const handleToggle = () => {
+    try {
+      Haptics.selectionAsync();
+    } catch {
+      // Haptics optional fallback
+    }
+    setIsOpen(!isOpen);
+  };
+
   return (
     <View style={styles.container}>
       <TouchableOpacity
         activeOpacity={0.7}
-        onPress={() => setIsOpen(!isOpen)}
+        onPress={handleToggle}
         style={styles.headerButton}
+        accessibilityRole="button"
+        accessibilityLabel={`Hạng mục công việc, ${jobs.length} mục`}
       >
         <View style={styles.headerTitleRow}>
           <Feather
@@ -77,11 +126,17 @@ export const ServiceJobAccordion: React.FC<ServiceJobAccordionProps> = ({
             const jobId = job.jobId || job.id || job.job?.id || `job-${index}`;
             const jobName = job.name || job.job?.name || 'Hạng mục con';
             const unitStr = job.unit || job.job?.unit || '';
-            const qty = job.quantity ?? 1;
-            const cost = job.costAtSale ?? job.costPrice ?? job.job?.costPrice ?? 0;
+            const qty = Number(job.quantity) || 1;
+            const cost = Number(job.costAtSale ?? job.costPrice ?? job.job?.costPrice ?? 0);
             const isBriefVideo = Boolean(job.isBriefVideo || job.job?.isBriefVideo);
             const isNotQuotation = isBriefVideo || job.isQuotationItem === false;
             const isIncluded = Boolean(job.included);
+
+            const approvedResults = (job.tasks || []).filter(
+              (task) =>
+                ['INTERNAL_COMPLETED', 'COMPLETED', 'ACCEPTED'].includes(task.status) &&
+                Boolean(task.result?.url)
+            );
 
             return (
               <View key={jobId} style={styles.jobCard}>
@@ -95,7 +150,18 @@ export const ServiceJobAccordion: React.FC<ServiceJobAccordionProps> = ({
                           <Text style={styles.nonQuoteBadgeText}>Không tính báo giá</Text>
                         </View>
                       )}
+                      {isBriefVideo && mode === 'opportunity_view' && (
+                        <View style={styles.nonQuoteBadge}>
+                          <Text style={styles.nonQuoteBadgeText}>Video AI demo</Text>
+                        </View>
+                      )}
                     </View>
+
+                    {job.briefVideo && mode === 'opportunity_view' ? (
+                      <Text style={styles.briefPreviewText}>
+                        Brief: {job.briefVideo}
+                      </Text>
+                    ) : null}
 
                     <View style={styles.jobMetaRow}>
                       <Text style={styles.jobMetaText}>
@@ -140,6 +206,97 @@ export const ServiceJobAccordion: React.FC<ServiceJobAccordionProps> = ({
                     )}
                   </View>
                 )}
+
+                {/* Mode opportunity_view: Khối kết quả Video AI Demo & Các nút duyệt */}
+                {mode === 'opportunity_view' && isBriefVideo && approvedResults.length > 0 && (
+                  <View style={styles.demoSection}>
+                    <View style={styles.demoSectionHeader}>
+                      <Feather name="check-circle" size={13} color="#059669" />
+                      <Text style={styles.demoSectionHeaderText}>
+                        Kết quả Video AI demo đã được xác nhận
+                      </Text>
+                    </View>
+
+                    {approvedResults.map((task) => (
+                      <View key={task.id} style={styles.demoTaskCard}>
+                        <View style={styles.demoTaskTitleRow}>
+                          <Text style={styles.demoTaskName} numberOfLines={1}>
+                            {task.result?.name || task.nickname || task.name || 'Video AI demo'}
+                          </Text>
+                          {task.result?.url ? (
+                            <TouchableOpacity
+                              activeOpacity={0.7}
+                              onPress={() =>
+                                onPreviewVideo?.(
+                                  task.result!.url!,
+                                  task.result?.name || task.nickname || task.name
+                                )
+                              }
+                              style={styles.openVideoBtn}
+                            >
+                              <Text style={styles.openVideoText}>Xem video</Text>
+                              <Feather name="external-link" size={12} color="#EA580C" />
+                            </TouchableOpacity>
+                          ) : null}
+                        </View>
+
+                        {task.result?.note ? (
+                          <Text style={styles.demoTaskNote}>{task.result.note}</Text>
+                        ) : null}
+
+                        {task.customerDecision === 'APPROVED' && (
+                          <View style={styles.decisionApprovedBadge}>
+                            <Feather name="check" size={12} color="#059669" />
+                            <Text style={styles.decisionApprovedText}>Khách hàng đã duyệt mua</Text>
+                          </View>
+                        )}
+
+                        {task.customerDecision === 'NOT_PURCHASED' && (
+                          <View style={styles.decisionRejectedBadge}>
+                            <Feather name="slash" size={12} color="#D97706" />
+                            <Text style={styles.decisionRejectedText}>Khách hàng không mua</Text>
+                          </View>
+                        )}
+
+                        {task.status === 'INTERNAL_COMPLETED' &&
+                          !task.customerDecision &&
+                          canHandleDemo && (
+                            <View style={styles.demoActionsRow}>
+                              <TouchableOpacity
+                                activeOpacity={0.8}
+                                onPress={() => onApproveDemo?.(task.id)}
+                                disabled={isApprovingDemo || isRejectingDemo}
+                                style={[styles.demoBtn, styles.demoBtnApprove]}
+                              >
+                                <Feather name="check" size={12} color="#FFFFFF" />
+                                <Text style={styles.demoBtnApproveText}>Khách duyệt</Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity
+                                activeOpacity={0.8}
+                                onPress={() => onRejectDemo?.(task.id)}
+                                disabled={isApprovingDemo || isRejectingDemo}
+                                style={[styles.demoBtn, styles.demoBtnReject]}
+                              >
+                                <Feather name="x" size={12} color="#B45309" />
+                                <Text style={styles.demoBtnRejectText}>Không mua</Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity
+                                activeOpacity={0.8}
+                                onPress={() => onRequestRework?.(task)}
+                                disabled={isApprovingDemo || isRejectingDemo}
+                                style={[styles.demoBtn, styles.demoBtnRework]}
+                              >
+                                <Feather name="rotate-ccw" size={12} color="#7C3AED" />
+                                <Text style={styles.demoBtnReworkText}>Làm lại</Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
             );
           })}
@@ -153,15 +310,16 @@ const styles = StyleSheet.create({
   container: {
     marginTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#EEF2FF',
+    borderTopColor: '#F1F5F9',
     paddingTop: 8,
   },
   headerButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 4,
+    paddingVertical: 6,
     paddingHorizontal: 2,
+    minHeight: 40,
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -170,14 +328,14 @@ const styles = StyleSheet.create({
   headerTitleText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#4F46E5',
+    color: '#D97010',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   toggleHintText: {
     fontSize: 11,
-    color: '#6366F1',
-    fontWeight: '500',
+    color: '#F38820',
+    fontWeight: '600',
   },
   jobsListContainer: {
     marginTop: 8,
@@ -209,6 +367,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1E293B',
     flexShrink: 1,
+  },
+  briefPreviewText: {
+    fontSize: 11,
+    color: '#C2410C',
+    marginTop: 3,
+    fontStyle: 'italic',
   },
   nonQuoteBadge: {
     backgroundColor: '#FEF3C7',
@@ -289,5 +453,142 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     textAlignVertical: 'top',
     minHeight: 60,
+  },
+  demoSection: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#D1FAE5',
+  },
+  demoSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 6,
+  },
+  demoSectionHeaderText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  demoTaskCard: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    padding: 8,
+    marginBottom: 6,
+  },
+  demoTaskTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  demoTaskName: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#166534',
+  },
+  openVideoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  openVideoText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#EA580C',
+  },
+  demoTaskNote: {
+    fontSize: 11,
+    color: '#475569',
+    marginTop: 4,
+  },
+  decisionApprovedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginTop: 6,
+    alignSelf: 'flex-start',
+  },
+  decisionApprovedText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#15803D',
+  },
+  decisionRejectedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginTop: 6,
+    alignSelf: 'flex-start',
+  },
+  decisionRejectedText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#B45309',
+  },
+  demoActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#DCFCE7',
+  },
+  demoBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    borderRadius: 6,
+    minHeight: 34,
+  },
+  demoBtnApprove: {
+    backgroundColor: '#16A34A',
+  },
+  demoBtnApproveText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  demoBtnReject: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  demoBtnRejectText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#B45309',
+  },
+  demoBtnRework: {
+    backgroundColor: '#F5F3FF',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  demoBtnReworkText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#7C3AED',
   },
 });
