@@ -114,21 +114,50 @@ export default function QuotationsListScreen() {
   };
 
   const handleApprove = async (id: string) => {
-    Alert.alert('Xác nhận duyệt', 'Bạn có chắc chắn muốn duyệt báo giá này không?', [
-      { text: 'Hủy', style: 'cancel' },
-      {
-        text: 'Duyệt',
-        style: 'default',
-        onPress: async () => {
-          try {
-            await approveQuotationMutation.mutateAsync(id);
-            Alert.alert('Thành công', 'Đã duyệt báo giá thành công');
-          } catch (err: any) {
-            Alert.alert('Lỗi', err?.message || 'Có lỗi xảy ra khi duyệt báo giá');
-          }
+    Alert.alert(
+      'Xác nhận duyệt',
+      'Bạn có chắc chắn muốn duyệt báo giá này không? Sau khi duyệt, hệ thống sẽ tự động tạo Hợp đồng tương ứng.',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Duyệt',
+          style: 'default',
+          onPress: async () => {
+            try {
+              const res: any = await approveQuotationMutation.mutateAsync(id);
+              const contractId =
+                res?.contractId ||
+                res?.contract?.id ||
+                res?.data?.contractId ||
+                res?.data?.contract?.id;
+
+              if (contractId) {
+                Alert.alert(
+                  'Thành công',
+                  'Đã duyệt báo giá và tự động tạo Hợp đồng kinh tế!',
+                  [
+                    {
+                      text: 'Xem hợp đồng',
+                      onPress: () => {
+                        router.push({
+                          pathname: '/contracts/[id]',
+                          params: { id: contractId },
+                        } as any);
+                      },
+                    },
+                    { text: 'Đóng', style: 'cancel' },
+                  ]
+                );
+              } else {
+                Alert.alert('Thành công', 'Đã duyệt báo giá thành công');
+              }
+            } catch (err: any) {
+              Alert.alert('Lỗi', err?.message || 'Có lỗi xảy ra khi duyệt báo giá');
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   const handleOpenReject = (id: string) => {

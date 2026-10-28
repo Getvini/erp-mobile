@@ -544,6 +544,10 @@ export default function OpportunityDetailScreen() {
   const hasApprovedQuotation =
     opportunity.status === 'QUOTE_APPROVED' ||
     opportunity.status === 'CONTRACT_CREATED' ||
+    opportunity.status === 'CONTRACT_APPROVED' ||
+    opportunity.status === 'PROJECT_ASSIGNED' ||
+    opportunity.status === 'IMPLEMENTATION' ||
+    opportunity.status === 'COMPLETED' ||
     quotations.some((q) => q.status === 'APPROVED' || q.status === 'QUOTE_APPROVED');
 
   const canCreateQuotation = canCreateQuotationFromOpportunity(
@@ -553,7 +557,6 @@ export default function OpportunityDetailScreen() {
   );
 
   const canViewQuotations = hasCustomer && quotations.length > 0;
-  const canCreateContract = opportunity.status === 'QUOTE_APPROVED';
   const isRejected = opportunity.status === 'OPP_REJECTED';
   const canResubmit =
     isRejected &&
@@ -561,12 +564,27 @@ export default function OpportunityDetailScreen() {
       user?.role === 'BOD' ||
       (opportunity.createdBy as any)?.id === user?.id ||
       (opportunity as any)?.creator?.id === user?.id);
+
   const linkedContract =
     opportunity.contracts && opportunity.contracts.length > 0
       ? opportunity.contracts[0]
-      : null;
+      : (opportunity as any).contract || null;
+
   const hasContract =
-    opportunity.status === 'CONTRACT_CREATED' || !!linkedContract;
+    opportunity.status === 'CONTRACT_CREATED' ||
+    opportunity.status === 'CONTRACT_APPROVED' ||
+    opportunity.status === 'PROJECT_ASSIGNED' ||
+    opportunity.status === 'IMPLEMENTATION' ||
+    opportunity.status === 'COMPLETED' ||
+    !!linkedContract;
+
+  // Khi báo giá được duyệt, hệ thống backend đã tự động tạo hợp đồng.
+  // Không hiển thị nút tạo hợp đồng khi đã có hợp đồng hoặc báo giá đã duyệt.
+  const canCreateContract =
+    opportunity.status === 'QUOTE_APPROVED' &&
+    !hasContract &&
+    !linkedContract &&
+    !hasApprovedQuotation;
   const standaloneServices = opportunity.services?.filter((s) => !s.opportunityPackageId) || [];
   const packages = opportunity.packages || [];
   const attachments = opportunity.attachments || [];
@@ -816,28 +834,32 @@ export default function OpportunityDetailScreen() {
                 </TouchableOpacity>
               )}
 
-              {hasContract && linkedContract && (
+              {hasContract && (
                 <TouchableOpacity
                   className="flex-row items-center justify-center gap-1.5 bg-slate-900 px-2.5 py-2 rounded-lg flex-1 min-w-[120px]"
-                  onPress={() =>
-                    router.push({
-                      pathname: '/contracts/[id]',
-                      params: { id: linkedContract.id },
-                    } as any)
-                  }
+                  onPress={() => {
+                    if (linkedContract?.id) {
+                      router.push({
+                        pathname: '/contracts/[id]',
+                        params: { id: linkedContract.id },
+                      } as any);
+                    } else {
+                      router.push('/contracts' as any);
+                    }
+                  }}
                   activeOpacity={0.8}
                 >
                   <Feather name="file-text" size={14} color="#FFFFFF" />
-                    <Text
-                      className="text-[13px] font-bold text-white"
-                      style={{ flexShrink: 1 }}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                    >
-                      {linkedContract.contractCode
-                        ? `HĐ: ${linkedContract.contractCode}`
-                        : 'Xem hợp đồng'}
-                    </Text>
+                  <Text
+                    className="text-[13px] font-bold text-white"
+                    style={{ flexShrink: 1 }}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {linkedContract?.contractCode
+                      ? `HĐ: ${linkedContract.contractCode}`
+                      : 'Xem hợp đồng'}
+                  </Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -1063,7 +1085,7 @@ export default function OpportunityDetailScreen() {
         )}
 
         {/* 11. KHỐI HỢP ĐỒNG KINH TẾ */}
-        {hasContract && linkedContract && (
+        {hasContract && (
           <View className="bg-white rounded-[18px] p-4 mb-3.5 border border-slate-200 shadow-sm">
             <View className="flex-row justify-between items-center mb-3.5">
               <View className="flex-row items-center gap-2">
@@ -1072,7 +1094,7 @@ export default function OpportunityDetailScreen() {
                 </View>
                 <Text className="text-[15px] font-extrabold text-slate-900">Hợp đồng kinh tế</Text>
               </View>
-              {(() => {
+              {linkedContract && (() => {
                 const statusKey = linkedContract.status || '';
                 const conf = CONTRACT_STATUS_CONFIG[statusKey];
                 return (
@@ -1098,15 +1120,15 @@ export default function OpportunityDetailScreen() {
               <View className="flex-row justify-between items-start mb-2.5">
                 <View className="flex-1">
                   <Text className="text-xs font-extrabold text-cyan-600">
-                    {linkedContract.contractCode ||
-                      (linkedContract as any).contract_code ||
-                      '—'}
+                    {linkedContract?.contractCode ||
+                      (linkedContract as any)?.contract_code ||
+                      'Hợp đồng đã tạo'}
                   </Text>
                   <Text className="text-sm font-bold text-slate-900 mt-0.5">
-                    {linkedContract.name || opportunity.name}
+                    {linkedContract?.name || opportunity.name}
                   </Text>
                 </View>
-                {linkedContract.totalWithVat ? (
+                {linkedContract?.totalWithVat ? (
                   <Text className="text-sm font-extrabold text-emerald-600">
                     {formatVNDFull(linkedContract.totalWithVat)}
                   </Text>
@@ -1115,12 +1137,16 @@ export default function OpportunityDetailScreen() {
 
               <TouchableOpacity
                 className="flex-row items-center justify-center gap-1.5 bg-white border border-cyan-100 py-2 rounded-lg"
-                onPress={() =>
-                  router.push({
-                    pathname: '/contracts/[id]',
-                    params: { id: linkedContract.id },
-                  } as any)
-                }
+                onPress={() => {
+                  if (linkedContract?.id) {
+                    router.push({
+                      pathname: '/contracts/[id]',
+                      params: { id: linkedContract.id },
+                    } as any);
+                  } else {
+                    router.push('/contracts' as any);
+                  }
+                }}
                 activeOpacity={0.85}
               >
                 <Text className="text-[13px] font-bold text-cyan-600">Xem chi tiết hợp đồng</Text>

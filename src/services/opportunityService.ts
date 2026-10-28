@@ -207,6 +207,7 @@ export interface OpportunityItem {
       quantity: number;
       sellingPrice: number;
       unit?: string;
+      jobs?: any[];
     }>;
   }>;
   services?: Array<{
@@ -227,6 +228,7 @@ export interface OpportunityItem {
     description?: string;
     opportunityPackageId?: string | null;
     unit?: string;
+    jobs?: any[];
   }>;
   attachments?: Array<{
     id?: string;

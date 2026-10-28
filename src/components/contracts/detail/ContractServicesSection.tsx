@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { formatVNDFull, formatNumber } from '@/utils/formatters';
+import { ServiceJobAccordion } from '@/components/opportunities/ServiceJobAccordion';
 
 interface PackageServiceItem {
   id?: string;
@@ -9,6 +10,7 @@ interface PackageServiceItem {
   quantity: number;
   sellingPrice: number;
   unit: string;
+  jobs?: any[];
 }
 
 interface PackageItem {
@@ -23,6 +25,7 @@ interface StandaloneServiceItem {
   quantity: number;
   sellingPrice: number;
   unit: string;
+  jobs?: any[];
 }
 
 interface ContractServicesSectionProps {
@@ -154,17 +157,20 @@ export const ContractServicesSection: React.FC<ContractServicesSectionProps> = (
                     pkg.services.map((s, sIdx) => (
                       <View
                         key={s.id || sIdx}
-                        className="flex-row justify-between items-center py-[4px] border-b border-b-[#E0F2FE]"
+                        className="py-[6px] border-b border-b-[#E0F2FE]"
                       >
-                        <View style={{ flex: 1, paddingRight: 8 }}>
-                          <Text className="text-[12px] font-semibold text-slate-800">{s.name}</Text>
-                          <Text className="text-[11px] text-slate-500 mt-[1px]">
-                            Định mức: {s.quantity} {s.unit} / Gói
+                        <View className="flex-row justify-between items-center">
+                          <View style={{ flex: 1, paddingRight: 8 }}>
+                            <Text className="text-[12px] font-semibold text-slate-800">{s.name}</Text>
+                            <Text className="text-[11px] text-slate-500 mt-[1px]">
+                              Định mức: {s.quantity} {s.unit} / Gói
+                            </Text>
+                          </View>
+                          <Text className="text-[12px] font-bold text-[#0369A1]">
+                            {formatNumber(s.sellingPrice)} VNĐ
                           </Text>
                         </View>
-                        <Text className="text-[12px] font-bold text-[#0369A1]">
-                          {formatNumber(s.sellingPrice)} VNĐ
-                        </Text>
+                        <ServiceJobAccordion jobs={s.jobs} mode="contract_view" />
                       </View>
                     ))
                   ) : (
@@ -187,17 +193,20 @@ export const ContractServicesSection: React.FC<ContractServicesSectionProps> = (
             {standaloneList.map((s, idx) => (
               <View
                 key={s.id || idx}
-                className="flex-row justify-between items-center bg-slate-50 rounded-[10px] p-[10px] border border-slate-200 mb-[6px]"
+                className="bg-slate-50 rounded-[10px] p-[10px] border border-slate-200 mb-[6px]"
               >
-                <View style={{ flex: 1, paddingRight: 8 }}>
-                  <Text className="text-[13px] font-semibold text-slate-800">{s.name}</Text>
-                  <Text className="text-[11px] text-slate-500 mt-[1px]">
-                    Số lượng: {s.quantity} {s.unit}
+                <View className="flex-row justify-between items-center">
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text className="text-[13px] font-semibold text-slate-800">{s.name}</Text>
+                    <Text className="text-[11px] text-slate-500 mt-[1px]">
+                      Số lượng: {s.quantity} {s.unit}
+                    </Text>
+                  </View>
+                  <Text className="text-[13px] font-bold text-emerald-600">
+                    {formatNumber(s.sellingPrice)} VNĐ
                   </Text>
                 </View>
-                <Text className="text-[13px] font-bold text-emerald-600">
-                  {formatNumber(s.sellingPrice)} VNĐ
-                </Text>
+                <ServiceJobAccordion jobs={s.jobs} mode="contract_view" />
               </View>
             ))}
           </View>

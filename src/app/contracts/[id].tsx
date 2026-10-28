@@ -519,6 +519,7 @@ export default function ContractDetailScreen() {
         quantity: number;
         sellingPrice: number;
         unit: string;
+        jobs?: any[];
       }>;
     }
   > = {};
@@ -544,6 +545,7 @@ export default function ContractDetailScreen() {
         quantity: 1,
         sellingPrice: Number(item.sellingPrice || 0),
         unit: unitName,
+        jobs: (item as any).jobs || (item as any).service?.serviceJobs || [],
       });
     }
   });
@@ -556,6 +558,7 @@ export default function ContractDetailScreen() {
     quantity: number;
     sellingPrice: number;
     unit: string;
+    jobs?: any[];
   }> = [];
 
   standaloneServices.forEach((item) => {
@@ -571,6 +574,7 @@ export default function ContractDetailScreen() {
         quantity: 1,
         sellingPrice: Number(item.sellingPrice || 0),
         unit: unitName,
+        jobs: (item as any).jobs || (item as any).service?.serviceJobs || [],
       });
     }
   });

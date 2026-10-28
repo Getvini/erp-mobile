@@ -24,6 +24,7 @@ import { canAccessServiceCatalog } from '@/utils/rbac';
 import { formatVND } from '@/utils/formatters';
 import { computePackagePrice } from '@/utils/catalogPricing';
 import { safeGoBack } from '@/utils/navigation';
+import { ServiceJobAccordion } from '@/components/opportunities/ServiceJobAccordion';
 
 export default function ServicePackageDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -268,25 +269,32 @@ export default function ServicePackageDetailScreen() {
               return (
                 <View
                   key={item.id || `${item.serviceId}-${index}`}
-                  className={`flex-row items-center gap-3 py-2.5 ${
+                  className={`py-2.5 ${
                     index === 0 ? '' : 'border-t border-slate-100'
                   }`}
                 >
-                  <View className="flex-1">
-                    <Text className="text-sm font-bold text-slate-800" numberOfLines={2}>
-                      {item.service?.name || 'Dịch vụ'}
-                    </Text>
-                    <Text className="mt-0.5 text-[11px] font-semibold text-slate-400">
-                      {item.service?.code
-                        ? `#${item.service.code}`
-                        : `#${(item.serviceId || '').slice(0, 8)}`}
-                      {` • SL mặc định: ${Number(item.defaultQuantity || 0)}`}
-                      {` • Đơn giá: ${formatVND(item.service?.costPrice ?? 0)}`}
-                    </Text>
-                    <Text className="mt-1 text-sm font-bold text-orange-600">
-                      {formatVND(lineTotal)}
-                    </Text>
+                  <View className="flex-row items-center gap-3">
+                    <View className="flex-1">
+                      <Text className="text-sm font-bold text-slate-800" numberOfLines={2}>
+                        {item.service?.name || 'Dịch vụ'}
+                      </Text>
+                      <Text className="mt-0.5 text-[11px] font-semibold text-slate-400">
+                        {item.service?.code
+                          ? `#${item.service.code}`
+                          : `#${(item.serviceId || '').slice(0, 8)}`}
+                        {` • SL mặc định: ${Number(item.defaultQuantity || 0)}`}
+                        {` • Đơn giá: ${formatVND(item.service?.costPrice ?? 0)}`}
+                      </Text>
+                      <Text className="mt-1 text-sm font-bold text-orange-600">
+                        {formatVND(lineTotal)}
+                      </Text>
+                    </View>
                   </View>
+
+                  <ServiceJobAccordion
+                    jobs={item.service?.serviceJobs}
+                    mode="catalog_view"
+                  />
                 </View>
               );
             })
