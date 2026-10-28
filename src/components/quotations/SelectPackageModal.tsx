@@ -7,7 +7,6 @@ interface SelectPackageModalProps {
   onClose: () => void;
   onSelect: (pkg: any) => void;
   packageTemplates: any[];
-  selectedPackageNames: Set<string>;
 }
 
 export const SelectPackageModal = memo<SelectPackageModalProps>(({
@@ -15,17 +14,14 @@ export const SelectPackageModal = memo<SelectPackageModalProps>(({
   onClose,
   onSelect,
   packageTemplates,
-  selectedPackageNames,
 }) => {
   const [search, setSearch] = useState('');
 
   const filteredPackageTemplates = useMemo(() => {
     return packageTemplates.filter(
-      (p) =>
-        !selectedPackageNames.has(p.name) &&
-        (search.trim() === '' || p.name?.toLowerCase().includes(search.toLowerCase()))
+      (p) => search.trim() === '' || p.name?.toLowerCase().includes(search.toLowerCase())
     );
-  }, [packageTemplates, selectedPackageNames, search]);
+  }, [packageTemplates, search]);
 
   const handleClose = () => {
     setSearch('');

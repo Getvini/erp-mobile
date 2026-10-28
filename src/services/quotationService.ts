@@ -29,12 +29,15 @@ export interface QuotationItem {
 export interface QuotationDetailItem {
   id?: string;
   serviceId: string;
+  opportunityServiceId?: string;
   servicePackageId?: string;
+  packageKey?: string;
   packageName?: string;
   packageQuantity?: number;
   quantity: number;
   sellingPrice: number;
   costAtSale: number;
+  budget?: number;
   name?: string;
   description?: string;
   isPackageService?: boolean;
@@ -63,6 +66,8 @@ export interface QuotationDetailResponse extends QuotationItem {
       services?: Array<{
         id: string;
         serviceId: string;
+        costAtSale?: number;
+        budget?: number;
         quantity: number;
         sellingPrice?: number;
         service?: {
@@ -71,6 +76,7 @@ export interface QuotationDetailResponse extends QuotationItem {
           description?: string;
           unit?: string;
           costPrice?: number;
+          isBudget?: boolean;
         };
       }>;
     }>;
@@ -79,12 +85,15 @@ export interface QuotationDetailResponse extends QuotationItem {
 
 export interface CreateQuotationDetailPayload {
   serviceId: string;
+  opportunityServiceId?: string;
   quantity: number;
   sellingPrice: number;
   costAtSale: number;
+  budget?: number;
   name?: string;
   packageQuantity?: number;
   packageName?: string;
+  packageKey?: string;
   servicePackageId?: string;
   isPackageService?: boolean;
 }
@@ -92,12 +101,14 @@ export interface CreateQuotationDetailPayload {
 export interface CreateQuotationPayload {
   opportunityId: string;
   note?: string;
+  totalAmount?: number;
   details: CreateQuotationDetailPayload[];
 }
 
 export interface UpdateQuotationPayload {
   opportunityId?: string;
   note?: string;
+  totalAmount?: number;
   status?: string;
   description?: string;
   details?: CreateQuotationDetailPayload[];

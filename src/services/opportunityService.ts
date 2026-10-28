@@ -189,16 +189,20 @@ export interface OpportunityItem {
   };
   packages?: Array<{
     id: string;
+    servicePackageId?: string;
     name: string;
     quantity: number;
     description?: string;
     services?: Array<{
       id: string;
       serviceId: string;
+      costAtSale?: number;
+      budget?: number;
       service?: {
         name: string;
         unit?: string;
         costPrice?: number;
+        isBudget?: boolean;
       };
       quantity: number;
       sellingPrice: number;
@@ -208,10 +212,14 @@ export interface OpportunityItem {
   services?: Array<{
     id?: string;
     serviceId?: string;
+    costAtSale?: number;
+    budget?: number;
     serviceName?: string;
     service?: {
       name: string;
       unit?: string;
+      costPrice?: number;
+      isBudget?: boolean;
     };
     quantity?: number;
     sellingPrice?: number;

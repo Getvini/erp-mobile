@@ -8,8 +8,6 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
-  Modal,
-  FlatList,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -41,9 +39,11 @@ import { SelectServiceModal, SelectPackageModal } from '@/components/quotations'
 
 interface QuotationFormItem {
   serviceId: string;
+  opportunityServiceId?: string;
   serviceName: string;
   quantity: number;
   costPrice: number;
+  budget: number;
   minPrice: number;
   recommendedPrice: number;
   customPrice: number;
@@ -52,10 +52,27 @@ interface QuotationFormItem {
   packageName: string;
   packageQuantity?: number;
   norm?: number;
+  packageKey?: string;
   servicePackageId?: string;
   unit?: string;
   jobs?: any[];
 }
+
+const roundToTenThousands = (value: number) => Math.ceil(value / 10000) * 10000;
+
+const calculateProfitMargin = (sellingPrice: number, costPrice: number, budget = 0) => {
+  if (!sellingPrice || sellingPrice === 0) return 0;
+  const totalCost = Number(costPrice || 0) + Number(budget || 0);
+  return ((sellingPrice - totalCost) / sellingPrice) * 100;
+};
+
+const getPricingValues = (costPrice: number, budget = 0) => {
+  const totalCost = Number(costPrice || 0) + Number(budget || 0);
+  return {
+    minPrice: roundToTenThousands(totalCost / 0.8),
+    recommendedPrice: roundToTenThousands(totalCost / 0.6),
+  };
+};
 
 export default function QuotationCreateEditScreen() {
   const router = useRouter();
@@ -85,7 +102,7 @@ export default function QuotationCreateEditScreen() {
   const [editQuotation, setEditQuotation] = useState<QuotationDetailResponse | null>(null);
 
   const [items, setItems] = useState<QuotationFormItem[]>([]);
-  const [priceType, setPriceType] = useState<'minimum' | 'recommended' | 'custom'>('recommended');
+  const [priceType, setPriceType] = useState<'minimum' | 'recommended' | 'custom'>('custom');
   const [notes, setNotes] = useState('');
 
   // Expand/collapse state for packages
@@ -127,15 +144,6 @@ export default function QuotationCreateEditScreen() {
     [servicesById]
   );
 
-  const roundToTenThousands = (value: number) => {
-    return Math.ceil(value / 10000) * 10000;
-  };
-
-  const calculateProfitMargin = (sellingPrice: number, costPrice: number) => {
-    if (!sellingPrice || sellingPrice === 0) return 0;
-    return ((sellingPrice - costPrice) / sellingPrice) * 100;
-  };
-
   // Sync state from query responses
   useEffect(() => {
     if (hasInitialized || !oppData || !allServicesRes || !pkgTemplatesRes) return;
@@ -155,29 +163,37 @@ export default function QuotationCreateEditScreen() {
       const loadedItems: QuotationFormItem[] = (quoteData.details || []).map((detail: any) => {
         const costPrice = parseFloat(String(detail.costAtSale || detail.service?.costPrice || 0));
         const sellingPrice = parseFloat(String(detail.sellingPrice || 0));
-        const minPrice = roundToTenThousands(costPrice / 0.8);
-        const recommendedPrice = roundToTenThousands(costPrice / 0.6);
+        const budget = Number(detail.budget || 0);
+        const { minPrice, recommendedPrice } = getPricingValues(costPrice, budget);
         const sId = String(detail.service?.id || detail.serviceId);
-        const oppService = detail.packageName && detail.packageName !== 'STANDALONE'
-          ? (oppData?.packages || []).flatMap((pkg: any) => pkg.services || []).find((s: any) => String(s.service?.id || s.serviceId) === sId)
-          : (oppData?.services || []).find((s: any) => !s.opportunityPackageId && String(s.service?.id || s.serviceId) === sId);
+        const opportunityServiceId = String(detail.opportunityServiceId || '');
+        const packageServices = (oppData?.packages || []).flatMap((pkg: any) => pkg.services || []);
+        const standaloneServices = (oppData?.services || []).filter((s: any) => !s.opportunityPackageId);
+        const oppService = [...packageServices, ...standaloneServices].find((s: any) =>
+          opportunityServiceId
+            ? String(s.id) === opportunityServiceId
+            : String(s.service?.id || s.serviceId) === sId
+        );
         const jobs = (detail.jobs && detail.jobs.length > 0)
           ? detail.jobs
           : resolveJobsForService(oppService || detail, sId);
 
         return {
           serviceId: detail.service?.id || detail.serviceId,
+          opportunityServiceId: detail.opportunityServiceId || oppService?.id,
           serviceName: detail.service?.name || detail.name || 'Dịch vụ',
           quantity: detail.quantity || 1,
           costPrice,
+          budget,
           minPrice,
           recommendedPrice,
           customPrice: sellingPrice,
           selectedPrice: sellingPrice,
-          profitMargin: calculateProfitMargin(sellingPrice, costPrice),
+          profitMargin: calculateProfitMargin(sellingPrice, costPrice, budget),
           packageName: detail.packageName || 'STANDALONE',
           packageQuantity: detail.packageQuantity || 1,
           norm: detail.packageQuantity ? (detail.quantity || 1) / detail.packageQuantity : 1,
+          packageKey: detail.packageKey,
           servicePackageId: detail.servicePackageId,
           unit: detail.service?.unit || detail.unit || '',
           jobs,
@@ -188,7 +204,7 @@ export default function QuotationCreateEditScreen() {
       const expandedMap: Record<string, boolean> = {};
       loadedItems.forEach((item) => {
         if (item.packageName && item.packageName !== 'STANDALONE') {
-          expandedMap[item.packageName] = true;
+          expandedMap[String(item.packageKey || item.servicePackageId || item.packageName)] = true;
         }
       });
       setExpandedPackages(expandedMap);
@@ -198,21 +214,24 @@ export default function QuotationCreateEditScreen() {
       const standaloneItems: QuotationFormItem[] = (servicesData || [])
         .filter((service: any) => !service.opportunityPackageId)
         .map((service: any) => {
-          const costPrice = parseFloat(service.service?.costPrice || service.costPrice) || 0;
-          const minPrice = roundToTenThousands(costPrice / 0.8);
-          const recommendedPrice = roundToTenThousands(costPrice / 0.6);
+          const costPrice = Number(service.costAtSale ?? service.service?.costPrice ?? service.costPrice ?? 0);
+          const budget = Number(service.budget || 0);
+          const { minPrice, recommendedPrice } = getPricingValues(costPrice, budget);
+          const customPrice = Number(service.sellingPrice || 0) || recommendedPrice;
           const jobs = resolveJobsForService(service);
 
           return {
             serviceId: service.service?.id || service.serviceId || service.id,
+            opportunityServiceId: service.id,
             serviceName: service.service?.name || service.serviceName || service.name || 'Dịch vụ',
             quantity: service.quantity || 1,
             costPrice,
+            budget,
             minPrice,
             recommendedPrice,
-            customPrice: recommendedPrice,
-            selectedPrice: recommendedPrice,
-            profitMargin: calculateProfitMargin(recommendedPrice, costPrice),
+            customPrice,
+            selectedPrice: customPrice,
+            profitMargin: calculateProfitMargin(customPrice, costPrice, budget),
             packageName: 'STANDALONE',
             unit: service.service?.unit || service.unit || '',
             jobs,
@@ -221,24 +240,31 @@ export default function QuotationCreateEditScreen() {
 
       const packageItems: QuotationFormItem[] = (oppData?.packages || []).flatMap((pkg: any) =>
         (pkg.services || []).map((ps: any) => {
-          const costPrice = parseFloat(ps.service?.costPrice || ps.sellingPrice) || 0;
-          const minPrice = roundToTenThousands(costPrice / 0.8);
-          const recommendedPrice = roundToTenThousands(costPrice / 0.6);
+          const norm = Number(ps.quantity || 1) / Number(pkg.quantity || 1);
+          const rawCost = Number(ps.costAtSale ?? ps.service?.costPrice ?? 0);
+          const rawSelling = Number(ps.sellingPrice || 0);
+          const costPrice = norm > 1 && rawCost > 100000 ? Math.round(rawCost / norm) : rawCost;
+          const budget = Number(ps.budget || 0);
+          const { minPrice, recommendedPrice } = getPricingValues(costPrice, budget);
+          const customPrice = (norm > 1 && rawSelling > 100000 ? Math.round(rawSelling / norm) : rawSelling) || recommendedPrice;
           const jobs = resolveJobsForService(ps);
 
           return {
             serviceId: ps.serviceId || ps.id,
+            opportunityServiceId: ps.id,
             serviceName: ps.service?.name || ps.name || 'Dịch vụ trong gói',
             quantity: ps.quantity || 1,
             costPrice,
+            budget,
             minPrice,
             recommendedPrice,
-            customPrice: recommendedPrice,
-            selectedPrice: recommendedPrice,
-            profitMargin: calculateProfitMargin(recommendedPrice, costPrice),
+            customPrice,
+            selectedPrice: customPrice,
+            profitMargin: calculateProfitMargin(customPrice, costPrice, budget),
             packageName: pkg.name || 'Gói dịch vụ',
             packageQuantity: pkg.quantity || 1,
-            norm: pkg.quantity ? (ps.quantity || 1) / pkg.quantity : 1,
+            norm,
+            packageKey: pkg.id,
             servicePackageId: pkg.servicePackageId,
             unit: ps.service?.unit || ps.unit || '',
             jobs,
@@ -247,7 +273,7 @@ export default function QuotationCreateEditScreen() {
       );
 
       setItems([...standaloneItems, ...packageItems]);
-      setPriceType('recommended');
+      setPriceType('custom');
     }
 
     setHasInitialized(true);
@@ -262,7 +288,7 @@ export default function QuotationCreateEditScreen() {
       const expandedMap: Record<string, boolean> = {};
       items.forEach((item) => {
         if (item.packageName && item.packageName !== 'STANDALONE') {
-          expandedMap[item.packageName] = true;
+          expandedMap[String(item.packageKey || item.servicePackageId || item.packageName)] = true;
         }
       });
       setExpandedPackages((prev) => ({ ...prev, ...expandedMap }));
@@ -280,25 +306,27 @@ export default function QuotationCreateEditScreen() {
         return {
           ...item,
           selectedPrice,
-          profitMargin: calculateProfitMargin(selectedPrice, item.costPrice),
+          profitMargin: calculateProfitMargin(selectedPrice, item.costPrice, item.budget),
         };
       })
     );
   };
 
   // Handle custom price change for a standalone item
-  const handleStandaloneCustomPriceChange = (index: number, valStr: string) => {
-    const numValue = parseNumberInput(valStr);
+  const handleCustomPriceChange = (index: number, valStr: string, packageLine = false) => {
+    const enteredPrice = parseNumberInput(valStr);
     setItems((prev) =>
       prev.map((item, i) => {
         if (i === index) {
+          const norm = packageLine ? Number(item.norm || 1) : 1;
+          const numValue = enteredPrice / norm;
           return {
             ...item,
             customPrice: numValue,
             selectedPrice: priceType === 'custom' ? numValue : item.selectedPrice,
             profitMargin:
               priceType === 'custom'
-                ? calculateProfitMargin(numValue, item.costPrice)
+                ? calculateProfitMargin(numValue, item.costPrice, item.budget)
                 : item.profitMargin,
           };
         }
@@ -308,65 +336,75 @@ export default function QuotationCreateEditScreen() {
   };
 
   // Handle custom price change for a PACKAGE (proportional redistribution)
-  const handlePackageCustomPriceChange = (packageName: string, valStr: string) => {
-    const newTotalCustomPrice = parseNumberInput(valStr);
-    const packageItems = items.filter((item) => item.packageName === packageName);
-    const currentTotalCustomPrice = packageItems.reduce(
-      (sum, item) => sum + item.customPrice * (item.norm || 1),
-      0
-    );
-
-    if (currentTotalCustomPrice === 0) {
-      const share = newTotalCustomPrice / (packageItems.length || 1);
-      setItems((prev) =>
-        prev.map((item) => {
-          if (item.packageName === packageName) {
-            const unitShare = share / (item.norm || 1);
-            return {
-              ...item,
-              customPrice: unitShare,
-              selectedPrice: priceType === 'custom' ? unitShare : item.selectedPrice,
-              profitMargin:
-                priceType === 'custom'
-                  ? calculateProfitMargin(unitShare, item.costPrice)
-                  : item.profitMargin,
-            };
-          }
-          return item;
-        })
-      );
-      return;
-    }
-
-    const ratio = newTotalCustomPrice / currentTotalCustomPrice;
+  const handlePackageCustomPriceChange = (packageKey: string, valStr: string) => {
+    const totalPrice = parseNumberInput(valStr);
     setItems((prev) =>
-      prev.map((item) => {
-        if (item.packageName === packageName) {
-          const newCustomPrice = item.customPrice * ratio;
+      {
+        const indexes = prev.reduce<number[]>((result, item, index) => (
+          String(item.packageKey || item.servicePackageId || item.packageName) === String(packageKey)
+            ? [...result, index]
+            : result
+        ), []);
+        if (indexes.length === 0) return prev;
+        const weights = indexes.map((index) => {
+          const item = prev[index];
+          return Number(item.recommendedPrice || item.costPrice || 1) * Number(item.norm || 1);
+        });
+        const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+        let allocated = 0;
+
+        return prev.map((item, index) => {
+          const position = indexes.indexOf(index);
+          if (position < 0) return item;
+          const linePrice = position === indexes.length - 1
+            ? Math.max(0, totalPrice - allocated)
+            : Math.round(totalPrice * (totalWeight > 0 ? weights[position] / totalWeight : 1 / indexes.length));
+          allocated += linePrice;
+          const newCustomPrice = linePrice / Number(item.norm || 1);
           return {
             ...item,
             customPrice: newCustomPrice,
             selectedPrice: priceType === 'custom' ? newCustomPrice : item.selectedPrice,
             profitMargin:
               priceType === 'custom'
-                ? calculateProfitMargin(newCustomPrice, item.costPrice)
+                ? calculateProfitMargin(newCustomPrice, item.costPrice, item.budget)
                 : item.profitMargin,
           };
-        }
-        return item;
-      })
+        });
+      }
     );
   };
 
+  const handleBudgetChange = (index: number, valStr: string) => {
+    const budget = parseNumberInput(valStr);
+    setItems((prev) => prev.map((item, itemIndex) => {
+      if (itemIndex !== index || servicesById.get(String(item.serviceId))?.isBudget !== true) return item;
+      const { minPrice, recommendedPrice } = getPricingValues(item.costPrice, budget);
+      const selectedPrice = priceType === 'minimum'
+        ? minPrice
+        : priceType === 'recommended'
+          ? recommendedPrice
+          : item.selectedPrice;
+      return {
+        ...item,
+        budget,
+        minPrice,
+        recommendedPrice,
+        selectedPrice,
+        profitMargin: calculateProfitMargin(selectedPrice, item.costPrice, budget),
+      };
+    }));
+  };
+
   // Handle quantity change for package
-  const handlePackageQuantityChange = (packageName: string, delta: number) => {
+  const handlePackageQuantityChange = (packageKey: string, delta: number) => {
     setItems((prev) => {
-      const currentPkg = prev.find((item) => item.packageName === packageName);
+      const currentPkg = prev.find((item) => String(item.packageKey || item.servicePackageId || item.packageName) === String(packageKey));
       const currentQty = currentPkg?.packageQuantity || 1;
       const newQty = Math.max(1, currentQty + delta);
 
       return prev.map((item) => {
-        if (item.packageName === packageName) {
+        if (String(item.packageKey || item.servicePackageId || item.packageName) === String(packageKey)) {
           return {
             ...item,
             packageQuantity: newQty,
@@ -406,14 +444,14 @@ export default function QuotationCreateEditScreen() {
   };
 
   // Delete entire package
-  const handleDeletePackage = (packageName: string) => {
+  const handleDeletePackage = (packageKey: string, packageName: string) => {
     Alert.alert('Xác nhận xóa', `Bạn có chắc chắn muốn xóa toàn bộ gói "${packageName}"?`, [
       { text: 'Hủy', style: 'cancel' },
       {
         text: 'Xóa',
         style: 'destructive',
         onPress: () => {
-          setItems((prev) => prev.filter((item) => item.packageName !== packageName));
+          setItems((prev) => prev.filter((item) => String(item.packageKey || item.servicePackageId || item.packageName) !== String(packageKey)));
         },
       },
     ]);
@@ -422,8 +460,8 @@ export default function QuotationCreateEditScreen() {
   // Add a standalone service from available list
   const handleSelectServiceToAdd = useCallback((service: any) => {
     const costPrice = parseFloat(service.costPrice) || 0;
-    const minPrice = roundToTenThousands(costPrice / 0.8);
-    const recommendedPrice = roundToTenThousands(costPrice / 0.6);
+    const budget = Number(service.budget || 0);
+    const { minPrice, recommendedPrice } = getPricingValues(costPrice, budget);
     const initialPrice = priceType === 'minimum' ? minPrice : recommendedPrice;
     const jobs = resolveJobsForService(service);
 
@@ -432,11 +470,12 @@ export default function QuotationCreateEditScreen() {
       serviceName: service.name,
       quantity: 1,
       costPrice,
+      budget,
       minPrice,
       recommendedPrice,
       customPrice: recommendedPrice,
       selectedPrice: initialPrice,
-      profitMargin: calculateProfitMargin(initialPrice, costPrice),
+      profitMargin: calculateProfitMargin(initialPrice, costPrice, budget),
       packageName: 'STANDALONE',
       unit: service.unit || '',
       jobs,
@@ -448,15 +487,11 @@ export default function QuotationCreateEditScreen() {
 
   // Add a package template
   const handleSelectPackageToAdd = useCallback((template: any) => {
-    if (items.some((item) => item.packageName === template.name)) {
-      Alert.alert('Thông báo', `Gói "${template.name}" đã có trong báo giá.`);
-      return;
-    }
-
+    const packageKey = `${template.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const packageItems: QuotationFormItem[] = (template.items || []).map((ps: any) => {
       const costPrice = parseFloat(ps.service?.costPrice || ps.sellingPrice) || 0;
-      const minPrice = roundToTenThousands(costPrice / 0.8);
-      const recommendedPrice = roundToTenThousands(costPrice / 0.6);
+      const budget = Number(ps.budget ?? ps.service?.budget ?? 0);
+      const { minPrice, recommendedPrice } = getPricingValues(costPrice, budget);
       const initialPrice = priceType === 'minimum' ? minPrice : recommendedPrice;
       const jobs = resolveJobsForService(ps);
 
@@ -465,14 +500,16 @@ export default function QuotationCreateEditScreen() {
         serviceName: ps.service?.name || ps.name || 'Dịch vụ trong gói',
         quantity: ps.defaultQuantity || 1,
         costPrice,
+        budget,
         minPrice,
         recommendedPrice,
         customPrice: recommendedPrice,
         selectedPrice: initialPrice,
-        profitMargin: calculateProfitMargin(initialPrice, costPrice),
+        profitMargin: calculateProfitMargin(initialPrice, costPrice, budget),
         packageName: template.name,
         packageQuantity: 1,
         norm: ps.defaultQuantity || 1,
+        packageKey,
         servicePackageId: template.id,
         unit: ps.service?.unit || ps.unit || '',
         jobs,
@@ -481,7 +518,7 @@ export default function QuotationCreateEditScreen() {
 
     setItems((prev) => [...prev, ...packageItems]);
     setShowAddPackageModal(false);
-  }, [items, priceType, resolveJobsForService]);
+  }, [priceType, resolveJobsForService]);
 
   const handleCloseServiceModal = useCallback(() => setShowAddServiceModal(false), []);
   const handleClosePackageModal = useCallback(() => setShowAddPackageModal(false), []);
@@ -489,18 +526,22 @@ export default function QuotationCreateEditScreen() {
   // Group items for display
   const displayGroups = useMemo(() => {
     const packages: Record<string, any> = {};
-    const standalone: Array<QuotationFormItem & { originalIndex: number }> = [];
+    const standalone: (QuotationFormItem & { originalIndex: number })[] = [];
 
     items.forEach((item, index) => {
-      const key = item.packageName || 'STANDALONE';
-      if (key === 'STANDALONE') {
+      const packageName = item.packageName || 'STANDALONE';
+      if (packageName === 'STANDALONE') {
         standalone.push({ ...item, originalIndex: index });
       } else {
+        const key = String(item.packageKey || item.servicePackageId || packageName);
         if (!packages[key]) {
           packages[key] = {
-            name: key,
+            key,
+            name: packageName,
             quantity: item.packageQuantity || 1,
+            rawCostPrice: 0,
             costPrice: 0,
+            budget: 0,
             minPrice: 0,
             recommendedPrice: 0,
             customPrice: 0,
@@ -510,7 +551,9 @@ export default function QuotationCreateEditScreen() {
         }
 
         const norm = item.norm || 1;
-        packages[key].costPrice += (item.costPrice || 0) * norm;
+        packages[key].rawCostPrice += (item.costPrice || 0) * norm;
+        packages[key].costPrice += ((item.costPrice || 0) + (item.budget || 0)) * norm;
+        packages[key].budget += (item.budget || 0) * norm;
         packages[key].minPrice += (item.minPrice || 0) * norm;
         packages[key].recommendedPrice += (item.recommendedPrice || 0) * norm;
         packages[key].customPrice += (item.customPrice || 0) * norm;
@@ -533,7 +576,7 @@ export default function QuotationCreateEditScreen() {
     const res = items.reduce(
       (acc, item) => {
         const revenue = (item.selectedPrice || 0) * (item.quantity || 0);
-        const cost = (item.costPrice || 0) * (item.quantity || 0);
+        const cost = ((item.costPrice || 0) + (item.budget || 0)) * (item.quantity || 0);
         const vat = revenue * 0.08;
         return {
           revenue: acc.revenue + revenue,
@@ -562,12 +605,15 @@ export default function QuotationCreateEditScreen() {
         totalAmount: totals.totalWithVat,
         details: items.map((item) => ({
           serviceId: item.serviceId,
+          opportunityServiceId: item.opportunityServiceId,
           quantity: item.quantity,
           sellingPrice: item.selectedPrice,
           costAtSale: item.costPrice,
+          budget: item.budget,
           name: item.serviceName,
           packageQuantity: item.packageQuantity || 1,
           packageName: item.packageName !== 'STANDALONE' ? item.packageName : undefined,
+          packageKey: item.packageName !== 'STANDALONE' ? item.packageKey : undefined,
           servicePackageId: item.servicePackageId,
           isPackageService: item.packageName !== 'STANDALONE',
         })),
@@ -600,10 +646,6 @@ export default function QuotationCreateEditScreen() {
         .filter((i) => i.packageName === 'STANDALONE')
         .map((i) => String(i.serviceId))
     );
-  }, [items]);
-
-  const selectedPackageNames = useMemo(() => {
-    return new Set(items.map((i) => i.packageName));
   }, [items]);
 
   if (isLoading) {
@@ -691,7 +733,7 @@ export default function QuotationCreateEditScreen() {
                 >
                   Giá tối thiểu
                 </Text>
-                <Text className="mt-0.5 text-[10px] text-slate-400">Cost / 0.8</Text>
+                <Text className="mt-0.5 text-[10px] text-slate-400">Biên lợi nhuận 20%</Text>
               </Pressable>
 
               <Pressable
@@ -718,7 +760,7 @@ export default function QuotationCreateEditScreen() {
                 >
                   Giá đề xuất
                 </Text>
-                <Text className="mt-0.5 text-[10px] text-slate-400">Cost / 0.6</Text>
+                <Text className="mt-0.5 text-[10px] text-slate-400">Biên lợi nhuận 40%</Text>
               </Pressable>
 
               <Pressable
@@ -745,16 +787,16 @@ export default function QuotationCreateEditScreen() {
                 >
                   Tùy chỉnh
                 </Text>
-                <Text className="mt-0.5 text-[10px] text-slate-400">Nhập tay</Text>
+                <Text className="mt-0.5 text-[10px] text-slate-400">Nhập giá bán</Text>
               </Pressable>
             </View>
           </View>
 
           {/* Package Services Section */}
           {displayGroups.packages.map((pkg) => {
-            const isExpanded = !!expandedPackages[pkg.name];
+            const isExpanded = !!expandedPackages[pkg.key];
             return (
-              <View key={pkg.name} className="mb-3 rounded-[14px] border border-slate-200 bg-white p-3.5">
+              <View key={pkg.key} className="mb-3 rounded-[14px] border border-slate-200 bg-white p-3.5">
                 <View className="mb-2.5 flex-row items-start justify-between">
                   <View className="flex-1">
                     <View className="gap-1">
@@ -767,7 +809,7 @@ export default function QuotationCreateEditScreen() {
                   </View>
 
                   <TouchableOpacity
-                    onPress={() => handleDeletePackage(pkg.name)}
+                    onPress={() => handleDeletePackage(pkg.key, pkg.name)}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <Feather name="trash-2" size={18} color="#DC2626" />
@@ -780,7 +822,7 @@ export default function QuotationCreateEditScreen() {
                   <View className="flex-row items-center rounded-lg border border-slate-300 bg-slate-50">
                     <TouchableOpacity
                       className="px-3 py-1.5"
-                      onPress={() => handlePackageQuantityChange(pkg.name, -1)}
+                      onPress={() => handlePackageQuantityChange(pkg.key, -1)}
                       activeOpacity={0.7}
                     >
                       <Feather name="minus" size={16} color="#334155" />
@@ -788,7 +830,7 @@ export default function QuotationCreateEditScreen() {
                     <Text className="min-w-7 text-center text-sm font-bold text-slate-900">{formatNumber(pkg.quantity)}</Text>
                     <TouchableOpacity
                       className="px-3 py-1.5"
-                      onPress={() => handlePackageQuantityChange(pkg.name, 1)}
+                      onPress={() => handlePackageQuantityChange(pkg.key, 1)}
                       activeOpacity={0.7}
                     >
                       <Feather name="plus" size={16} color="#334155" />
@@ -798,30 +840,43 @@ export default function QuotationCreateEditScreen() {
 
                 {/* Package Unit Price */}
                 <View className="flex-row items-center justify-between border-t border-slate-100 py-2">
-                  <View className="flex-row items-center gap-1.5">
-                    <Text className="text-[13px] font-semibold text-slate-600">Đơn giá gói (VNĐ):</Text>
-                    {priceType === 'custom' && (
-                      <View className="flex-row items-center gap-[3px] rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5">
-                        <Feather name="lock" size={11} color="#64748B" />
-                        <Text className="text-[10px] font-semibold text-slate-500">Khóa</Text>
-                      </View>
-                    )}
-                  </View>
-                  <View style={{ alignItems: 'flex-end' }}>
+                  <Text className="text-[13px] font-semibold text-slate-600">Đơn giá gói (VNĐ):</Text>
+                  {priceType === 'custom' ? (
+                    <TextInput
+                      className="min-w-[140px] rounded-lg border border-orange-500 bg-orange-50 px-2.5 py-1.5 text-right text-sm font-bold text-slate-900"
+                      keyboardType="numeric"
+                      value={formatNumberInput(pkg.customPrice)}
+                      onChangeText={(val) => handlePackageCustomPriceChange(pkg.key, val)}
+                      placeholder="0"
+                      placeholderTextColor="#94A3B8"
+                    />
+                  ) : (
                     <Text className="text-sm font-bold text-slate-900">
                       {formatNumber(pkg.selectedPrice)} ₫
                     </Text>
-                    {priceType === 'custom' && (
-                      <Text className="mt-0.5 text-[11px] font-medium text-emerald-600">Tự cộng từ dịch vụ con</Text>
-                    )}
-                  </View>
+                  )}
                 </View>
 
-                {/* Total and Margin row - 2 hàng tránh tràn */}
-                <View className="mt-1 border-t border-slate-100 pt-2 gap-1.5">
+                <View className="mt-1 gap-1.5 border-t border-slate-100 pt-2">
                   <View className="flex-row items-center justify-between">
                     <Text className="text-xs text-slate-500">
-                      Giá vốn gói: <Text className="font-semibold text-slate-700">{formatNumber(pkg.costPrice)} ₫</Text>
+                      Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(pkg.rawCostPrice)} ₫</Text>
+                    </Text>
+                    <Text className="text-xs text-slate-500">
+                      Ngân sách: <Text className="font-semibold text-slate-700">{formatNumber(pkg.budget)} ₫</Text>
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs text-slate-500">
+                      Tối thiểu: <Text className="font-semibold text-slate-700">{formatNumber(pkg.minPrice)} ₫</Text>
+                    </Text>
+                    <Text className="text-xs text-slate-500">
+                      Đề xuất: <Text className="font-semibold text-slate-700">{formatNumber(pkg.recommendedPrice)} ₫</Text>
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs font-semibold text-slate-600">
+                      Đang áp dụng: {formatNumber(pkg.selectedPrice)} ₫
                     </Text>
                     <Text
                       className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
@@ -845,7 +900,7 @@ export default function QuotationCreateEditScreen() {
                   onPress={() =>
                     setExpandedPackages((prev) => ({
                       ...prev,
-                      [pkg.name]: !prev[pkg.name],
+                      [pkg.key]: !prev[pkg.key],
                     }))
                   }
                   activeOpacity={0.7}
@@ -868,56 +923,57 @@ export default function QuotationCreateEditScreen() {
                         <Text className="mt-0.5 text-[11px] text-slate-500">
                           Định mức: {formatNumber(sub.norm)} {sub.unit || 'lần'} / gói | Số lượng tổng: {formatNumber(sub.quantity)}
                         </Text>
-                        {priceType === 'custom' ? (
-                          <View className="mt-2 border-t border-slate-100 pt-2 gap-1.5">
-                            <View className="flex-row items-center justify-between gap-2">
-                              <Text className="text-xs text-slate-500">
-                                Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(sub.costPrice)} ₫</Text>
-                              </Text>
-                              <Text
-                                className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
-                                  sub.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                                }`}
-                              >
-                                Tỉ suất lợi nhuận: {sub.profitMargin.toFixed(0)}%
-                              </Text>
-                            </View>
-                            <View className="flex-row items-center justify-between">
-                              <Text className="text-xs font-semibold text-slate-600">Đơn giá con (VNĐ):</Text>
+                        <View className="mt-2 gap-1.5 border-t border-slate-100 pt-2">
+                          <View className="flex-row items-center justify-between gap-2">
+                            <Text className="text-xs text-slate-500">
+                              Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(sub.costPrice * (sub.norm || 1))} ₫</Text>
+                            </Text>
+                            <Text
+                              className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
+                                sub.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                              }`}
+                            >
+                              Tỉ suất lợi nhuận: {sub.profitMargin.toFixed(0)}%
+                            </Text>
+                          </View>
+                          <View className="flex-row items-center justify-between">
+                            <Text className="text-xs font-semibold text-slate-600">Ngân sách:</Text>
+                            {servicesById.get(String(sub.serviceId))?.isBudget === true ? (
                               <TextInput
-                                className="w-[140px] rounded-md border border-emerald-600 bg-slate-50 px-2 py-1 text-right text-[13px] font-bold text-slate-900"
+                                className="w-[140px] rounded-md border border-slate-300 bg-white px-2 py-1 text-right text-[13px] font-semibold text-slate-900"
                                 keyboardType="numeric"
-                                value={formatNumberInput(sub.customPrice)}
-                                onChangeText={(val) =>
-                                  handleStandaloneCustomPriceChange(sub.originalIndex, val)
-                                }
+                                value={formatNumberInput(sub.budget)}
+                                onChangeText={(val) => handleBudgetChange(sub.originalIndex, val)}
+                              />
+                            ) : (
+                              <View className="flex-row items-center gap-1">
+                                <Feather name="lock" size={11} color="#64748B" />
+                                <Text className="text-xs font-semibold text-slate-600">{formatNumber(sub.budget)} ₫</Text>
+                              </View>
+                            )}
+                          </View>
+                          <View className="flex-row items-center justify-between">
+                            <Text className="text-[11px] text-slate-500">Tối thiểu: {formatNumber(sub.minPrice * (sub.norm || 1))} ₫</Text>
+                            <Text className="text-[11px] text-slate-500">Đề xuất: {formatNumber(sub.recommendedPrice * (sub.norm || 1))} ₫</Text>
+                          </View>
+                          <View className="flex-row items-center justify-between">
+                            <Text className="text-xs font-semibold text-slate-600">Giá bán trong 1 gói:</Text>
+                            {priceType === 'custom' ? (
+                              <TextInput
+                                className="w-[140px] rounded-md border border-orange-500 bg-orange-50 px-2 py-1 text-right text-[13px] font-bold text-slate-900"
+                                keyboardType="numeric"
+                                value={formatNumberInput(sub.customPrice * (sub.norm || 1))}
+                                onChangeText={(val) => handleCustomPriceChange(sub.originalIndex, val, true)}
                                 placeholder="0"
                                 placeholderTextColor="#94A3B8"
                               />
-                            </View>
-                          </View>
-                        ) : (
-                          <View className="mt-1.5 gap-1.5 border-t border-slate-100 pt-1.5">
-                            <View className="flex-row items-center justify-between gap-2">
-                              <Text className="text-xs text-slate-500">
-                                Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(sub.costPrice)} ₫</Text>
-                              </Text>
-                              <Text
-                                className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
-                                  sub.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                                }`}
-                              >
-                                Tỉ suất lợi nhuận: {sub.profitMargin.toFixed(0)}%
-                              </Text>
-                            </View>
-                            <View className="flex-row items-center justify-between">
-                              <Text className="text-xs font-semibold text-slate-600">Đơn giá con:</Text>
+                            ) : (
                               <Text className="text-xs font-bold text-slate-900">
-                                {formatNumber(sub.selectedPrice)} ₫
+                                {formatNumber(sub.selectedPrice * (sub.norm || 1))} ₫
                               </Text>
-                            </View>
+                            )}
                           </View>
-                        )}
+                        </View>
                       </View>
                     ))}
                   </View>
@@ -973,7 +1029,7 @@ export default function QuotationCreateEditScreen() {
                     keyboardType="numeric"
                     value={formatNumberInput(item.customPrice)}
                     onChangeText={(val) =>
-                      handleStandaloneCustomPriceChange(item.originalIndex, val)
+                      handleCustomPriceChange(item.originalIndex, val)
                     }
                   />
                 ) : (
@@ -983,9 +1039,25 @@ export default function QuotationCreateEditScreen() {
                 )}
               </View>
 
-              {/* Standalone Financial info - 2 hàng tránh tràn */}
+              <View className="flex-row items-center justify-between border-t border-slate-100 py-2">
+                <Text className="text-[13px] font-semibold text-slate-600">Ngân sách:</Text>
+                {servicesById.get(String(item.serviceId))?.isBudget === true ? (
+                  <TextInput
+                    className="min-w-[130px] rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-right text-sm font-bold text-slate-900"
+                    keyboardType="numeric"
+                    value={formatNumberInput(item.budget)}
+                    onChangeText={(val) => handleBudgetChange(item.originalIndex, val)}
+                  />
+                ) : (
+                  <View className="flex-row items-center gap-1">
+                    <Feather name="lock" size={12} color="#64748B" />
+                    <Text className="text-sm font-semibold text-slate-700">{formatNumber(item.budget)} ₫</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Standalone Financial info */}
               <View className="mt-1 border-t border-slate-100 pt-2 gap-1.5">
-                {/* Hàng 1: Giá vốn & Margin */}
                 <View className="flex-row items-center justify-between">
                   <Text className="text-xs text-slate-500">
                     Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(item.costPrice)} ₫</Text>
@@ -998,8 +1070,14 @@ export default function QuotationCreateEditScreen() {
                     Tỉ suất lợi nhuận: {item.profitMargin.toFixed(0)}%
                   </Text>
                 </View>
-
-                {/* Hàng 2: Thành tiền */}
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-xs text-slate-500">Tối thiểu: <Text className="font-semibold">{formatNumber(item.minPrice)} ₫</Text></Text>
+                  <Text className="text-xs text-slate-500">Đề xuất: <Text className="font-semibold">{formatNumber(item.recommendedPrice)} ₫</Text></Text>
+                </View>
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-xs font-semibold text-slate-600">Giá đang áp dụng:</Text>
+                  <Text className="text-xs font-bold text-slate-900">{formatNumber(item.selectedPrice)} ₫</Text>
+                </View>
                 <View className="flex-row items-center justify-between">
                   <Text className="text-[13px] font-bold text-slate-700">Thành tiền:</Text>
                   <Text className="text-sm font-extrabold text-blue-600">
@@ -1120,7 +1198,6 @@ export default function QuotationCreateEditScreen() {
         onClose={handleClosePackageModal}
         onSelect={handleSelectPackageToAdd}
         packageTemplates={packageTemplates}
-        selectedPackageNames={selectedPackageNames}
       />
     </SafeAreaView>
   );
