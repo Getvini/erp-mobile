@@ -92,19 +92,23 @@ export default function ServiceDetailScreen() {
   }, [jobSearch, jobs, serviceJobs]);
 
   const availableServices = useMemo(() => {
-    const usedIds = new Set(serviceJobs.map((serviceJob) => serviceJob.jobId));
+    const usedIds = new Set(serviceJobs.map((sj) => String(sj.jobId)));
     const keyword = jobSearch.trim().toLowerCase();
-    return services.filter((s) => {
-      if (s.id === serviceId) return false;
-      const sJobs = s.serviceJobs ?? [];
-      const newJobs = sJobs.filter((sj) => !usedIds.has(sj.jobId));
-      if (newJobs.length === 0) return false;
-      if (!keyword) return true;
-      return (
-        (s.name || '').toLowerCase().includes(keyword) ||
-        (s.code || '').toLowerCase().includes(keyword)
+    return services
+      .filter((s) => String(s.id) !== String(serviceId))
+      .map((s) => {
+        const availableJobs = (s.serviceJobs ?? []).filter(
+          (sj) => !usedIds.has(String(sj.jobId)),
+        );
+        return { ...s, availableJobs };
+      })
+      .filter((s) => s.availableJobs.length > 0)
+      .filter(
+        (s) =>
+          !keyword ||
+          (s.name || '').toLowerCase().includes(keyword) ||
+          (s.code || '').toLowerCase().includes(keyword),
       );
-    });
   }, [jobSearch, serviceId, serviceJobs, services]);
 
   const handleAddJob = useCallback(
@@ -623,34 +627,32 @@ export default function ServiceDetailScreen() {
                   </Text>
                 </View>
               ) : (
-                availableServices.slice(0, 60).map((s) => {
-                  const sJobs = s.serviceJobs ?? [];
-                  const usedIds = new Set(serviceJobs.map((sj) => String(sj.jobId)));
-                  const availableCount = sJobs.filter((sj) => !usedIds.has(String(sj.jobId))).length;
-                  return (
-                    <TouchableOpacity
-                      key={s.id}
-                      className="min-h-[60px] flex-row items-center justify-between border-b border-slate-100 py-2.5"
-                      onPress={() => handleAddJobsFromService(s)}
-                      disabled={updateServiceMutation.isPending}
-                      activeOpacity={0.75}
-                    >
-                      <View className="flex-1 pr-3">
-                        <Text className="text-sm font-bold text-slate-800" numberOfLines={1}>
-                          {s.name}
-                        </Text>
-                        <Text className="text-[11px] text-slate-400" numberOfLines={1}>
-                          {s.code ? `#${s.code} • ` : ''}
-                          {availableCount} hạng mục có thể thêm
-                        </Text>
-                      </View>
-                      <View className="flex-row items-center gap-1 rounded-xl bg-orange-50 px-3 py-2">
-                        <Feather name="copy" size={14} color="#F38820" />
-                        <Text className="text-xs font-bold text-primary">Thêm</Text>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })
+                availableServices.slice(0, 60).map((s) => (
+                  <TouchableOpacity
+                    key={s.id}
+                    className="min-h-[60px] flex-row items-center justify-between border-b border-slate-100 py-2.5"
+                    onPress={() => handleAddJobsFromService(s)}
+                    disabled={updateServiceMutation.isPending}
+                    activeOpacity={0.75}
+                  >
+                    <View className="flex-1 pr-3">
+                      <Text className="text-sm font-bold text-slate-800" numberOfLines={1}>
+                        {s.name}
+                      </Text>
+                      <Text className="text-[11px] text-slate-400" numberOfLines={1}>
+                        {s.code ? `#${s.code} • ` : ''}
+                        {s.availableJobs.length} hạng mục có thể thêm
+                      </Text>
+                      <Text className="text-[11px] text-slate-400" numberOfLines={2}>
+                        {s.availableJobs.map((sj: any) => sj.job?.name).filter(Boolean).join(', ')}
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center gap-1 rounded-xl bg-orange-50 px-3 py-2">
+                      <Feather name="copy" size={14} color="#F38820" />
+                      <Text className="text-xs font-bold text-primary">Thêm</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))
               )}
             </ScrollView>
           </View>

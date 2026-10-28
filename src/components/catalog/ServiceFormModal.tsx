@@ -113,19 +113,23 @@ export default function ServiceFormModal({
   }, [jobConfigs, jobSearch, jobs]);
 
   const availableServices = useMemo(() => {
-    const selectedIds = new Set(jobConfigs.map((config) => config.jobId));
+    const selectedIds = new Set(jobConfigs.map((c) => String(c.jobId)));
     const keyword = jobSearch.trim().toLowerCase();
-    return services.filter((s) => {
-      if (service?.id && s.id === service.id) return false;
-      const sJobs = s.serviceJobs ?? [];
-      const newJobs = sJobs.filter((sj) => !selectedIds.has(sj.jobId));
-      if (newJobs.length === 0) return false;
-      if (!keyword) return true;
-      return (
-        (s.name || '').toLowerCase().includes(keyword) ||
-        (s.code || '').toLowerCase().includes(keyword)
+    return services
+      .filter((s) => !(service?.id && String(s.id) === String(service.id)))
+      .map((s) => {
+        const availableJobs = (s.serviceJobs ?? []).filter(
+          (sj) => !selectedIds.has(String(sj.jobId)),
+        );
+        return { ...s, availableJobs };
+      })
+      .filter((s) => s.availableJobs.length > 0)
+      .filter(
+        (s) =>
+          !keyword ||
+          (s.name || '').toLowerCase().includes(keyword) ||
+          (s.code || '').toLowerCase().includes(keyword),
       );
-    });
   }, [jobConfigs, jobSearch, service?.id, services]);
 
   const handleAddJob = useCallback((jobId: string) => {
@@ -679,33 +683,31 @@ export default function ServiceFormModal({
                     </Text>
                   ) : (
                     <ScrollView className="max-h-[220px]" keyboardShouldPersistTaps="handled">
-                      {availableServices.slice(0, 40).map((s) => {
-                        const sJobs = s.serviceJobs ?? [];
-                        const selectedIds = new Set(jobConfigs.map((c) => c.jobId));
-                        const availableCount = sJobs.filter((sj) => !selectedIds.has(sj.jobId)).length;
-                        return (
-                          <TouchableOpacity
-                            key={s.id}
-                            className="min-h-[52px] flex-row items-center justify-between border-b border-slate-100 px-1 py-1.5"
-                            onPress={() => handleAddJobsFromService(s)}
-                            activeOpacity={0.75}
-                          >
-                            <View className="flex-1 pr-2">
-                              <Text className="text-xs font-bold text-slate-800" numberOfLines={1}>
-                                {s.name}
-                              </Text>
-                              <Text className="text-[11px] text-slate-400" numberOfLines={1}>
-                                {s.code ? `#${s.code} • ` : ''}
-                                {availableCount} hạng mục có thể thêm
-                              </Text>
-                            </View>
-                            <View className="flex-row items-center gap-1 rounded-lg bg-orange-50 px-2 py-1">
-                              <Feather name="copy" size={13} color="#F38820" />
-                              <Text className="text-[11px] font-bold text-primary">Thêm</Text>
-                            </View>
-                          </TouchableOpacity>
-                        );
-                      })}
+                      {availableServices.slice(0, 40).map((s) => (
+                        <TouchableOpacity
+                          key={s.id}
+                          className="min-h-[52px] flex-row items-center justify-between border-b border-slate-100 px-1 py-1.5"
+                          onPress={() => handleAddJobsFromService(s)}
+                          activeOpacity={0.75}
+                        >
+                          <View className="flex-1 pr-2">
+                            <Text className="text-xs font-bold text-slate-800" numberOfLines={1}>
+                              {s.name}
+                            </Text>
+                            <Text className="text-[11px] text-slate-400" numberOfLines={1}>
+                              {s.code ? `#${s.code} • ` : ''}
+                              {s.availableJobs.length} hạng mục có thể thêm
+                            </Text>
+                            <Text className="text-[11px] text-slate-400" numberOfLines={2}>
+                              {s.availableJobs.map((sj: any) => sj.job?.name).filter(Boolean).join(', ')}
+                            </Text>
+                          </View>
+                          <View className="flex-row items-center gap-1 rounded-lg bg-orange-50 px-2 py-1">
+                            <Feather name="copy" size={13} color="#F38820" />
+                            <Text className="text-[11px] font-bold text-primary">Thêm</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
                     </ScrollView>
                   )}
                 </View>
