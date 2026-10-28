@@ -10,6 +10,7 @@ import {
   PAYMENT_REQUEST_TYPE_LABELS,
 } from '@/services/paymentRequestService';
 import { formatVND, formatDateToDDMMYYYY } from '@/utils/formatters';
+import { StatusBadge } from '@/components/common/StatusBadge';
 
 export interface PaymentRequestCardProps {
   item: PaymentRequest;
@@ -182,37 +183,11 @@ export const PaymentRequestCard: React.FC<PaymentRequestCardProps> = React.memo(
         {/* Dual Status Badges (Approval, Payment & Settlement) */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
           {/* Approval Status Badge */}
-          <View
-            style={{
-              paddingHorizontal: 7,
-              paddingVertical: 2,
-              borderRadius: 6,
-              backgroundColor: approvalCfg.bg,
-              borderWidth: 1,
-              borderColor: approvalCfg.border,
-            }}
-          >
-            <Text style={{ fontSize: 10, fontWeight: '700', color: approvalCfg.color }}>
-              {approvalCfg.text}
-            </Text>
-          </View>
+          <StatusBadge domain="paymentRequest" status={item.approvalStatus} size="sm" />
 
           {/* Payment Status Badge if approved */}
           {item.approvalStatus === 'APPROVED' && item.paymentStatus !== 'NOT_APPLICABLE' && (
-            <View
-              style={{
-                paddingHorizontal: 7,
-                paddingVertical: 2,
-                borderRadius: 6,
-                backgroundColor: paymentCfg.bg,
-                borderWidth: 1,
-                borderColor: paymentCfg.border,
-              }}
-            >
-              <Text style={{ fontSize: 10, fontWeight: '700', color: paymentCfg.color }}>
-                {paymentCfg.text}
-              </Text>
-            </View>
+            <StatusBadge domain="paymentRequest" status={item.paymentStatus} size="sm" />
           )}
 
           {/* Settlement Status Badge if ADVANCE */}

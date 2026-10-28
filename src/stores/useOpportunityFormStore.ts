@@ -21,6 +21,7 @@ export interface PackageServiceItem {
   serviceId: string;
   quantity: number;
   sellingPrice?: number;
+  budget?: number;
   jobs?: ServiceJobBrief[];
 }
 
@@ -35,6 +36,7 @@ export interface SelectedPackage {
 export interface SelectedService {
   serviceId: string;
   quantity: number;
+  budget?: number;
   jobs?: ServiceJobBrief[];
 }
 
@@ -82,7 +84,7 @@ export const INITIAL_OPPORTUNITY_FORM_DATA: OpportunityFormData = {
   priority: 'High',
   successChance: 0, // Mặc định là 0%
   packages: [{ servicePackageId: '', quantity: 1 }],
-  services: [{ serviceId: '', quantity: 1 }],
+  services: [{ serviceId: '', quantity: 1, budget: 0 }],
   customerRequirements: '',
   links: ['', '', ''],
   attachedFiles: [],
@@ -116,10 +118,11 @@ interface OpportunityFormStore {
   updatePackageService: (
     pkgIndex: number,
     serviceIndex: number,
-    fieldOrItem: 'serviceId' | 'quantity' | Partial<PackageServiceItem>,
+    fieldOrItem: 'serviceId' | 'quantity' | 'budget' | Partial<PackageServiceItem>,
     value?: any,
     serviceObj?: any
   ) => void;
+  setPackageServiceBudget: (pkgIndex: number, serviceIndex: number, budget: number) => void;
   setPackageServiceJobIncluded: (pkgIndex: number, serviceIndex: number, jobId: string, included: boolean) => void;
   setPackageServiceJobBrief: (pkgIndex: number, serviceIndex: number, jobId: string, briefVideo: string) => void;
 
@@ -128,6 +131,7 @@ interface OpportunityFormStore {
   removeService: (index: number) => void;
   selectServiceItem: (index: number, serviceId: string, serviceObj?: any) => void;
   setServiceQuantity: (index: number, qty: number) => void;
+  setServiceBudget: (index: number, budget: number) => void;
   setServiceJobIncluded: (serviceIndex: number, jobId: string, included: boolean) => void;
   setServiceJobBrief: (serviceIndex: number, jobId: string, briefVideo: string) => void;
 
@@ -269,6 +273,7 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
               serviceId: item.service?.id || item.serviceId,
               quantity: item.defaultQuantity || 1,
               sellingPrice: item.service?.costPrice || 0,
+              budget: 0,
               jobs: (item.service?.serviceJobs || []).map((serviceJob: any) => ({
                 jobId: serviceJob.job?.id || serviceJob.jobId,
                 name: serviceJob.job?.name || 'Hạng mục',
@@ -306,7 +311,7 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
               ...next[pkgIndex],
               services: [
                 ...curServices,
-                { serviceId: '', quantity: 1, sellingPrice: 0, jobs: [] },
+                { serviceId: '', quantity: 1, sellingPrice: 0, budget: 0, jobs: [] },
               ],
             };
           }
@@ -347,6 +352,7 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
                 ...pServices[serviceIndex],
                 serviceId: value,
                 sellingPrice: serviceObj?.costPrice || 0,
+                budget: 0,
                 jobs,
               };
             } else if (fieldOrItem === 'quantity') {
@@ -354,7 +360,26 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
                 ...pServices[serviceIndex],
                 quantity: Math.max(1, Number(value) || 1),
               };
+            } else if (fieldOrItem === 'budget') {
+              pServices[serviceIndex] = {
+                ...pServices[serviceIndex],
+                budget: Math.max(0, Number(value) || 0),
+              };
             }
+            next[pkgIndex] = { ...next[pkgIndex], services: pServices };
+          }
+          return { formData: { ...state.formData, packages: next } };
+        }),
+
+      setPackageServiceBudget: (pkgIndex, serviceIndex, budget) =>
+        set((state) => {
+          const next = [...state.formData.packages];
+          if (next[pkgIndex]?.services?.[serviceIndex]) {
+            const pServices = [...next[pkgIndex].services!];
+            pServices[serviceIndex] = {
+              ...pServices[serviceIndex],
+              budget: Math.max(0, Number(budget) || 0),
+            };
             next[pkgIndex] = { ...next[pkgIndex], services: pServices };
           }
           return { formData: { ...state.formData, packages: next } };
@@ -400,7 +425,7 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
         set((state) => ({
           formData: {
             ...state.formData,
-            services: [...state.formData.services, { serviceId: '', quantity: 1, jobs: [] }],
+            services: [...state.formData.services, { serviceId: '', quantity: 1, budget: 0, jobs: [] }],
           },
         })),
 
@@ -410,7 +435,7 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
           return {
             formData: {
               ...state.formData,
-              services: filtered.length > 0 ? filtered : [{ serviceId: '', quantity: 1, jobs: [] }],
+              services: filtered.length > 0 ? filtered : [{ serviceId: '', quantity: 1, budget: 0, jobs: [] }],
             },
           };
         }),
@@ -426,7 +451,7 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
               included: !Boolean(serviceJob.job?.isBriefVideo),
               briefVideo: '',
             }));
-            next[index] = { ...next[index], serviceId, jobs };
+            next[index] = { ...next[index], serviceId, budget: 0, jobs };
           }
           return { formData: { ...state.formData, services: next } };
         }),
@@ -436,6 +461,15 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
           const next = [...state.formData.services];
           if (next[index]) {
             next[index] = { ...next[index], quantity: qty };
+          }
+          return { formData: { ...state.formData, services: next } };
+        }),
+
+      setServiceBudget: (index, budget) =>
+        set((state) => {
+          const next = [...state.formData.services];
+          if (next[index]) {
+            next[index] = { ...next[index], budget: Math.max(0, Number(budget) || 0) };
           }
           return { formData: { ...state.formData, services: next } };
         }),

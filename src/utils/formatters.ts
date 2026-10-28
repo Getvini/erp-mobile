@@ -1,3 +1,5 @@
+import Decimal from 'decimal.js';
+
 /**
  * Chuẩn Định Dạng Số & Tiền Tệ Hệ Thống Getvini ERP Mobile
  * Tuân thủ quy định: Toàn bộ số và tiền tệ phải có dấu phân cách hàng nghìn (dấu chấm .)
@@ -5,10 +7,6 @@
 
 /**
  * Định dạng số nguyên hoặc số thực với dấu phân cách hàng nghìn theo chuẩn vi-VN (dấu .)
- * Ví dụ: 1000000 -> "1.000.000", 1500.5 -> "1.500,5"
- */
-/**
- * Định dạng số nguyên hoặc số thực với dấu phân cách hàng nghìn theo chuẩn vi-VN (dấu chấm .)
  * Sử dụng regex để đảm bảo 100% hoạt động chính xác trên React Native / Hermes
  * Ví dụ: 1000000 -> "1.000.000", 1500.5 -> "1.500,5"
  */
@@ -42,14 +40,53 @@ export const formatNumber = (value: number | string | undefined | null): string 
 };
 
 /**
- * Định dạng tiền tệ với ký hiệu "₫" và dấu phân cách hàng nghìn (dấu chấm .)
- * Ví dụ: 15000000 -> "15.000.000 ₫"
+ * Định dạng tiền tệ VND với dấu phân cách hàng nghìn (.) và khoảng trắng không ngắt (\u00A0) trước ký hiệu "₫".
+ * - Làm tròn nửa ra xa 0 (half-away-from-zero / Decimal.ROUND_HALF_UP) về số nguyên đồng (0 fraction digits).
+ * - Khử triệt để dấu âm -0.
+ * - Nhận chuỗi số decimal (TypeORM string) an toàn mà không ép qua Number() gây tràn số hay mất độ chính xác.
+ * - Hỗ trợ giá trị vượt Number.MAX_SAFE_INTEGER.
  */
 export const formatVND = (
   value: number | string | undefined | null,
   suffix: string = '₫'
 ): string => {
-  return `${formatNumber(value)} ${suffix}`;
+  const space = suffix === '₫' ? '\u00A0' : ' ';
+  if (value === null || value === undefined || value === '') return `0${space}${suffix}`;
+
+  try {
+    let cleanStr = typeof value === 'string' ? value.trim() : String(value);
+    if (!cleanStr) return `0${space}${suffix}`;
+
+    // Chuẩn hóa chuỗi định dạng hỗn hợp (vd: "1.500.000,50" -> "1500000.50")
+    if (cleanStr.includes('.') && cleanStr.includes(',')) {
+      if (cleanStr.lastIndexOf(',') > cleanStr.lastIndexOf('.')) {
+        cleanStr = cleanStr.replace(/\./g, '').replace(',', '.');
+      } else {
+        cleanStr = cleanStr.replace(/,/g, '');
+      }
+    } else if (cleanStr.includes(',') && !cleanStr.includes('.')) {
+      cleanStr = cleanStr.replace(',', '.');
+    }
+
+    const d = new Decimal(cleanStr);
+    if (d.isNaN()) return `0${space}${suffix}`;
+
+    // Làm tròn nguyên đồng theo chuẩn half-away-from-zero
+    const rounded = d.toDecimalPlaces(0, Decimal.ROUND_HALF_UP);
+
+    // Khử dấu âm -0
+    if (rounded.isZero()) {
+      return `0${space}${suffix}`;
+    }
+
+    const isNegative = rounded.isNegative();
+    const absStr = rounded.abs().toFixed(0);
+    const formattedInt = absStr.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+    return `${isNegative ? '-' : ''}${formattedInt}${space}${suffix}`;
+  } catch {
+    return `0${space}${suffix}`;
+  }
 };
 
 /**
@@ -57,7 +94,7 @@ export const formatVND = (
  * Ví dụ: 100000000 -> "100.000.000 VNĐ"
  */
 export const formatVNDFull = (value: number | string | undefined | null): string => {
-  return `${formatNumber(value)} VNĐ`;
+  return formatVND(value, 'VNĐ');
 };
 
 /**

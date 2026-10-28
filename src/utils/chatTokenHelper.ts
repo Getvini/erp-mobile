@@ -82,9 +82,46 @@ export const stripChatTokens = (content?: string | null): string => {
     .join('');
 };
 
+export const formatReplyPreview = (message?: {
+  content?: string | null;
+  isRecalled?: boolean;
+  attachments?: Array<{ type?: string; url?: string; name?: string }> | null;
+} | null): string => {
+  if (!message) return '...';
+  if (message.isRecalled) return '[Tin nhắn đã được thu hồi]';
+  const stripped = stripChatTokens(message.content).trim();
+  if (stripped && stripped !== '🎤 [Tin nhắn thoại]' && stripped !== '[Tin nhắn thoại]') return stripped;
+  if (message.attachments && message.attachments.length > 0) {
+    const first = message.attachments[0];
+    const isImg =
+      first.type === 'image' ||
+      first.type?.includes('image') ||
+      /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(first.url || '');
+    const isAudio =
+      first.type === 'audio' ||
+      first.type?.includes('audio') ||
+      first.name?.startsWith('Tin nhắn thoại') ||
+      first.name?.includes('voice_') ||
+      first.url?.includes('voice') ||
+      /\.(webm|mp3|wav|ogg|m4a|aac|3gp|3gpp|amr)($|\?)/i.test(first.url || '') ||
+      /\.(webm|mp3|wav|ogg|m4a|aac|3gp|3gpp|amr)($|\?)/i.test(first.name || '');
+    if (isImg) return '[Hình ảnh]';
+    if (isAudio) return '[Tin nhắn thoại]';
+    return `[Tệp: ${first.name || 'Tệp đính kèm'}]`;
+  }
+  return '...';
+};
+
 export const formatSystemMessage = (message: any, selfUserId?: string | null): string => {
   if (!message) return '';
-  const meta = message.systemMetadata || {};
+  let meta = message.systemMetadata || {};
+  if (typeof meta === 'string') {
+    try {
+      meta = JSON.parse(meta);
+    } catch {
+      meta = {};
+    }
+  }
   const action = meta.action;
   const actorId = meta.actorId || message.senderId || message.sender?.id;
   const isActorMe = selfUserId && String(actorId) === String(selfUserId);
@@ -130,8 +167,10 @@ export const formatSystemMessage = (message: any, selfUserId?: string | null): s
       return `${actorName} đã xóa ${targetName} khỏi nhóm.`;
     }
 
-    case 'LEAVE_GROUP':
-      return isActorMe ? 'Bạn đã rời khỏi nhóm.' : `${actorName} đã rời khỏi nhóm.`;
+    case 'LEAVE_GROUP': {
+      const isTargetMe = isActorMe || (selfUserId && String(meta.actorId || meta.targetId) === String(selfUserId));
+      return isTargetMe ? 'Bạn đã rời khỏi nhóm.' : `${actorName} đã rời khỏi nhóm.`;
+    }
 
     case 'RENAME_GROUP':
       return `${actorName} đã đổi tên nhóm thành "${meta.newName || ''}".`;
@@ -165,7 +204,7 @@ export const formatMessagePreview = (
   const content = message.content || '';
   let previewText = '';
 
-  if (!content.trim() || content === '[Hình ảnh]' || content === '[Tệp đính kèm]') {
+  if (!content.trim() || content === '[Hình ảnh]' || content === '[Tệp đính kèm]' || content === '🎤 [Tin nhắn thoại]' || content === '[Tin nhắn thoại]') {
     const attachments = message.attachments;
     if (attachments && attachments.length > 0) {
       const first = attachments[0];
@@ -173,12 +212,20 @@ export const formatMessagePreview = (
         first.type === 'image' ||
         first.type?.includes('image') ||
         /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(first.url || '');
+      const isVoice =
+        first.name?.startsWith('Tin nhắn thoại') ||
+        first.name?.includes('voice_') ||
+        /\( ?\d+s ?\)/i.test(first.name || '') ||
+        content === '🎤 [Tin nhắn thoại]' ||
+        content === '[Tin nhắn thoại]';
       const isAudio =
         first.type === 'audio' ||
         first.type?.includes('audio') ||
-        /\.(webm|mp3|wav|ogg|m4a)($|\?)/i.test(first.url || '');
+        /\.(webm|mp3|wav|ogg|m4a|aac|3gp|3gpp|amr)($|\?)/i.test(first.url || '') ||
+        /\.(webm|mp3|wav|ogg|m4a|aac|3gp|3gpp|amr)($|\?)/i.test(first.name || '');
       if (isImg) previewText = '[Hình ảnh]';
-      else if (isAudio) previewText = '[Tin nhắn thoại]';
+      else if (isVoice) previewText = 'đã gửi 1 tin nhắn thoại';
+      else if (isAudio) previewText = 'đã gửi 1 file âm thanh';
       else previewText = `[Tệp: ${first.name || 'Tệp đính kèm'}]`;
     } else {
       return 'Chưa có tin nhắn';
@@ -190,13 +237,20 @@ export const formatMessagePreview = (
   const senderId = message.senderId || message.sender?.id;
   if (senderId) {
     const isMe = selfUserId && String(senderId) === String(selfUserId);
+    const isActionPhrase =
+      previewText === 'đã gửi 1 tin nhắn thoại' ||
+      previewText === 'đã gửi 1 file âm thanh';
+
     if (isMe) {
-      return `Bạn: ${previewText}`;
+      return isActionPhrase ? `Bạn ${previewText}` : `Bạn: ${previewText}`;
     }
     if (isGroup) {
       const senderUser = message.sender || allUsers.find((u) => u.id === senderId);
       const senderName = senderUser?.fullName || senderUser?.username || 'Thành viên';
-      return `${senderName}: ${previewText}`;
+      return isActionPhrase ? `${senderName} ${previewText}` : `${senderName}: ${previewText}`;
+    }
+    if (isActionPhrase) {
+      return previewText.charAt(0).toUpperCase() + previewText.slice(1);
     }
   }
 

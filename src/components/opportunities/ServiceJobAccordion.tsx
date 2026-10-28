@@ -59,7 +59,7 @@ export const ServiceJobAccordion: React.FC<ServiceJobAccordionProps> = ({
           <Feather
             name={isOpen ? 'chevron-up' : 'chevron-down'}
             size={16}
-            color="#4F46E5"
+            color="#D97010"
             style={{ marginRight: 6 }}
           />
           <Text style={styles.headerTitleText}>
@@ -86,7 +86,7 @@ export const ServiceJobAccordion: React.FC<ServiceJobAccordionProps> = ({
             return (
               <View key={jobId} style={styles.jobCard}>
                 <View style={styles.jobMainRow}>
-                  <Feather name="corner-down-right" size={14} color="#6366F1" style={styles.treeIcon} />
+                  <Feather name="corner-down-right" size={14} color="#F38820" style={styles.treeIcon} />
                   <View style={{ flex: 1 }}>
                     <View style={styles.jobTitleBadgeRow}>
                       <Text style={styles.jobNameText}>{jobName}</Text>
@@ -261,8 +261,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   checkboxChecked: {
-    backgroundColor: '#2563EB',
-    borderColor: '#2563EB',
+    backgroundColor: '#F38820',
+    borderColor: '#F38820',
   },
   checkboxLabel: {
     fontSize: 12,

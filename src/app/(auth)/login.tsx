@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   ImageBackground,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,8 +19,10 @@ import { useLoginMutation } from '@/hooks/queries';
 import { STORAGE_REMEMBER_KEY } from '@/services/api';
 import { privateStorage } from '@/services/secureStorage';
 import { authService, BiometricStatus } from '@/services/authService';
+import { AppButton } from '@/components/common/AppButton';
 
 const bg = require('@/assets/images/bg.jpg');
+const logo = require('@/assets/images/logo.png');
 
 const PRIMARY_COLOR = '#F38820';
 
@@ -187,8 +190,15 @@ export default function LoginScreen() {
 
           {/* Clean Edge-to-Edge Sheet */}
           <View className="-mt-7 min-h-full flex-1 rounded-t-[28px] bg-white px-[22px] pb-9 pt-[26px]">
-            {/* Header */}
+            {/* Header with Floating Brand Logo */}
             <View className="mb-[22px] items-center">
+              <View className="-mt-[58px] mb-3.5 h-[64px] w-[64px] items-center justify-center rounded-[20px] bg-white p-2.5 shadow-lg shadow-black/15 border border-slate-100">
+                <Image
+                  source={logo}
+                  style={{ width: '100%', height: '100%' }}
+                  contentFit="contain"
+                />
+              </View>
               <Text className="text-center text-2xl font-bold text-slate-950">Đăng nhập hệ thống</Text>
               <Text className="mt-1.5 text-center text-sm text-slate-500">
                 Nhập thông tin tài khoản doanh nghiệp của bạn
@@ -283,25 +293,16 @@ export default function LoginScreen() {
 
               {/* Submit Button & Biometric Quick Button (Option A) */}
               <View className="mt-1.5 flex-row items-center gap-2.5">
-                <TouchableOpacity
-                  className={`h-[50px] flex-1 items-center justify-center rounded-[10px] bg-primary shadow-md ${
-                    isLoading || isBiometricLoading ? 'opacity-60' : ''
-                  }`}
-                  onPress={handleSubmit}
-                  disabled={isLoading || isBiometricLoading}
-                  activeOpacity={0.9}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: isLoading || isBiometricLoading }}
-                >
-                  {isLoading ? (
-                    <View className="flex-row items-center justify-center gap-2">
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                      <Text className="text-base font-bold text-white">Đang đăng nhập...</Text>
-                    </View>
-                  ) : (
-                    <Text className="text-base font-bold text-white">Đăng nhập</Text>
-                  )}
-                </TouchableOpacity>
+                <View className="flex-1">
+                  <AppButton
+                    title="Đăng nhập"
+                    variant="primary"
+                    size="lg"
+                    loading={isLoading}
+                    disabled={isLoading || isBiometricLoading}
+                    onPress={handleSubmit}
+                  />
+                </View>
 
                 {isBiometricAvailable && (
                   <TouchableOpacity

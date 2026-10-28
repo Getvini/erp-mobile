@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather, MaterialIcons } from '@expo/vector-icons';
+import { Feather, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useChatStore } from '@/stores/useChatStore';
 import { useAuth } from '@/context/AuthContext';
@@ -20,6 +20,7 @@ import { ChatRoom, chatService } from '@/services/chatService';
 import { UserItem } from '@/services/userService';
 import { BrandColors } from '@/constants/colors';
 import { ChatGroupModal } from '@/components/chat/ChatGroupModal';
+import { RoomAvatar } from '@/components/chat/RoomAvatar';
 import { formatMessagePreview, formatChatTime } from '@/utils/chatTokenHelper';
 
 type UnifiedChatListItem =
@@ -245,7 +246,7 @@ export default function ChatRoomsScreen() {
                     fontWeight: '600',
                   }}
                 >
-                  {isConnected ? 'Thời gian thực' : 'Đang kết nối...'}
+                  {isConnected ? 'Đang trực tuyến' : 'Đang kết nối...'}
                 </Text>
               </View>
             </View>
@@ -394,55 +395,14 @@ export default function ChatRoomsScreen() {
                     borderBottomColor: '#F8FAFC',
                   }}
                 >
-                  {/* Avatar Icon + Online Dot */}
-                  <View style={{ position: 'relative' }}>
-                    <View
-                      style={{
-                        width: 46,
-                        height: 46,
-                        borderRadius: 23,
-                        backgroundColor: isGroup ? '#EFF6FF' : '#FFF7ED',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderWidth: 1,
-                        borderColor: isGroup ? '#DBEAFE' : '#FFEDD5',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      {avatarUrl ? (
-                        <Image
-                          source={{ uri: avatarUrl }}
-                          style={{ width: 46, height: 46, borderRadius: 23 }}
-                          resizeMode="cover"
-                        />
-                      ) : isGroup ? (
-                        <Feather name="users" size={20} color="#3B82F6" />
-                      ) : (
-                        <Text
-                          style={{ fontSize: 17, fontWeight: '800', color: BrandColors.primary }}
-                        >
-                          {title.charAt(0).toUpperCase()}
-                        </Text>
-                      )}
-                    </View>
-
-                    {/* Chấm tròn Online thời gian thực */}
-                    {isOnline && (
-                      <View
-                        style={{
-                          position: 'absolute',
-                          bottom: 0,
-                          right: 0,
-                          width: 13,
-                          height: 13,
-                          borderRadius: 6.5,
-                          backgroundColor: '#10B981',
-                          borderWidth: 2,
-                          borderColor: '#FFFFFF',
-                        }}
-                      />
-                    )}
-                  </View>
+                  {/* Avatar chuẩn Web ERP (Messenger style cho nhóm, Cam Getvini cho 1-1) */}
+                  <RoomAvatar
+                    room={room}
+                    selfUserId={user?.id}
+                    allUsers={allUsers}
+                    size="lg"
+                    isOnline={isOnline}
+                  />
 
                   {/* Content */}
                   <View style={{ flex: 1, marginLeft: 12 }}>
@@ -455,20 +415,20 @@ export default function ChatRoomsScreen() {
                       }}
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 5 }}>
-                        {room.isPinned && (
-                          <Feather name="bookmark" size={13} color={BrandColors.primary} />
-                        )}
                         <Text
                           numberOfLines={1}
                           style={{
                             fontSize: 15,
                             fontWeight: hasUnread ? '800' : '600',
                             color: '#0F172A',
-                            flex: 1,
+                            flexShrink: 1,
                           }}
                         >
                           {title}
                         </Text>
+                        {room.isPinned && (
+                          <MaterialCommunityIcons name="pin" size={14} color="#F38820" />
+                        )}
                       </View>
 
                       <Text
@@ -548,42 +508,13 @@ export default function ChatRoomsScreen() {
                     borderBottomColor: '#F8FAFC',
                   }}
                 >
-                  {/* Avatar + Online Dot */}
-                  <View style={{ position: 'relative' }}>
-                    <View
-                      style={{
-                        width: 42,
-                        height: 42,
-                        borderRadius: 21,
-                        backgroundColor: '#F1F5F9',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderWidth: 1,
-                        borderColor: '#E2E8F0',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <Text style={{ fontSize: 16, fontWeight: '700', color: '#475569' }}>
-                        {name.charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-
-                    {isOnline && (
-                      <View
-                        style={{
-                          position: 'absolute',
-                          bottom: 0,
-                          right: 0,
-                          width: 12,
-                          height: 12,
-                          borderRadius: 6,
-                          backgroundColor: '#10B981',
-                          borderWidth: 2,
-                          borderColor: '#FFFFFF',
-                        }}
-                      />
-                    )}
-                  </View>
+                  {/* Avatar chuẩn Web ERP */}
+                  <RoomAvatar
+                    user={targetUser}
+                    selfUserId={user?.id}
+                    size="md"
+                    isOnline={isOnline}
+                  />
 
                   {/* Info */}
                   <View style={{ flex: 1, marginLeft: 12 }}>

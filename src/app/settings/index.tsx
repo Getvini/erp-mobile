@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { isManagementRole } from '@/utils/rbac';
@@ -140,6 +141,18 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>THÔNG TIN ỨNG DỤNG</Text>
           <View style={styles.infoCard}>
+            <View style={{ alignItems: 'center', paddingVertical: 14 }}>
+              <View style={{ width: 64, height: 64, borderRadius: 18, backgroundColor: '#FFFFFF', padding: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 2, borderWidth: 1, borderColor: '#F1F5F9', marginBottom: 10, alignItems: 'center', justifyContent: 'center' }}>
+                <Image
+                  source={require('@/assets/images/logo.png')}
+                  style={{ width: '100%', height: '100%' }}
+                  contentFit="contain"
+                />
+              </View>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#0F172A' }}>Getvini Mobile ERP</Text>
+              <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>Make a sustainable brand</Text>
+            </View>
+            <View style={styles.divider} />
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Phiên bản</Text>
               <Text style={styles.infoValue}>1.0.0 (Build 2026)</Text>

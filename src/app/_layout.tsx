@@ -15,6 +15,7 @@ import { useSSEQueryBridge } from '@/hooks/useSSEQueryBridge';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { QueryProvider } from '@/providers/QueryProvider';
 import { ScreenErrorBoundary } from '@/components/common/ErrorBoundary';
+import { FloatingChatBubble } from '@/components/chat/FloatingChatBubble';
 
 // Polyfill for Hermes Symbol.description compatibility
 if (typeof Symbol !== 'undefined' && !('description' in Symbol.prototype)) {
@@ -79,6 +80,7 @@ export default function RootLayout() {
             <Stack.Screen name="announcements" options={{ headerShown: false }} />
             <Stack.Screen name="documents" options={{ headerShown: false }} />
           </Stack>
+          <FloatingChatBubble />
         </ThemeProvider>
       </AuthProvider>
     </QueryProvider>

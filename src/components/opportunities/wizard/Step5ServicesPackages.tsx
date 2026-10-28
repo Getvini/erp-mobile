@@ -17,7 +17,7 @@ import {
   ServiceSelectionBottomSheet,
   ServiceJobAccordion,
 } from '@/components/opportunities';
-import { formatNumberInput, parseNumberInput, formatVNDFull } from '@/utils/formatters';
+import { formatNumberInput, parseNumberInput, formatVND, formatVNDFull } from '@/utils/formatters';
 
 export const Step5ServicesPackages: React.FC = () => {
   const { width } = useWindowDimensions();
@@ -32,12 +32,14 @@ export const Step5ServicesPackages: React.FC = () => {
     addPackageService,
     removePackageService,
     updatePackageService,
+    setPackageServiceBudget,
     setPackageServiceJobIncluded,
     setPackageServiceJobBrief,
     addService,
     removeService,
     selectServiceItem,
     setServiceQuantity,
+    setServiceBudget,
     setServiceJobIncluded,
     setServiceJobBrief,
   } = useOpportunityFormStore();
@@ -48,7 +50,13 @@ export const Step5ServicesPackages: React.FC = () => {
   const { data: rawServ } = useAvailableServicesQuery();
   const { data: rawPkg } = useServicePackagesQuery();
 
-  const availableServices = useMemo<Array<{ id: string; name: string; costPrice?: number; serviceJobs?: any[] }>>(() => {
+  const availableServices = useMemo<Array<{
+    id: string;
+    name: string;
+    costPrice?: number;
+    isBudget?: boolean;
+    serviceJobs?: any[];
+  }>>(() => {
     if (!rawServ) return [];
     return Array.isArray(rawServ)
       ? rawServ
@@ -65,6 +73,45 @@ export const Step5ServicesPackages: React.FC = () => {
       ? (rawPkg as any).data
       : [];
   }, [rawPkg]);
+
+  // Helper functions tính giá vốn chuẩn khớp với Web
+  const getServiceJobsCost = (jobs: any[] = []) =>
+    jobs.reduce((total, sj) => {
+      if (sj?.included === false) return total;
+      const qty = Number(sj.quantity || 1);
+      const unitCost = Number(
+        sj.costPrice ?? sj.costAtSale ?? sj.job?.costPrice ?? 0
+      );
+      return total + unitCost * qty;
+    }, 0);
+
+  const getServiceBaseCost = (service: any, jobs: any[] = []) => {
+    const jobsCost = getServiceJobsCost(jobs);
+    if (jobsCost > 0 || (jobs && jobs.length > 0)) return jobsCost;
+    return Number(service?.costPrice || 0);
+  };
+
+  const getLineCost = (
+    item: { quantity?: number; budget?: number; jobs?: any[]; sellingPrice?: number },
+    serviceObj?: any
+  ) => {
+    const jobs = item.jobs && item.jobs.length > 0 ? item.jobs : (serviceObj?.serviceJobs || []);
+    const baseCost = getServiceBaseCost(serviceObj, jobs);
+    const budget = Number(item.budget || 0);
+    return (baseCost + budget) * Math.max(1, Number(item.quantity) || 1);
+  };
+
+  const getPackageLineCost = (pkg: any) => {
+    const pkgQty = Math.max(1, Number(pkg.quantity) || 1);
+    const servicesTotal = (pkg.services || []).reduce((sum: number, s: any) => {
+      if (!s.serviceId) return sum;
+      const found = availableServices.find((serv) => String(serv.id) === String(s.serviceId));
+      const baseCost = getServiceBaseCost(found, s.jobs || found?.serviceJobs || []);
+      const budget = Number(s.budget || 0);
+      return sum + (baseCost + budget) * Math.max(1, Number(s.quantity) || 1);
+    }, 0);
+    return servicesTotal * pkgQty;
+  };
 
   // Modal / BottomSheet States
   const [activePackageIndex, setActivePackageIndex] = useState<number | null>(null);
@@ -110,38 +157,44 @@ export const Step5ServicesPackages: React.FC = () => {
     const standaloneCost = services.reduce((total, item) => {
       if (!item.serviceId) return total;
       const found = availableServices.find((s) => String(s.id) === String(item.serviceId));
-      return total + (found?.costPrice || 0) * (item.quantity || 1);
+      return total + getLineCost(item, found);
     }, 0);
 
     const packagesCost = packages.reduce((total, pkg) => {
-      const pkgQty = Number(pkg.quantity) || 1;
-      const pkgServicesTotal = (pkg.services || []).reduce((pSum, s) => {
-        return pSum + (s.sellingPrice || 0) * (s.quantity || 1) * pkgQty;
-      }, 0);
-      return total + pkgServicesTotal;
+      if (!pkg.servicePackageId) return total;
+      return total + getPackageLineCost(pkg);
     }, 0);
 
     return standaloneCost + packagesCost;
   }, [services, packages, availableServices]);
 
+  const expectedSellingValue = useMemo(() => {
+    return Math.round(totalServicesCost * 1.4);
+  }, [totalServicesCost]);
+
   return (
     <View className="bg-white rounded-[14px] p-[16px] border border-slate-200">
-      <View className="flex-row items-center justify-between pb-[12px] border-b border-b-slate-200 mb-[14px]">
-        <View className="flex-row items-center gap-[8px]">
-          <View className="w-[28px] h-[28px] rounded-[8px] bg-[#EEF2FF] justify-center items-center">
-            <Feather name="briefcase" size={18} color="#6366F1" />
+      <View className="flex-row items-center justify-between pb-[14px] border-b border-b-slate-200 mb-[16px]">
+        <View className="flex-row items-center gap-[12px] flex-1 mr-[8px]">
+          <View style={{ backgroundColor: '#FFF7ED' }} className="w-[30px] h-[30px] rounded-[15px] justify-center items-center border border-[#FDCB9E]">
+            <Text style={{ color: '#F38820' }} className="text-[14px] font-bold">5</Text>
           </View>
-          <Text className="text-[15px] font-bold text-slate-900">
-            Dịch vụ đề xuất <Text className="text-[#EF4444]">*</Text>
-          </Text>
+          <View style={{ flex: 1 }}>
+            <Text className="text-[15px] font-bold text-slate-900">
+              Dịch vụ đề xuất <Text className="text-[#EF4444]">*</Text>
+            </Text>
+            <Text className="text-[12px] text-slate-500 mt-[2px]" numberOfLines={1}>
+              Chọn gói hoặc dịch vụ lẻ và tính giá vốn
+            </Text>
+          </View>
         </View>
         <TouchableOpacity
           onPress={() => addPackage()}
           activeOpacity={0.7}
-          className="flex-row items-center px-[10px] py-[6px] rounded-[8px] bg-blue-50 gap-[4px]"
+          className="flex-row items-center px-[10px] py-[6px] rounded-[8px] bg-[#FFF7ED] border border-[#FDCB9E] gap-[4px]"
         >
-          <Feather name="plus" size={14} color="#2563EB" />
-          <Text className="text-[13px] font-semibold text-blue-600">Gói dịch vụ</Text>
+          <Feather name="plus" size={14} color="#D97010" />
+          <Text className="text-[13px] font-semibold text-[#D97010]">Gói dịch vụ</Text>
         </TouchableOpacity>
       </View>
 
@@ -162,17 +215,17 @@ export const Step5ServicesPackages: React.FC = () => {
             return (
               <View
                 key={idx}
-                className="flex-row items-center bg-[rgba(239,_246,_255,_0.4)] border border-blue-200 rounded-[12px] p-[10px] gap-[10px] mb-[8px]"
+                className="flex-row items-center bg-[#FFF7ED]/70 rounded-[12px] p-[10px] gap-[10px] mb-[8px]"
               >
                 <TouchableOpacity
                   onPress={() => setActivePackageIndex(idx)}
                   activeOpacity={0.7}
-                  className="flex-1 flex-row items-center justify-between bg-white border-[2px] border-blue-200 rounded-[8px] px-[12px] py-[9px]"
+                  className="flex-1 flex-row items-center justify-between bg-white border border-[#FDCB9E] rounded-[8px] px-[12px] py-[9px]"
                 >
-                  <Text className="text-[13px] font-bold text-[#1E3A8A]">
+                  <Text className="text-[13px] font-bold text-orange-950">
                     -- Chọn gói dịch vụ --
                   </Text>
-                  <Feather name="chevron-down" size={18} color="#1E3A8A" />
+                  <Feather name="chevron-down" size={18} color="#D97010" />
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -180,34 +233,36 @@ export const Step5ServicesPackages: React.FC = () => {
                   activeOpacity={0.7}
                   className="p-[6px]"
                 >
-                  <Feather name="trash-2" size={18} color="#F87171" />
+                  <Feather name="trash-2" size={18} color="#EF4444" />
                 </TouchableOpacity>
               </View>
             );
           }
 
+          const pkgLineCost = getPackageLineCost(pkg);
+
           return (
             <View
               key={idx}
-              className="bg-[rgba(239,_246,_255,_0.4)] border-[2px] border-[#DBEAFE] rounded-[14px] p-[12px] mb-[12px]"
+              className="bg-[#FFF7ED]/70 rounded-[14px] p-[12px] mb-[12px]"
             >
               <View className="flex-row items-center justify-between">
-                <View className="flex-row items-center gap-[10px] flex-1">
-                  <View className="w-[34px] h-[34px] rounded-[10px] bg-blue-600 justify-center items-center">
-                    <Feather name="briefcase" size={18} color="#FFFFFF" />
+                <View className="flex-row items-center gap-[10px] flex-1 mr-[8px]">
+                  <View className="w-[34px] h-[34px] rounded-[10px] bg-[#F38820] justify-center items-center">
+                    <Feather name="briefcase" size={17} color="#FFFFFF" />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text className="text-[14px] font-bold text-[#1E3A8A]">
+                    <Text className="text-[14px] font-bold text-slate-900 leading-[19px]">
                       {selectedPkg?.name || pkg.name || 'Gói dịch vụ'}
                     </Text>
-                    <Text className="text-[9px] font-extrabold text-blue-600 tracking-[0.6px] mt-[1px]">
+                    <Text className="text-[10px] font-extrabold text-[#F38820] tracking-[0.6px] mt-[1px]">
                       GÓI DỊCH VỤ
                     </Text>
                   </View>
                 </View>
 
                 <View className="flex-row items-center gap-[8px]">
-                  <View className="flex-row items-center bg-white border border-slate-300 rounded-[8px] px-[6px] h-[38px]">
+                  <View className="flex-row items-center bg-white border border-slate-300 rounded-[8px] px-[6px] h-[36px]">
                     <Text className="text-[11px] text-slate-500 mr-[4px]">SL</Text>
                     <TextInput
                       keyboardType="numeric"
@@ -215,7 +270,8 @@ export const Step5ServicesPackages: React.FC = () => {
                       onChangeText={(txt) =>
                         setPackageQuantity(idx, Math.max(1, parseNumberInput(txt) || 1))
                       }
-                      className="w-[36px] text-center text-[14px] font-bold text-slate-900"
+                      style={{ paddingVertical: 0 }}
+                      className="w-[32px] text-center text-[13px] font-bold text-slate-900"
                     />
                   </View>
 
@@ -224,9 +280,19 @@ export const Step5ServicesPackages: React.FC = () => {
                     activeOpacity={0.7}
                     className="p-[6px]"
                   >
-                    <Feather name="trash-2" size={18} color="#F87171" />
+                    <Feather name="trash-2" size={18} color="#EF4444" />
                   </TouchableOpacity>
                 </View>
+              </View>
+
+              {/* Dòng Giá vốn gói: Xuống dòng riêng biệt, rõ ràng và không chèn ép tên gói */}
+              <View className="flex-row items-center justify-between mt-[10px] bg-white border border-[#FDCB9E]/80 rounded-[8px] py-[6px] px-[10px]">
+                <Text className="text-[11px] font-semibold text-slate-600 uppercase tracking-[0.3px]">
+                  Giá vốn gói:
+                </Text>
+                <Text className="text-[13px] font-extrabold text-[#D97010]">
+                  {formatVND(pkgLineCost)}
+                </Text>
               </View>
 
               {pkg.description ? (
@@ -236,7 +302,7 @@ export const Step5ServicesPackages: React.FC = () => {
               ) : null}
 
               {/* Accordion Toggle Bar: Dịch vụ trong gói */}
-              <View className="mt-[10px] pt-[8px] border-t border-t-[#DBEAFE]">
+              <View className="mt-[10px] pt-[8px] border-t border-t-[#FDCB9E]/60">
                 <View className="flex-row items-center justify-between mb-[8px]">
                   <TouchableOpacity
                     onPress={() => handleToggleExpandPackage(idx)}
@@ -246,9 +312,9 @@ export const Step5ServicesPackages: React.FC = () => {
                     <Feather
                       name={isExpanded ? 'chevron-up' : 'chevron-down'}
                       size={16}
-                      color="#1D4ED8"
+                      color="#D97010"
                     />
-                    <Text className="text-[12px] font-bold text-[#1D4ED8] uppercase tracking-[0.4px]">
+                    <Text className="text-[12px] font-bold text-[#D97010] uppercase tracking-[0.4px]">
                       Dịch vụ trong gói ({pkgServices.length})
                     </Text>
                   </TouchableOpacity>
@@ -257,10 +323,10 @@ export const Step5ServicesPackages: React.FC = () => {
                     <TouchableOpacity
                       onPress={() => addPackageService(idx)}
                       activeOpacity={0.7}
-                      className="flex-row items-center gap-[4px] px-[8px] py-[4px] rounded-[6px] bg-blue-100"
+                      className="flex-row items-center gap-[4px] px-[8px] py-[4px] rounded-[6px] bg-[#FFF7ED] border border-[#FDCB9E]"
                     >
-                      <Feather name="plus" size={12} color="#1D4ED8" />
-                      <Text className="text-[11px] font-semibold text-[#1D4ED8]">Thêm dịch vụ</Text>
+                      <Feather name="plus" size={12} color="#D97010" />
+                      <Text className="text-[11px] font-semibold text-[#D97010]">Thêm dịch vụ</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -272,6 +338,7 @@ export const Step5ServicesPackages: React.FC = () => {
                       const foundSub = availableServices.find(
                         (s) => String(s.id) === String(serviceItem.serviceId)
                       );
+                      const subLineCost = getLineCost(serviceItem, foundSub);
                       const allJobs =
                         serviceItem.jobs && serviceItem.jobs.length > 0
                           ? serviceItem.jobs
@@ -290,7 +357,7 @@ export const Step5ServicesPackages: React.FC = () => {
                       return (
                         <View
                           key={sIdx}
-                          className="bg-white rounded-[10px] p-[10px] border border-blue-100 gap-[8px]"
+                          className="bg-white rounded-[10px] p-[10px] border border-border gap-[8px]"
                         >
                           <View className="flex-row items-center gap-[8px]">
                             <TouchableOpacity
@@ -336,9 +403,50 @@ export const Step5ServicesPackages: React.FC = () => {
                               activeOpacity={0.7}
                               className="p-[6px]"
                             >
-                              <Feather name="trash-2" size={16} color="#F87171" />
+                              <Feather name="trash-2" size={16} color="#EF4444" />
                             </TouchableOpacity>
                           </View>
+
+                          {/* Giá vốn dòng */}
+                          {foundSub ? (
+                            <View className="flex-row items-center justify-between px-1">
+                              <Text className="text-[11px] text-slate-500 font-medium">Giá vốn:</Text>
+                              <Text className="text-[12px] font-bold text-slate-800">
+                                {formatVND(subLineCost)}
+                              </Text>
+                            </View>
+                          ) : null}
+
+                          {/* Ô nhập Ngân sách nếu dịch vụ có isBudget */}
+                          {foundSub?.isBudget ? (
+                            <View className="bg-amber-50/80 border border-amber-200 rounded-[8px] p-[8px] flex-row items-center justify-between">
+                              <View className="flex-row items-center gap-[6px] flex-1 mr-[8px]">
+                                <Feather name="dollar-sign" size={13} color="#D97706" />
+                                <Text className="text-[12px] font-bold text-amber-800">
+                                  Ngân sách dịch vụ <Text className="text-red-500">*</Text>
+                                </Text>
+                              </View>
+                              <View className="w-[125px] h-[36px] bg-white border border-amber-300 rounded-[6px] px-[8px] flex-row items-center">
+                                <TextInput
+                                  keyboardType="numeric"
+                                  placeholder="0"
+                                  placeholderTextColor="#94A3B8"
+                                  value={serviceItem.budget ? formatNumberInput(String(serviceItem.budget)) : ''}
+                                  onChangeText={(txt) =>
+                                    updatePackageService(
+                                      idx,
+                                      sIdx,
+                                      'budget',
+                                      parseNumberInput(txt) || 0
+                                    )
+                                  }
+                                  style={{ paddingVertical: 0 }}
+                                  className="flex-1 text-right text-[13px] font-bold text-slate-900"
+                                />
+                                <Text className="text-[11px] font-bold text-amber-700 ml-[4px]">₫</Text>
+                              </View>
+                            </View>
+                          ) : null}
 
                           {/* Hạng mục con lồng trong dịch vụ gói */}
                           <ServiceJobAccordion
@@ -371,10 +479,10 @@ export const Step5ServicesPackages: React.FC = () => {
           <TouchableOpacity
             onPress={() => addService()}
             activeOpacity={0.7}
-            className="flex-row items-center px-[10px] py-[6px] rounded-[8px] bg-blue-50 gap-[4px]"
+            className="flex-row items-center px-[10px] py-[6px] rounded-[8px] bg-[#FFF7ED] border border-[#FDCB9E] gap-[4px]"
           >
-            <Feather name="plus" size={14} color="#6366F1" />
-            <Text style={{ color: '#6366F1' }} className="text-[13px] font-semibold">
+            <Feather name="plus" size={14} color="#D97010" />
+            <Text className="text-[13px] font-semibold text-[#D97010]">
               Dịch vụ lẻ
             </Text>
           </TouchableOpacity>
@@ -397,16 +505,18 @@ export const Step5ServicesPackages: React.FC = () => {
                   briefVideo: '',
                 }));
 
+          const lineCost = getLineCost(row, selectedServ);
+
           return (
             <View
               key={idx}
-              className="bg-slate-50 rounded-[12px] p-[10px] border border-slate-200 mb-[8px] gap-[8px]"
+              className="bg-[#FFF7ED]/70 rounded-[14px] p-[12px] border border-[#FDCB9E]/80 mb-[10px] gap-[8px]"
             >
               <View className="flex-row items-center gap-[8px]">
                 <TouchableOpacity
                   onPress={() => setActiveServiceTarget({ type: 'standalone', index: idx })}
                   activeOpacity={0.7}
-                  className="flex-1 flex-row items-center justify-between bg-white rounded-[8px] px-[12px] py-[9px] border border-slate-300"
+                  className="flex-1 flex-row items-center justify-between bg-white rounded-[8px] px-[12px] py-[9px] border border-[#FDCB9E]"
                 >
                   <Text
                     numberOfLines={1}
@@ -416,10 +526,10 @@ export const Step5ServicesPackages: React.FC = () => {
                   >
                     {selectedServ ? selectedServ.name : '-- Chọn dịch vụ --'}
                   </Text>
-                  <Feather name="chevron-down" size={16} color="#64748B" />
+                  <Feather name="chevron-down" size={16} color="#D97010" />
                 </TouchableOpacity>
 
-                <View className="w-[52px] h-[38px] bg-white border border-slate-300 rounded-[8px] justify-center items-center">
+                <View className="w-[52px] h-[38px] bg-white border border-[#FDCB9E] rounded-[8px] justify-center items-center">
                   <TextInput
                     keyboardType="numeric"
                     value={formatNumberInput(String(row.quantity))}
@@ -435,9 +545,45 @@ export const Step5ServicesPackages: React.FC = () => {
                   activeOpacity={0.7}
                   className="p-[6px]"
                 >
-                  <Feather name="trash-2" size={18} color="#F87171" />
+                  <Feather name="trash-2" size={18} color="#EF4444" />
                 </TouchableOpacity>
               </View>
+
+              {/* Giá vốn dòng */}
+              {selectedServ ? (
+                <View className="flex-row items-center justify-between bg-white border border-[#FDCB9E]/80 rounded-[8px] py-[6px] px-[10px]">
+                  <Text className="text-[11px] font-semibold text-slate-600 uppercase tracking-[0.3px]">Giá vốn:</Text>
+                  <Text className="text-[13px] font-extrabold text-[#D97010]">
+                    {formatVND(lineCost)}
+                  </Text>
+                </View>
+              ) : null}
+
+              {/* Ô nhập Ngân sách nếu dịch vụ có isBudget */}
+              {selectedServ?.isBudget ? (
+                <View className="bg-amber-50/80 border border-amber-200 rounded-[8px] p-[8px] flex-row items-center justify-between">
+                  <View className="flex-row items-center gap-[6px] flex-1 mr-[8px]">
+                    <Feather name="dollar-sign" size={13} color="#D97706" />
+                    <Text className="text-[12px] font-bold text-amber-800">
+                      Ngân sách dịch vụ <Text className="text-red-500">*</Text>
+                    </Text>
+                  </View>
+                  <View className="w-[125px] h-[36px] bg-white border border-amber-300 rounded-[6px] px-[8px] flex-row items-center">
+                    <TextInput
+                      keyboardType="numeric"
+                      placeholder="0"
+                      placeholderTextColor="#94A3B8"
+                      value={row.budget ? formatNumberInput(String(row.budget)) : ''}
+                      onChangeText={(txt) =>
+                        setServiceBudget(idx, parseNumberInput(txt) || 0)
+                      }
+                      style={{ paddingVertical: 0 }}
+                      className="flex-1 text-right text-[13px] font-bold text-slate-900"
+                    />
+                    <Text className="text-[11px] font-bold text-amber-700 ml-[4px]">₫</Text>
+                  </View>
+                </View>
+              ) : null}
 
               {/* Hạng mục con lồng trong dịch vụ lẻ */}
               <ServiceJobAccordion
@@ -455,21 +601,41 @@ export const Step5ServicesPackages: React.FC = () => {
         })}
       </View>
 
-      {/* C. TỔNG GIÁ VỐN GRADIENT BANNER (Y chang bên Web) */}
-      <View
-        className={`mt-[12px] bg-[#6D28D9] rounded-[12px] px-[16px] py-[14px] flex-row items-center justify-between ${
-          isSmallScreen ? 'flex-col items-start gap-[4px]' : ''
-        }`}
-      >
-        <Text className="text-[12px] font-medium text-white flex-1">
-          Tổng giá vốn của các dịch vụ đã chọn:
-        </Text>
-        <Text
-          style={isSmallScreen ? { fontSize: 17, marginTop: 4 } : undefined}
-          className="text-[20px] font-extrabold text-white"
+      {/* C. TỔNG GIÁ VỐN & GIÁ BÁN DỰ KIẾN (Chuẩn sắc cam Getvini) */}
+      <View className="mt-[14px] bg-[#F38820] rounded-[14px] px-[16px] py-[14px] shadow-sm">
+        {/* Hàng 1: Tổng giá vốn */}
+        <View
+          className={`flex-row items-center justify-between ${
+            isSmallScreen ? 'flex-col items-start gap-[4px]' : ''
+          }`}
         >
-          {formatVNDFull(totalServicesCost)}
-        </Text>
+          <Text className="text-[12px] font-medium text-white/95 flex-1">
+            Tổng giá vốn của các dịch vụ đã chọn:
+          </Text>
+          <Text
+            style={isSmallScreen ? { fontSize: 16, marginTop: 4 } : undefined}
+            className="text-[18px] font-extrabold text-white"
+          >
+            {formatVNDFull(totalServicesCost)}
+          </Text>
+        </View>
+
+        {/* Hàng 2: Giá bán dự kiến (140% giá vốn) */}
+        <View
+          className={`mt-[10px] pt-[10px] border-t border-white/30 flex-row items-center justify-between ${
+            isSmallScreen ? 'flex-col items-start gap-[4px]' : ''
+          }`}
+        >
+          <Text className="text-[12px] font-medium text-white/95 flex-1">
+            Giá bán dự kiến (140% giá vốn):
+          </Text>
+          <Text
+            style={isSmallScreen ? { fontSize: 17, marginTop: 4 } : undefined}
+            className="text-[20px] font-black text-white"
+          >
+            {formatVNDFull(expectedSellingValue)}
+          </Text>
+        </View>
       </View>
 
       {/* Service Package Bottom Sheet Modal */}

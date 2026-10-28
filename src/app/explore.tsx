@@ -7,6 +7,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { BrandColors } from '@/constants/colors';
@@ -381,12 +382,21 @@ export default function ExploreScreen() {
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
       <ScrollView contentContainerClassName="px-[18px] pb-6" showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View className="py-[18px]">
-          <Text className="text-[22px] font-extrabold text-slate-900">Hệ sinh thái ERP</Text>
-          <Text className="mt-1.5 text-[13px] leading-[19px] text-slate-500">
-            Toàn bộ các phân hệ chức năng chuyên sâu phục vụ chuyển đổi số doanh nghiệp
-          </Text>
+        {/* Header with Getvini Brand Emblem */}
+        <View className="flex-row items-center justify-between py-[18px]">
+          <View className="flex-1 pr-3">
+            <Text className="text-[22px] font-extrabold text-slate-900">Hệ sinh thái ERP</Text>
+            <Text className="mt-1 text-[13px] leading-[19px] text-slate-500">
+              Toàn bộ các phân hệ chức năng chuyên sâu phục vụ chuyển đổi số doanh nghiệp
+            </Text>
+          </View>
+          <View className="h-12 w-12 items-center justify-center rounded-2xl bg-white p-2 shadow-sm border border-slate-100">
+            <Image
+              source={require('@/assets/images/logo.png')}
+              style={{ width: '100%', height: '100%' }}
+              contentFit="contain"
+            />
+          </View>
         </View>
 
         {/* Auth prompt if not logged in */}

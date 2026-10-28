@@ -17,6 +17,7 @@ export interface ServiceSelectionItem {
   name: string;
   costPrice?: number;
   description?: string;
+  isBudget?: boolean;
 }
 
 interface ServiceSelectionBottomSheetProps {
@@ -127,13 +128,20 @@ export function ServiceSelectionBottomSheet({
                   >
                     <View className="flex-row items-center justify-between">
                       <View className="flex-1 mr-3">
-                        <Text
-                          className={`text-sm ${
-                            isSelected ? 'font-extrabold text-primary' : 'font-bold text-text-primary'
-                          }`}
-                        >
-                          {serv.name}
-                        </Text>
+                        <View className="flex-row items-center gap-2 flex-wrap">
+                          <Text
+                            className={`text-sm ${
+                              isSelected ? 'font-extrabold text-primary' : 'font-bold text-text-primary'
+                            }`}
+                          >
+                            {serv.name}
+                          </Text>
+                          {serv.isBudget && (
+                            <View className="bg-amber-100 rounded px-1.5 py-0.5">
+                              <Text className="text-[10px] font-bold text-amber-700">Ngân sách</Text>
+                            </View>
+                          )}
+                        </View>
                         {serv.description ? (
                           <Text className="text-xs text-slate-500 mt-1" numberOfLines={2}>
                             {serv.description}

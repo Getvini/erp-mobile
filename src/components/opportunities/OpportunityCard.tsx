@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Linking, Alert } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { OpportunityItem } from '@/services/opportunityService';
 import { formatVND } from '@/utils/formatters';
+import { StatusBadge } from '@/components/common/StatusBadge';
 
 interface OpportunityCardProps {
   item: OpportunityItem;
@@ -16,42 +17,6 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = React.memo(({ ite
 
   // Format currency with standard thousand separators
   const formatMoney = (val?: number) => formatVND(val);
-
-  // Status mapping
-  const getStatusMeta = (status: string) => {
-    switch (status) {
-      case 'OPEN':
-        return { label: 'Mới tạo', color: '#64748B', bg: '#F1F5F9' };
-      case 'PENDING_OPP_APPROVAL':
-        return { label: 'Đang chờ duyệt', color: '#D97706', bg: '#FEF3C7' };
-      case 'OPP_REJECTED':
-        return { label: 'Không duyệt', color: '#DC2626', bg: '#FEE2E2' };
-      case 'OPP_APPROVED':
-        return { label: 'Đã duyệt cơ hội', color: '#059669', bg: '#D1FAE5' };
-      case 'QUOTATION':
-        return { label: 'Báo giá', color: '#4F46E5', bg: '#EEF2FF' };
-      case 'QUOTATION_DRAFTING':
-        return { label: 'Đang làm báo giá', color: '#2563EB', bg: '#DBEAFE' };
-      case 'PENDING_QUOTE_APPROVAL':
-        return { label: 'Chờ duyệt báo giá', color: '#EA580C', bg: '#FFEDD5' };
-      case 'QUOTE_APPROVED':
-        return { label: 'Báo giá đã duyệt', color: '#0D9488', bg: '#CCFBF1' };
-      case 'CONTRACT_CREATED':
-        return { label: 'Đang làm hợp đồng', color: '#7C3AED', bg: '#EDE9FE' };
-      case 'CONTRACT_APPROVED':
-        return { label: 'Đã tạo hợp đồng', color: '#16A34A', bg: '#DCFCE7' };
-      case 'PROJECT_ASSIGNED':
-        return { label: 'Đã giao dự án', color: '#4F46E5', bg: '#EEF2FF' };
-      case 'IMPLEMENTATION':
-        return { label: 'Đang triển khai', color: '#0284C7', bg: '#E0F2FE' };
-      case 'COMPLETED':
-        return { label: 'Hoàn thành', color: '#16A34A', bg: '#DCFCE7' };
-      case 'CANCELLED':
-        return { label: 'Đã hủy', color: '#DC2626', bg: '#FEE2E2' };
-      default:
-        return { label: status, color: '#64748B', bg: '#F1F5F9' };
-    }
-  };
 
   // Priority mapping
   const getPriorityMeta = (priority?: string) => {
@@ -69,7 +34,6 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = React.memo(({ ite
     }
   };
 
-  const statusMeta = getStatusMeta(item.status);
   const priorityMeta = getPriorityMeta(item.priority);
   const chance = item.successChance ?? 0;
 
@@ -102,11 +66,7 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = React.memo(({ ite
           )}
         </View>
 
-        <View className="px-2 py-0.5 rounded-lg" style={{ backgroundColor: statusMeta.bg }}>
-          <Text className="text-[11px] font-bold" style={{ color: statusMeta.color }}>
-            {statusMeta.label}
-          </Text>
-        </View>
+        <StatusBadge domain="opportunity" status={item.status} size="sm" />
       </View>
 
       {/* Opportunity Name */}
