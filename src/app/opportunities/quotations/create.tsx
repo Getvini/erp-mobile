@@ -101,6 +101,32 @@ export default function QuotationCreateEditScreen() {
 
   const opportunity: OpportunityItem | null = oppData || null;
 
+  const servicesById = useMemo(() => {
+    const srvList = Array.isArray(allServicesRes) ? allServicesRes : (allServicesRes as any)?.data || [];
+    return new Map<string, any>(srvList.map((s: any) => [String(s.id), s]));
+  }, [allServicesRes]);
+
+  const resolveJobsForService = useCallback(
+    (service: any, sId?: string): any[] => {
+      const id = String(sId || service?.service?.id || service?.serviceId || service?.id || '');
+      const fullService = servicesById.get(id);
+      if (Array.isArray(service?.jobs) && service.jobs.length > 0) {
+        return service.jobs;
+      }
+      if (Array.isArray(service?.service?.serviceJobs) && service.service.serviceJobs.length > 0) {
+        return service.service.serviceJobs;
+      }
+      if (Array.isArray(service?.serviceJobs) && service.serviceJobs.length > 0) {
+        return service.serviceJobs;
+      }
+      if (Array.isArray(fullService?.serviceJobs) && fullService.serviceJobs.length > 0) {
+        return fullService.serviceJobs;
+      }
+      return [];
+    },
+    [servicesById]
+  );
+
   const roundToTenThousands = (value: number) => {
     return Math.ceil(value / 10000) * 10000;
   };
@@ -131,6 +157,13 @@ export default function QuotationCreateEditScreen() {
         const sellingPrice = parseFloat(String(detail.sellingPrice || 0));
         const minPrice = roundToTenThousands(costPrice / 0.8);
         const recommendedPrice = roundToTenThousands(costPrice / 0.6);
+        const sId = String(detail.service?.id || detail.serviceId);
+        const oppService = detail.packageName && detail.packageName !== 'STANDALONE'
+          ? (oppData?.packages || []).flatMap((pkg: any) => pkg.services || []).find((s: any) => String(s.service?.id || s.serviceId) === sId)
+          : (oppData?.services || []).find((s: any) => !s.opportunityPackageId && String(s.service?.id || s.serviceId) === sId);
+        const jobs = (detail.jobs && detail.jobs.length > 0)
+          ? detail.jobs
+          : resolveJobsForService(oppService || detail, sId);
 
         return {
           serviceId: detail.service?.id || detail.serviceId,
@@ -147,6 +180,7 @@ export default function QuotationCreateEditScreen() {
           norm: detail.packageQuantity ? (detail.quantity || 1) / detail.packageQuantity : 1,
           servicePackageId: detail.servicePackageId,
           unit: detail.service?.unit || detail.unit || '',
+          jobs,
         };
       });
 
@@ -167,6 +201,7 @@ export default function QuotationCreateEditScreen() {
           const costPrice = parseFloat(service.service?.costPrice || service.costPrice) || 0;
           const minPrice = roundToTenThousands(costPrice / 0.8);
           const recommendedPrice = roundToTenThousands(costPrice / 0.6);
+          const jobs = resolveJobsForService(service);
 
           return {
             serviceId: service.service?.id || service.serviceId || service.id,
@@ -180,6 +215,7 @@ export default function QuotationCreateEditScreen() {
             profitMargin: calculateProfitMargin(recommendedPrice, costPrice),
             packageName: 'STANDALONE',
             unit: service.service?.unit || service.unit || '',
+            jobs,
           };
         });
 
@@ -188,6 +224,7 @@ export default function QuotationCreateEditScreen() {
           const costPrice = parseFloat(ps.service?.costPrice || ps.sellingPrice) || 0;
           const minPrice = roundToTenThousands(costPrice / 0.8);
           const recommendedPrice = roundToTenThousands(costPrice / 0.6);
+          const jobs = resolveJobsForService(ps);
 
           return {
             serviceId: ps.serviceId || ps.id,
@@ -204,6 +241,7 @@ export default function QuotationCreateEditScreen() {
             norm: pkg.quantity ? (ps.quantity || 1) / pkg.quantity : 1,
             servicePackageId: pkg.servicePackageId,
             unit: ps.service?.unit || ps.unit || '',
+            jobs,
           };
         })
       );
@@ -213,7 +251,7 @@ export default function QuotationCreateEditScreen() {
     }
 
     setHasInitialized(true);
-  }, [hasInitialized, oppData, allServicesRes, pkgTemplatesRes, quoteData, servicesRes, isEditMode, quotationId]);
+  }, [hasInitialized, oppData, allServicesRes, pkgTemplatesRes, quoteData, servicesRes, isEditMode, quotationId, resolveJobsForService]);
 
   const isLoading = isLoadingOpp || isLoadingServices || isLoadingPackages || (isEditMode && isLoadingQuote) || !hasInitialized;
 
@@ -387,6 +425,7 @@ export default function QuotationCreateEditScreen() {
     const minPrice = roundToTenThousands(costPrice / 0.8);
     const recommendedPrice = roundToTenThousands(costPrice / 0.6);
     const initialPrice = priceType === 'minimum' ? minPrice : recommendedPrice;
+    const jobs = resolveJobsForService(service);
 
     const newItem: QuotationFormItem = {
       serviceId: service.id,
@@ -400,11 +439,12 @@ export default function QuotationCreateEditScreen() {
       profitMargin: calculateProfitMargin(initialPrice, costPrice),
       packageName: 'STANDALONE',
       unit: service.unit || '',
+      jobs,
     };
 
     setItems((prev) => [...prev, newItem]);
     setShowAddServiceModal(false);
-  }, [priceType]);
+  }, [priceType, resolveJobsForService]);
 
   // Add a package template
   const handleSelectPackageToAdd = useCallback((template: any) => {
@@ -418,6 +458,7 @@ export default function QuotationCreateEditScreen() {
       const minPrice = roundToTenThousands(costPrice / 0.8);
       const recommendedPrice = roundToTenThousands(costPrice / 0.6);
       const initialPrice = priceType === 'minimum' ? minPrice : recommendedPrice;
+      const jobs = resolveJobsForService(ps);
 
       return {
         serviceId: ps.service?.id || ps.serviceId,
@@ -434,12 +475,13 @@ export default function QuotationCreateEditScreen() {
         norm: ps.defaultQuantity || 1,
         servicePackageId: template.id,
         unit: ps.service?.unit || ps.unit || '',
+        jobs,
       };
     });
 
     setItems((prev) => [...prev, ...packageItems]);
     setShowAddPackageModal(false);
-  }, [items, priceType]);
+  }, [items, priceType, resolveJobsForService]);
 
   const handleCloseServiceModal = useCallback(() => setShowAddServiceModal(false), []);
   const handleClosePackageModal = useCallback(() => setShowAddPackageModal(false), []);
@@ -822,24 +864,22 @@ export default function QuotationCreateEditScreen() {
                   <View className="mt-2 gap-1.5 rounded-lg bg-slate-50 p-2">
                     {pkg.items.map((sub: any, sIdx: number) => (
                       <View key={sub.serviceId || sIdx} className="rounded-md border border-slate-200 bg-white p-2">
-                        <View className="flex-row items-center justify-between gap-2">
-                          <Text className="text-xs font-bold text-slate-800">{sub.serviceName}</Text>
-                          <Text
-                            className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
-                              sub.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                            }`}
-                          >
-                            Tỉ suất lợi nhuận: {sub.profitMargin.toFixed(0)}%
-                          </Text>
-                        </View>
+                        <Text className="text-xs font-bold text-slate-800">{sub.serviceName}</Text>
                         <Text className="mt-0.5 text-[11px] text-slate-500">
                           Định mức: {formatNumber(sub.norm)} {sub.unit || 'lần'} / gói | Số lượng tổng: {formatNumber(sub.quantity)}
                         </Text>
                         {priceType === 'custom' ? (
                           <View className="mt-2 border-t border-slate-100 pt-2 gap-1.5">
-                            <View className="flex-row items-center justify-between">
+                            <View className="flex-row items-center justify-between gap-2">
                               <Text className="text-xs text-slate-500">
                                 Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(sub.costPrice)} ₫</Text>
+                              </Text>
+                              <Text
+                                className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
+                                  sub.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                                }`}
+                              >
+                                Tỉ suất lợi nhuận: {sub.profitMargin.toFixed(0)}%
                               </Text>
                             </View>
                             <View className="flex-row items-center justify-between">
@@ -857,13 +897,25 @@ export default function QuotationCreateEditScreen() {
                             </View>
                           </View>
                         ) : (
-                          <View className="mt-1.5 flex-row items-center justify-between border-t border-slate-100 pt-1.5">
-                            <Text className="text-xs text-slate-500">
-                              Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(sub.costPrice)} ₫</Text>
-                            </Text>
-                            <Text className="text-xs font-bold text-slate-900">
-                              Đơn giá con: {formatNumber(sub.selectedPrice)} ₫
-                            </Text>
+                          <View className="mt-1.5 gap-1.5 border-t border-slate-100 pt-1.5">
+                            <View className="flex-row items-center justify-between gap-2">
+                              <Text className="text-xs text-slate-500">
+                                Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(sub.costPrice)} ₫</Text>
+                              </Text>
+                              <Text
+                                className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${
+                                  sub.profitMargin >= 20 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                                }`}
+                              >
+                                Tỉ suất lợi nhuận: {sub.profitMargin.toFixed(0)}%
+                              </Text>
+                            </View>
+                            <View className="flex-row items-center justify-between">
+                              <Text className="text-xs font-semibold text-slate-600">Đơn giá con:</Text>
+                              <Text className="text-xs font-bold text-slate-900">
+                                {formatNumber(sub.selectedPrice)} ₫
+                              </Text>
+                            </View>
                           </View>
                         )}
                       </View>

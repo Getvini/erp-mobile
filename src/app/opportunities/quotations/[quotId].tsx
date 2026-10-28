@@ -20,11 +20,13 @@ import {
   useApproveQuotationMutation,
   useRejectQuotationMutation,
 } from '@/hooks/queries/useQuotations';
+import { useAvailableServicesQuery } from '@/hooks/queries/useOpportunities';
 import {
   QuotationStatus,
   QuotationItem,
 } from '@/services/quotationService';
 import { formatVND, formatNumber } from '@/utils/formatters';
+import { ServiceJobAccordion } from '@/components/opportunities/ServiceJobAccordion';
 
 export default function QuotationDetailScreen() {
   const router = useRouter();
@@ -43,6 +45,12 @@ export default function QuotationDetailScreen() {
 
   // TanStack Query for sibling quotations
   const { data: oppQuotesRes } = useOpportunityQuotationsQuery(oppId);
+  const { data: allServicesRes } = useAvailableServicesQuery();
+
+  const servicesById = useMemo(() => {
+    const srvList = Array.isArray(allServicesRes) ? allServicesRes : (allServicesRes as any)?.data || [];
+    return new Map<string, any>(srvList.map((s: any) => [String(s.id), s]));
+  }, [allServicesRes]);
 
   // Mutations
   const approveMutation = useApproveQuotationMutation();
@@ -117,6 +125,14 @@ export default function QuotationDetailScreen() {
       const itemCost = costAtSale * quantity;
       const itemVat = itemRevenue * 0.08;
 
+      const sId = String(detail.serviceId || detail.service?.id || '');
+      const fullService = servicesById.get(sId);
+      const jobs = (Array.isArray(detail.jobs) && detail.jobs.length > 0)
+        ? detail.jobs
+        : (Array.isArray(detail.service?.serviceJobs) && detail.service.serviceJobs.length > 0)
+          ? detail.service.serviceJobs
+          : (Array.isArray(fullService?.serviceJobs) ? fullService.serviceJobs : []);
+
       runningRevenue += itemRevenue;
       runningCost += itemCost;
 
@@ -125,6 +141,7 @@ export default function QuotationDetailScreen() {
       if (groupKey === 'STANDALONE') {
         standalone.push({
           ...detail,
+          jobs,
           revenue: itemRevenue,
           cost: itemCost,
           vat: itemVat,
@@ -160,6 +177,7 @@ export default function QuotationDetailScreen() {
       packages[groupKey].totalWithVat += itemRevenue + itemVat;
       packages[groupKey].items.push({
         ...detail,
+        jobs,
         norm,
         revenue: itemRevenue,
         cost: itemCost,
@@ -510,23 +528,29 @@ export default function QuotationDetailScreen() {
                     <View className="mt-2.5 rounded-lg border-t border-slate-200 bg-slate-50 p-2.5 pt-2.5">
                       <Text className="mb-2 text-[11px] font-bold uppercase text-slate-500">Chi tiết dịch vụ con:</Text>
                       {pkg.items.map((item: any, itemIdx: number) => (
-                        <View key={item.id || itemIdx} className="flex-row items-center justify-between border-b border-slate-100 py-1.5">
-                          <View className="flex-1">
-                            <Text className="text-[13px] font-semibold text-slate-800">
-                              {item.name || item.service?.name || 'Dịch vụ'}
-                            </Text>
-                            <Text className="mt-0.5 text-[11px] text-slate-500">
-                              Định mức: {formatNumber(item.norm)} {item.service?.unit || item.unit || 'lần'} / gói | Đơn giá: {formatMoney(item.sellingPrice)}
-                            </Text>
-                            {Boolean(item.service?.description || item.description) && (
-                              <Text className="mt-1 text-[11px] italic text-slate-500 leading-4">
-                                {item.service?.description || item.description}
+                        <View key={item.id || itemIdx} className="border-b border-slate-100 py-2">
+                          <View className="flex-row items-center justify-between">
+                            <View className="flex-1">
+                              <Text className="text-[13px] font-semibold text-slate-800">
+                                {item.name || item.service?.name || 'Dịch vụ'}
                               </Text>
-                            )}
+                              <Text className="mt-0.5 text-[11px] text-slate-500">
+                                Định mức: {formatNumber(item.norm)} {item.service?.unit || item.unit || 'lần'} / gói | Đơn giá: {formatMoney(item.sellingPrice)}
+                              </Text>
+                              {Boolean(item.service?.description || item.description) && (
+                                <Text className="mt-1 text-[11px] italic text-slate-500 leading-4">
+                                  {item.service?.description || item.description}
+                                </Text>
+                              )}
+                            </View>
+                            <Text className="ml-2 text-[13px] font-bold text-slate-700">
+                              {formatMoney(item.revenue)}
+                            </Text>
                           </View>
-                          <Text className="ml-2 text-[13px] font-bold text-slate-700">
-                            {formatMoney(item.revenue)}
-                          </Text>
+                          <ServiceJobAccordion
+                            jobs={item.jobs}
+                            mode="quotation_view"
+                          />
                         </View>
                       ))}
                     </View>
@@ -575,6 +599,11 @@ export default function QuotationDetailScreen() {
                     </Text>
                   </Text>
                 </View>
+
+                <ServiceJobAccordion
+                  jobs={item.jobs}
+                  mode="quotation_view"
+                />
               </View>
             ))}
           </View>
