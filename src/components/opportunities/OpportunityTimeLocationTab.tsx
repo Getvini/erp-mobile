@@ -37,7 +37,6 @@ export const OpportunityTimeLocationTab: React.FC<OpportunityTimeLocationTabProp
               {opportunity.startDate ? formatDateToDDMMYYYY(opportunity.startDate) : 'Chưa đặt'}
             </Text>
           </View>
-          <Feather name="arrow-right" size={14} color="#94A3B8" style={{ marginTop: 16 }} />
           <View style={styles.dateCol}>
             <Text style={styles.dateLabel}>Ngày kết thúc</Text>
             <Text style={styles.dateValue}>

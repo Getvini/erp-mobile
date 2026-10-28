@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { OpportunityItem } from '@/services/opportunityService';
+import { OpportunityItem, getServiceTheme } from '@/services/opportunityService';
 import { formatVND } from '@/utils/formatters';
 
 export interface OpportunityFinancialTabProps {
@@ -60,20 +60,31 @@ export const OpportunityFinancialTab: React.FC<OpportunityFinancialTabProps> = (
 
                 {pkg.services && pkg.services.length > 0 && (
                   <View style={styles.subServicesList}>
-                    {pkg.services.map((sub, sIdx) => (
-                      <View key={sub.id || sIdx} style={styles.subServiceRow}>
-                        <Feather name="corner-down-right" size={11} color="#94A3B8" />
-                        <Text style={styles.subServiceName} numberOfLines={1}>
-                          {sub.service?.name || 'Dịch vụ trong gói'}
-                        </Text>
-                        <Text style={styles.subServiceQty}>
-                          x{sub.quantity} {sub.unit || ''}
-                        </Text>
-                        {Boolean(sub.sellingPrice) && (
-                          <Text style={styles.subServicePrice}>{formatVND(sub.sellingPrice)}</Text>
-                        )}
-                      </View>
-                    ))}
+                    {pkg.services.map((sub, sIdx) => {
+                      const serviceName = sub.service?.name || 'Dịch vụ trong gói';
+                      const theme = getServiceTheme(serviceName);
+                      return (
+                        <View key={sub.id || sIdx} style={styles.subServiceRow}>
+                          <View
+                            style={[
+                              styles.serviceDot,
+                              { backgroundColor: theme.bg, borderColor: theme.border },
+                            ]}
+                          >
+                            <Feather name="box" size={10} color={theme.color} />
+                          </View>
+                          <Text style={styles.subServiceName} numberOfLines={1}>
+                            {serviceName}
+                          </Text>
+                          <Text style={styles.subServiceQty}>
+                            x{sub.quantity} {sub.unit || ''}
+                          </Text>
+                          {Boolean(sub.sellingPrice) && (
+                            <Text style={styles.subServicePrice}>{formatVND(sub.sellingPrice)}</Text>
+                          )}
+                        </View>
+                      );
+                    })}
                   </View>
                 )}
               </View>
@@ -93,24 +104,34 @@ export const OpportunityFinancialTab: React.FC<OpportunityFinancialTabProps> = (
           </View>
 
           <View style={styles.itemsList}>
-            {services.map((srv, idx) => (
-              <View key={srv.id || idx} style={styles.serviceItemRow}>
-                <View style={styles.serviceInfoCol}>
-                  <Text style={styles.serviceName}>
-                    {srv.serviceName || srv.service?.name || `Dịch vụ #${idx + 1}`}
-                  </Text>
-                  <Text style={styles.serviceUnit}>
-                    Số lượng: {srv.quantity || 1} {srv.unit || srv.service?.unit || ''}
-                  </Text>
-                </View>
+            {services.map((srv, idx) => {
+              const name = srv.serviceName || srv.service?.name || `Dịch vụ #${idx + 1}`;
+              const theme = getServiceTheme(name);
+              return (
+                <View key={srv.id || idx} style={styles.serviceItemRow}>
+                  <View
+                    style={[
+                      styles.serviceIconContainer,
+                      { backgroundColor: theme.bg, borderColor: theme.border },
+                    ]}
+                  >
+                    <Feather name="layers" size={15} color={theme.color} />
+                  </View>
+                  <View style={styles.serviceInfoCol}>
+                    <Text style={styles.serviceName}>{name}</Text>
+                    <Text style={styles.serviceUnit}>
+                      Số lượng: {srv.quantity || 1} {srv.unit || srv.service?.unit || ''}
+                    </Text>
+                  </View>
 
-                {Boolean(srv.sellingPrice || srv.expectedRevenue) && (
-                  <Text style={styles.servicePrice}>
-                    {formatVND(srv.sellingPrice || srv.expectedRevenue)}
-                  </Text>
-                )}
-              </View>
-            ))}
+                  {Boolean(srv.sellingPrice || srv.expectedRevenue) && (
+                    <Text style={styles.servicePrice}>
+                      {formatVND(srv.sellingPrice || srv.expectedRevenue)}
+                    </Text>
+                  )}
+                </View>
+              );
+            })}
           </View>
         </View>
       )}
@@ -222,6 +243,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+  serviceDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   subServiceName: {
     flex: 1,
     fontSize: 11,
@@ -241,10 +270,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#F8FAFC',
-    borderRadius: 8,
+    borderRadius: 10,
     padding: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    gap: 10,
+  },
+  serviceIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   serviceInfoCol: {
     flex: 1,

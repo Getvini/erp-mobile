@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { OpportunityItem } from '@/services/opportunityService';
+import { OpportunityItem, getFieldConfig } from '@/services/opportunityService';
 import { formatVND } from '@/utils/formatters';
 
 export interface OpportunityEvaluationTabProps {
@@ -29,6 +29,7 @@ export const OpportunityEvaluationTab: React.FC<OpportunityEvaluationTabProps> =
   };
 
   const priorityConfig = getPriorityConfig(priority);
+  const fieldConfig = getFieldConfig(opportunity.field);
 
   return (
     <View style={styles.container}>
@@ -82,9 +83,25 @@ export const OpportunityEvaluationTab: React.FC<OpportunityEvaluationTabProps> =
 
         <View style={[styles.card, styles.gridCol]}>
           <Text style={styles.label}>Lĩnh vực kinh doanh</Text>
-          <Text style={styles.fieldValue} numberOfLines={1}>
-            {opportunity.field || 'Chưa phân loại'}
-          </Text>
+          <View
+            style={[
+              styles.fieldBadge,
+              { backgroundColor: fieldConfig.bg, borderColor: fieldConfig.border },
+            ]}
+          >
+            <Feather
+              name="briefcase"
+              size={12}
+              color={fieldConfig.color}
+              style={{ marginRight: 4 }}
+            />
+            <Text
+              style={[styles.fieldBadgeText, { color: fieldConfig.color }]}
+              numberOfLines={1}
+            >
+              {fieldConfig.label}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -209,6 +226,21 @@ const styles = StyleSheet.create({
   priorityBadgeText: {
     fontSize: 12,
     fontWeight: '800',
+  },
+  fieldBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+  },
+  fieldBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    flexShrink: 1,
   },
   fieldValue: {
     fontSize: 13,

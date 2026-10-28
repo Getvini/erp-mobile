@@ -22,6 +22,7 @@ import { BrandColors } from '@/constants/colors';
 import {
   opportunityService,
   OpportunityItem,
+  FIELD_LABELS,
 } from '@/services/opportunityService';
 import {
   quotationService,
@@ -70,25 +71,12 @@ import {
 } from '@/utils/opportunityAiJobValidation';
 import { validateQuotationRejection } from '@/utils/quotationRejectionValidation';
 
-// Dictionary mapping for Region, Field and Priority
+// Dictionary mapping for Region and Priority
 const REGION_LABELS: Record<string, string> = {
   NATIONAL: 'Toàn quốc',
   NORTH: 'Miền Bắc',
   CENTRAL: 'Miền Trung',
   SOUTH: 'Miền Nam',
-};
-
-const FIELD_LABELS: Record<string, string> = {
-  CNTT: 'Công nghệ thông tin',
-  XayDung: 'Xây dựng',
-  SanXuat: 'Sản xuất',
-  ThuongMai: 'Thương mại',
-  DichVu: 'Dịch vụ',
-  GiaoDuc: 'Giáo dục',
-  YTe: 'Y tế',
-  TaiChinh: 'Tài chính',
-  BatDongSan: 'Bất động sản',
-  Khac: 'Khác',
 };
 
 const PRIORITY_LABELS: Record<string, string> = {

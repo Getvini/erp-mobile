@@ -11,6 +11,8 @@ export const FIELDS = [
   { value: 'DichVu', label: 'Dịch vụ' },
   { value: 'GiaoDuc', label: 'Giáo dục' },
   { value: 'YTe', label: 'Y tế' },
+  { value: 'TaiChinh', label: 'Tài chính' },
+  { value: 'BatDongSan', label: 'Bất động sản' },
   { value: 'Khac', label: 'Khác' },
 ];
 

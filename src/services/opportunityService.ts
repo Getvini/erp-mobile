@@ -59,6 +59,84 @@ export const OPPORTUNITY_STATUS_CONFIG: Record<
   CANCELLED: { label: 'Đã hủy', color: '#DC2626', bg: '#FEE2E2' },
 };
 
+// Field / Lĩnh vực kinh doanh
+export const FIELD_LABELS: Record<string, string> = {
+  CNTT: 'Công nghệ thông tin',
+  XayDung: 'Xây dựng',
+  SanXuat: 'Sản xuất',
+  ThuongMai: 'Thương mại',
+  DichVu: 'Dịch vụ',
+  GiaoDuc: 'Giáo dục',
+  YTe: 'Y tế',
+  TaiChinh: 'Tài chính',
+  BatDongSan: 'Bất động sản',
+  Khac: 'Khác',
+};
+
+export interface FieldBadgeTheme {
+  label: string;
+  color: string;
+  bg: string;
+  border: string;
+}
+
+export const FIELD_CONFIG: Record<string, FieldBadgeTheme> = {
+  CNTT: { label: 'Công nghệ thông tin', color: '#2563EB', bg: '#EFF6FF', border: '#DBEAFE' },
+  XayDung: { label: 'Xây dựng', color: '#D97706', bg: '#FEF3C7', border: '#FDE68A' },
+  SanXuat: { label: 'Sản xuất', color: '#0D9488', bg: '#F0FDFA', border: '#CCFBF1' },
+  ThuongMai: { label: 'Thương mại', color: '#EA580C', bg: '#FFF7ED', border: '#FFEDD5' },
+  DichVu: { label: 'Dịch vụ', color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE' },
+  GiaoDuc: { label: 'Giáo dục', color: '#059669', bg: '#ECFDF5', border: '#A7F3D0' },
+  YTe: { label: 'Y tế', color: '#E11D48', bg: '#FFF1F2', border: '#FFE4E6' },
+  TaiChinh: { label: 'Tài chính', color: '#0284C7', bg: '#F0F9FF', border: '#BAE6FD' },
+  BatDongSan: { label: 'Bất động sản', color: '#CA8A04', bg: '#FEFCE8', border: '#FEF08A' },
+  Khac: { label: 'Khác', color: '#475569', bg: '#F1F5F9', border: '#E2E8F0' },
+};
+
+export const getFieldConfig = (field?: string): FieldBadgeTheme => {
+  if (!field) {
+    return { label: 'Chưa phân loại', color: '#64748B', bg: '#F8FAFC', border: '#E2E8F0' };
+  }
+  return (
+    FIELD_CONFIG[field] || {
+      label: FIELD_LABELS[field] || field,
+      color: '#475569',
+      bg: '#F1F5F9',
+      border: '#E2E8F0',
+    }
+  );
+};
+
+// Dịch vụ Color Themes (Bảng màu định danh cho từng dịch vụ)
+export interface ServiceBadgeTheme {
+  color: string;
+  bg: string;
+  border: string;
+}
+
+export const SERVICE_COLOR_PALETTES: ServiceBadgeTheme[] = [
+  { color: '#2563EB', bg: '#EFF6FF', border: '#DBEAFE' }, // Blue
+  { color: '#7C3AED', bg: '#F5F3FF', border: '#EDE9FE' }, // Violet
+  { color: '#0D9488', bg: '#F0FDFA', border: '#CCFBF1' }, // Teal
+  { color: '#EA580C', bg: '#FFF7ED', border: '#FFEDD5' }, // Orange
+  { color: '#059669', bg: '#ECFDF5', border: '#D1FAE5' }, // Green
+  { color: '#E11D48', bg: '#FFF1F2', border: '#FFE4E6' }, // Rose
+  { color: '#0284C7', bg: '#F0F9FF', border: '#BAE6FD' }, // Sky
+  { color: '#CA8A04', bg: '#FEFCE8', border: '#FEF08A' }, // Amber
+];
+
+export const getServiceTheme = (indexOrName: number | string): ServiceBadgeTheme => {
+  if (typeof indexOrName === 'number') {
+    return SERVICE_COLOR_PALETTES[Math.abs(indexOrName) % SERVICE_COLOR_PALETTES.length];
+  }
+  let hash = 0;
+  for (let i = 0; i < (indexOrName?.length || 0); i++) {
+    hash = (hash << 5) - hash + indexOrName.charCodeAt(i);
+    hash |= 0;
+  }
+  return SERVICE_COLOR_PALETTES[Math.abs(hash) % SERVICE_COLOR_PALETTES.length];
+};
+
 export interface OpportunityServiceItem {
   id?: string;
   serviceId?: string;
