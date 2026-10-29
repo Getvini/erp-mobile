@@ -18,6 +18,7 @@ import {
 } from '@/services/productDescriptionService';
 import { uploadToCloudinary } from '@/services/cloudinaryService';
 import { BrandColors } from '@/constants/colors';
+import { hasProjectAccount } from '@/utils/teamMember';
 import { htmlToEditableText, resolveHtml } from '@/utils/productDescriptionText';
 import ProductDescriptionLegend from './ProductDescriptionLegend';
 import {
@@ -349,8 +350,8 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
     });
 
   const canManageSubmission =
-    !isClosed && (isAccount || isAssignedPm || ['BOD', 'ADMIN'].includes(userRole));
-  const canReview = !isClosed && (isAssignedPm || ['BOD', 'ADMIN'].includes(userRole));
+    hasProjectAccount(project) && !isClosed && (isAccount || isAssignedPm || ['BOD', 'ADMIN'].includes(userRole));
+  const canReview = hasProjectAccount(project) && !isClosed && (isAssignedPm || ['BOD', 'ADMIN'].includes(userRole));
 
   const handleOpenUrl = (url?: string) => {
     if (!url) return;

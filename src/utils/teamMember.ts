@@ -46,11 +46,22 @@ export const getProjectManagerUser = (project?: any, members?: any[]): { id: str
  * Ưu tiên danh sách thành viên mới từ `/teams/:id/members`.
  * Project detail có thể giữ snapshot cũ/chưa đầy đủ (ví dụ chỉ có PM), nên chỉ dùng
  * snapshot đó làm fallback trong lúc endpoint thành viên chưa trả dữ liệu.
+ * Danh sách rỗng đã tải thành công phải được giữ nguyên, không hồi phục snapshot cũ.
  */
 export const resolveEffectiveTeamMembers = <T>(
   fetchedMembers?: T[] | null,
   projectMembers?: T[] | null,
-): T[] => (fetchedMembers && fetchedMembers.length > 0 ? fetchedMembers : projectMembers || []);
+): T[] => fetchedMembers ?? projectMembers ?? [];
+
+/** Account nghiệp vụ của dự án: team lead legacy hoặc thành viên có vai trò ACCOUNT. */
+export const hasProjectAccount = (project: any, members?: any[] | null): boolean =>
+  Boolean(project?.team?.teamLead?.id || project?.team?.teamLeadId) ||
+  resolveEffectiveTeamMembers(members, project?.team?.members).some(
+    (member: any) => Boolean(member?.user?.id || member?.userId) && hasTeamMemberRole(member, 'ACCOUNT'),
+  );
+
+export const PROJECT_ACCOUNT_REQUIRED_MESSAGE =
+  'Dự án chưa có Account phụ trách. Vui lòng bổ nhiệm Account trước khi phân công và thực hiện các nghiệp vụ của dự án.';
 
 /**
  * Account trong nghiệp vụ dự án là Lead dự án: team lead legacy hoặc thành viên

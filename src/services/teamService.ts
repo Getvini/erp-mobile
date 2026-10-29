@@ -75,7 +75,7 @@ export const teamService = {
     const m = month || now.getMonth() + 1;
     const y = year || now.getFullYear();
     const res = await apiService.get(`/teams/${teamId}/members`, { month: m, year: y });
-    const data = res.data || res.data?.data || [];
+    const data = res.data?.data ?? res.data ?? [];
     return { data: Array.isArray(data) ? (data as TeamMember[]) : [], error: res.error };
   },
 

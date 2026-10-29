@@ -6,7 +6,7 @@ import { ProjectDetailItem } from '@/services/projectService';
 import { TeamMember, TEAM_MEMBER_ROLE_LABELS, USER_ROLE } from '@/services/teamService';
 import { BrandColors } from '@/constants/colors';
 import { formatNumber, formatDateToDDMMYYYY } from '@/utils/formatters';
-import { getProjectManagerUser, hasTeamMemberRole, groupTeamMembers, getUserAccountRole } from '@/utils/teamMember';
+import { getProjectManagerUser, hasTeamMemberRole, hasProjectAccount, groupTeamMembers, getUserAccountRole, resolveEffectiveTeamMembers } from '@/utils/teamMember';
 import { WorkloadBadge } from '@/components/common/WorkloadBadge';
 import { ProjectWorkingFilesSection } from '@/components/projects/ProjectWorkingFilesSection';
 import { DatePickerModal } from '@/components/common/DatePickerModal';
@@ -54,7 +54,7 @@ export default function ProjectOverviewTab({
   canCreateMonthlyWork = false,
 }: ProjectOverviewTabProps) {
   const router = useRouter();
-  const effectiveMembers = (teamMembers && teamMembers.length > 0) ? teamMembers : (project.team?.members || []);
+  const effectiveMembers = resolveEffectiveTeamMembers(teamMembers, project.team?.members);
 
 
   const pmUser = getProjectManagerUser(project, effectiveMembers);
@@ -89,7 +89,7 @@ export default function ProjectOverviewTab({
   const isClosed = ['COMPLETED', 'CANCELLED'].includes(project.status);
   const isOnHold = project.status === 'ON_HOLD' || Boolean((project as any).isOnHold);
   const isAssignedPm = pmUser?.id === user?.id && getUserAccountRole(user) === 'PM';
-  const canEditTimeline = !isClosed && !isOnHold && (getUserAccountRole(user) === 'ADMIN' || isAssignedPm);
+  const canEditTimeline = hasProjectAccount(project, effectiveMembers) && !isClosed && !isOnHold && (getUserAccountRole(user) === 'ADMIN' || isAssignedPm);
 
   // Timeline edit state
   const [editingTimeline, setEditingTimeline] = useState(false);
@@ -463,7 +463,7 @@ export default function ProjectOverviewTab({
       </View>
 
       {/* Working Files Section */}
-      <ProjectWorkingFilesSection project={project} />
+      <ProjectWorkingFilesSection project={{ ...project, team: project.team ? { ...project.team, members: effectiveMembers } : undefined }} />
 
       {/* Project Manager Card */}
       <View className="bg-surface rounded-2xl p-4 border border-border gap-3">

@@ -18,6 +18,7 @@ import { useUpdateWorkingFilesMutation } from '@/hooks/queries/useProjects';
 import { uploadToCloudinary } from '@/services/cloudinaryService';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { BrandColors } from '@/constants/colors';
+import { hasProjectAccount, PROJECT_ACCOUNT_REQUIRED_MESSAGE } from '@/utils/teamMember';
 
 const ALLOWED_EXTENSIONS = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -101,6 +102,7 @@ export const ProjectWorkingFilesSection: React.FC<ProjectWorkingFilesSectionProp
   const [singleFileName, setSingleFileName] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
 
+  const projectHasAccount = hasProjectAccount(project);
   const isOnHold = project.status === 'ON_HOLD' || Boolean((project as any).isOnHold);
   const isClosed = ['COMPLETED', 'CANCELLED'].includes(project.status || '');
 
@@ -114,7 +116,7 @@ export const ProjectWorkingFilesSection: React.FC<ProjectWorkingFilesSectionProp
     project.team?.teamLead?.id === currentUserId;
 
   const canDeleteFile = (file: WorkingFileItem) => {
-    if (isOnHold || isClosed) return false;
+    if (!projectHasAccount || isOnHold || isClosed) return false;
     if (canManageAll || isTeamLead) return true;
     return Boolean(file.createdById && file.createdById === currentUserId);
   };
@@ -142,6 +144,10 @@ export const ProjectWorkingFilesSection: React.FC<ProjectWorkingFilesSectionProp
   const handleDeleteFile = (file: WorkingFileItem) => {
     if (isClosed) {
       Alert.alert('Thông báo', 'Dự án đã hoàn tất hoặc đã đóng, không thể xóa tài liệu.');
+      return;
+    }
+    if (!projectHasAccount) {
+      Alert.alert('Thông báo', PROJECT_ACCOUNT_REQUIRED_MESSAGE);
       return;
     }
     if (isOnHold) {
@@ -177,6 +183,10 @@ export const ProjectWorkingFilesSection: React.FC<ProjectWorkingFilesSectionProp
   const handleOpenModal = () => {
     if (isClosed) {
       Alert.alert('Thông báo', 'Dự án đã hoàn tất hoặc đã đóng, không thể thêm tài liệu.');
+      return;
+    }
+    if (!projectHasAccount) {
+      Alert.alert('Thông báo', PROJECT_ACCOUNT_REQUIRED_MESSAGE);
       return;
     }
     if (isOnHold) {
@@ -263,6 +273,10 @@ export const ProjectWorkingFilesSection: React.FC<ProjectWorkingFilesSectionProp
   };
 
   const handleSubmit = async () => {
+    if (!projectHasAccount) {
+      Alert.alert('Thông báo', PROJECT_ACCOUNT_REQUIRED_MESSAGE);
+      return;
+    }
     if (isOnHold) {
       Alert.alert('Thông báo', 'Dự án đang tạm dừng, không thể lưu tài liệu.');
       return;
@@ -381,9 +395,9 @@ export const ProjectWorkingFilesSection: React.FC<ProjectWorkingFilesSectionProp
         {!isClosed && (
           <TouchableOpacity
             onPress={handleOpenModal}
-            disabled={isOnHold}
+            disabled={!projectHasAccount || isOnHold}
             className={`flex-row items-center px-2.5 py-1.5 rounded-xl bg-primary ${
-              isOnHold ? 'opacity-50' : 'active:opacity-80'
+              !projectHasAccount || isOnHold ? 'opacity-50' : 'active:opacity-80'
             }`}
           >
             <Feather name="plus" size={13} color="#FFFFFF" />
@@ -417,9 +431,9 @@ export const ProjectWorkingFilesSection: React.FC<ProjectWorkingFilesSectionProp
           {!isClosed && (
             <TouchableOpacity
               onPress={handleOpenModal}
-              disabled={isOnHold}
+              disabled={!projectHasAccount || isOnHold}
               className={`flex-row items-center px-3 py-1.5 rounded-xl bg-primary/10 ${
-                isOnHold ? 'opacity-50' : 'active:opacity-80'
+                !projectHasAccount || isOnHold ? 'opacity-50' : 'active:opacity-80'
               }`}
             >
               <Feather name="plus" size={12} color={BrandColors.primary} />

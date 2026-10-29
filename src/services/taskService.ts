@@ -4,8 +4,8 @@ import type { QcMismatchResultItem, SpellCheckResultItem } from './taskResultChe
 import type { ScanRegion } from '@/utils/sheetScope';
 
 export const TASK_STATUS_LABELS: Record<string, string> = {
-  // NOT_STARTED: 'Chưa thực hiện',
-  NOT_STARTED: 'Sẵn sàng bắt đầu',
+
+  NOT_STARTED: 'Chưa thực hiện',
   PENDING: 'Chờ phân công',
   DOING: 'Đang thực hiện',
   DONE: 'Hoàn thành',
@@ -31,8 +31,8 @@ export const TASK_STATUS_CONFIG: Record<
   string,
   { text: string; color: string; bg: string }
 > = {
-  // NOT_STARTED: { text: 'Chưa thực hiện', color: '#64748B', bg: '#F1F5F9' },
-  NOT_STARTED: { text: 'Sẵn sàng bắt đầu', color: '#02f7a9ff', bg: '#ECFDF5' },
+
+  NOT_STARTED: { text: 'Chưa thực hiện', color: '#475569', bg: '#F1F5F9' },
   PENDING: { text: 'Chờ phân công', color: '#D97706', bg: '#FFFBEB' },
   DOING: { text: 'Đang thực hiện', color: '#2563EB', bg: '#EFF6FF' },
   DONE: { text: 'Hoàn thành', color: '#059669', bg: '#ECFDF5' },

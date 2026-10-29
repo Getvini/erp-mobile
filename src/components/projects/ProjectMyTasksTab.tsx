@@ -21,6 +21,7 @@ interface ProjectMyTasksTabProps {
   /** ID người dùng hiện tại — dùng để lọc việc được phân công cho mình. */
   currentUserId?: string;
   projectStatus?: string;
+  projectHasAccount: boolean;
   /** Gọi lại sau khi bắt đầu việc để cha refresh danh sách task/dự án. */
   onChanged?: () => void;
 }
@@ -31,11 +32,12 @@ export default function ProjectMyTasksTab({
   isLoading = false,
   currentUserId,
   projectStatus,
+  projectHasAccount,
   onChanged,
 }: ProjectMyTasksTabProps) {
   const router = useRouter();
   const [isSelectMode, setIsSelectMode] = useState(false);
-  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [selectedIds, setSelectedTaskIds] = useState<string[]>([]);
 
   const myTasks = useMemo(() => {
     if (!currentUserId) return [];
@@ -44,7 +46,7 @@ export default function ProjectMyTasksTab({
     );
   }, [tasks, currentUserId]);
 
-  const isProjectStartable = PROJECT_STARTABLE_STATUSES.includes(projectStatus || '');
+  const isProjectStartable = projectHasAccount && PROJECT_STARTABLE_STATUSES.includes(projectStatus || '');
 
   const isTaskStartable = useCallback(
     (task: TaskDetail): boolean =>
@@ -59,20 +61,11 @@ export default function ProjectMyTasksTab({
     [myTasks, isTaskStartable],
   );
 
-  /**
-   * Bỏ chọn những việc không còn khả năng "Bắt đầu" (đổi trạng thái sau khi refresh).
-   * Điều chỉnh state trong lúc render thay vì useEffect (tránh set-state-in-effect).
-   */
-  const startableSignature = startableTasks.map((task) => task.id).join(',');
-  const [syncedSignature, setSyncedSignature] = useState(startableSignature);
-  if (startableSignature !== syncedSignature) {
-    setSyncedSignature(startableSignature);
+  // Lọc selection từ dữ liệu hiện tại, không cập nhật state trong render.
+  const selectedTaskIds = useMemo(() => {
     const startableIds = new Set(startableTasks.map((task) => task.id));
-    setSelectedTaskIds((prev) => {
-      const next = prev.filter((id) => startableIds.has(id));
-      return next.length === prev.length ? prev : next;
-    });
-  }
+    return selectedIds.filter((taskId) => startableIds.has(taskId));
+  }, [selectedIds, startableTasks]);
 
   const bulkStartMutation = useBulkStartTasksMutation();
 

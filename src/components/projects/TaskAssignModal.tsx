@@ -23,6 +23,7 @@ import {
   useTaskDailyWorkloadQuery,
 } from '@/hooks/queries/useTasks';
 import { useVendorsByJobQuery, useBulkVendorsByJobsQuery } from '@/hooks/queries/useVendors';
+import { useUsersQuery } from '@/hooks/queries/useUsers';
 import { useTeamsQuery } from '@/hooks/queries/useTeams';
 import { uploadToCloudinary, PickedFile } from '@/services/cloudinaryService';
 import { BrandColors } from '@/constants/colors';
@@ -432,7 +433,7 @@ interface TaskAssignModalProps {
   onClose: () => void;
   task: TaskDetail | TaskDetail[] | null;
   project?: any;
-  teamMembers: {
+  teamMembers?: {
     id: string;
     role: string;
     roles?: (string | { role?: string })[];
@@ -609,18 +610,34 @@ export default function TaskAssignModal({
     return Number(day?.workloadPercent ?? 0) || 0;
   }, [workloadData?.days, selectedDeadlineDateKey]);
 
+  const { data: allUsersData = [] } = useUsersQuery();
+  const effectiveTeamMembers = useMemo(() => {
+    if (teamMembers && teamMembers.length > 0) return teamMembers;
+    return allUsersData.map((u: any) => ({
+      id: u.id,
+      role: u.role || 'STAFF',
+      roles: u.role ? [u.role] : [],
+      user: {
+        id: u.id,
+        fullName: u.fullName || u.name,
+        email: u.email,
+        workload: u.workload,
+      },
+    }));
+  }, [teamMembers, allUsersData]);
+
   const selectedAssigneeName = useMemo(() => {
-    const member = teamMembers.find((item) => item.user?.id === selectedAssigneeId);
+    const member = effectiveTeamMembers.find((item) => item.user?.id === selectedAssigneeId);
     return member?.user?.fullName || 'Nhân sự được chọn';
-  }, [teamMembers, selectedAssigneeId]);
+  }, [effectiveTeamMembers, selectedAssigneeId]);
 
   const selectedMember = useMemo(() => {
-    return teamMembers.find((m) => m.user?.id === selectedAssigneeId) || null;
-  }, [teamMembers, selectedAssigneeId]);
+    return effectiveTeamMembers.find((m) => m.user?.id === selectedAssigneeId) || null;
+  }, [effectiveTeamMembers, selectedAssigneeId]);
 
   const quickSuggestions = useMemo(() => {
-    if (!teamMembers || teamMembers.length === 0) return [];
-    const valid = teamMembers.filter((m) => m.user?.id);
+    if (!effectiveTeamMembers || effectiveTeamMembers.length === 0) return [];
+    const valid = effectiveTeamMembers.filter((m) => m.user?.id);
     return [...valid]
       .sort((a, b) => {
         const wA = getWorkloadPercent(a.user?.workload);
@@ -628,7 +645,7 @@ export default function TaskAssignModal({
         return wA - wB;
       })
       .slice(0, 3);
-  }, [teamMembers]);
+  }, [effectiveTeamMembers]);
 
   const selectedVendor = useMemo(() => {
     return vendors.find((v) => v.id === selectedVendorId) || null;
@@ -965,7 +982,7 @@ export default function TaskAssignModal({
               {/* Support Team Request Toggle Banner */}
               <Text className="text-xs font-bold text-slate-700 mt-3 mb-1.5">
                 {performerType === 'INTERNAL'
-                  ? `2. Người thực hiện (${teamMembers.length} thành viên)`
+                  ? `2. Người thực hiện (${effectiveTeamMembers.length} thành viên)`
                   : '2. Đối tác Vendor'}
               </Text>
 
@@ -1012,7 +1029,7 @@ export default function TaskAssignModal({
                 </View>
               ) : performerType === 'INTERNAL' ? (
                 <View className="mt-0.5 mb-1.5">
-                  {teamMembers.length === 0 ? (
+                  {effectiveTeamMembers.length === 0 ? (
                     <Text className="text-xs text-slate-400 italic py-2">
                       Đội dự án chưa có thành viên nào. Vui lòng thêm nhân sự vào đội ở Tab Tổng quan.
                     </Text>
@@ -1078,7 +1095,7 @@ export default function TaskAssignModal({
                                 Chạm để chọn người thực hiện
                               </Text>
                               <Text className="text-[11px] text-slate-400">
-                                {teamMembers.length} nhân sự sẵn sàng trong dự án
+                                {effectiveTeamMembers.length} nhân sự sẵn sàng trong dự án
                               </Text>
                             </View>
                           </View>
@@ -1494,7 +1511,7 @@ export default function TaskAssignModal({
       <AssigneeSelectorModal
         visible={isAssigneePickerVisible}
         onClose={() => setIsAssigneePickerVisible(false)}
-        teamMembers={teamMembers}
+        teamMembers={effectiveTeamMembers}
         selectedAssigneeId={selectedAssigneeId}
         onSelect={(assigneeId) => setSelectedAssigneeId(assigneeId)}
       />

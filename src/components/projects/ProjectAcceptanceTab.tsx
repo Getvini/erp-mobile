@@ -16,6 +16,7 @@ interface ProjectAcceptanceTabProps {
   acceptances: AcceptanceItem[];
   isLoading: boolean;
   projectStatus?: string;
+  projectHasAccount: boolean;
   projectIsOnHold?: boolean;
   /**
    * @deprecated RBAC được tính lại bên trong bằng `canSendAcceptance(role)`.
@@ -31,6 +32,7 @@ export default function ProjectAcceptanceTab({
   acceptances,
   isLoading,
   projectStatus,
+  projectHasAccount,
   projectIsOnHold,
   onOpenCreateAcceptance,
   onOpenReviewAcceptance,
@@ -43,7 +45,7 @@ export default function ProjectAcceptanceTab({
    */
   const canCreateAcceptance = canSendAcceptance((user as any)?.role);
   const isProjectLockedForAcceptance =
-    isProjectClosed(projectStatus) || isProjectOnHold(projectStatus, projectIsOnHold);
+    !projectHasAccount || isProjectClosed(projectStatus) || isProjectOnHold(projectStatus, projectIsOnHold);
 
   if (isLoading) {
     return (

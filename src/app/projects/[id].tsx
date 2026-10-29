@@ -21,6 +21,7 @@ import { AcceptanceItem } from '@/services/acceptanceService';
 import { BrandColors } from '@/constants/colors';
 
 import ProjectOverviewTab from '@/components/projects/ProjectOverviewTab';
+import ProjectBudgetSummaryCard from '@/components/projects/ProjectBudgetSummaryCard';
 import ProjectTasksTab from '@/components/projects/ProjectTasksTab';
 import ProjectAcceptanceTab from '@/components/projects/ProjectAcceptanceTab';
 import ProjectMyTasksTab from '@/components/projects/ProjectMyTasksTab';
@@ -44,6 +45,8 @@ import { safeGoBack } from '@/utils/navigation';
 import {
   getProjectManagerUser,
   hasTeamMemberRole,
+  hasProjectAccount,
+  PROJECT_ACCOUNT_REQUIRED_MESSAGE,
   getTeamMemberRoles,
   isProjectAccountUser,
   resolveEffectiveTeamMembers,
@@ -57,6 +60,7 @@ import {
 } from '@/hooks/queries/useProjects';
 import { useTasksByProjectQuery } from '@/hooks/queries/useTasks';
 import { useAcceptancesQuery } from '@/hooks/queries/useAcceptances';
+import { useProjectBudgetSummaryQuery } from '@/hooks/queries/usePaymentRequests';
 import {
   PROJECT_MANAGEMENT_ROLES,
   ProjectPermissionContext,
@@ -97,6 +101,7 @@ export default function ProjectDetailScreen() {
   } = useProjectDetailQuery(String(id || ''));
 
   const project: ProjectDetailItem | null = projectData || null;
+  const budgetQuery = useProjectBudgetSummaryQuery(project?.id);
   const { data: teamMembersData, refetch: refetchTeamMembers } = useTeamMembersQuery(project?.team?.id);
 
   const confirmProjectMutation = useConfirmProjectMutation();
@@ -104,23 +109,24 @@ export default function ProjectDetailScreen() {
   const resumeProjectMutation = useResumeProjectMutation();
 
   const { data: tasksData, isLoading: isLoadingTasks, isFetching: isTasksFetching, refetch: refetchTasks } = useTasksByProjectQuery(String(id || ''));
+  const projectTasks = project?.tasks;
   const tasks: TaskDetail[] = useMemo(() => {
-    if (Array.isArray(project?.tasks) && project.tasks.length > 0) {
+    if (Array.isArray(projectTasks) && projectTasks.length > 0) {
       if (Array.isArray(tasksData) && tasksData.length > 0) {
         const tasksDataMap = new Map(tasksData.map((t) => [t.id, t]));
-        return project.tasks.map((pt: any) => tasksDataMap.get(pt.id) || pt);
+        return projectTasks.map((pt: any) => tasksDataMap.get(pt.id) || pt);
       }
-      return project.tasks as TaskDetail[];
+      return projectTasks as TaskDetail[];
     }
     return tasksData || [];
-  }, [project?.tasks, tasksData]);
+  }, [projectTasks, tasksData]);
   const isTasksLoadingEffective = isLoadingTasks && (!project?.tasks || project.tasks.length === 0);
 
   const { data: acceptancesData, isLoading: isLoadingAcceptances, refetch: refetchAcceptances } = useAcceptancesQuery({ projectId: String(id || '') });
   const acceptances: AcceptanceItem[] = useMemo(() => acceptancesData || [], [acceptancesData]);
 
   const isLoading = isProjectLoading;
-  const isRefreshing = isProjectFetching || isTasksFetching;
+  const isRefreshing = isProjectFetching || isTasksFetching || budgetQuery.isFetching;
 
   // Modal & Confirm States
   const [showAssignPm, setShowAssignPm] = useState(false);
@@ -149,12 +155,17 @@ export default function ProjectDetailScreen() {
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
 
   // RBAC & Permission Calculations
-  const effectiveTeamMembers = resolveEffectiveTeamMembers(
-    teamMembersData,
-    project?.team?.members,
+  const effectiveTeamMembers = useMemo(
+    () => resolveEffectiveTeamMembers(teamMembersData, project?.team?.members),
+    [teamMembersData, project?.team?.members],
   );
 
   const isAdminOrBod = isManagementRole(user?.role);
+  const projectHasAccount = hasProjectAccount(project, effectiveTeamMembers);
+  const effectiveProject = project ? {
+    ...project,
+    team: project.team ? { ...project.team, members: effectiveTeamMembers } : undefined,
+  } : null;
   const assignedPm = getProjectManagerUser(project, effectiveTeamMembers);
   const assignedPmId = assignedPm?.id;
   const isAssignedPm = !!user?.id && !!assignedPmId && assignedPmId === user.id;
@@ -172,11 +183,12 @@ export default function ProjectDetailScreen() {
   );
   const canAssignPm = isAdminOrBod;
   const canConfirmProject =
-    (isAdmin || isCurrentTeamLead) && project?.status === 'PENDING_CONFIRMATION';
+    projectHasAccount && (isAdmin || isCurrentProjectAccount) && project?.status === 'PENDING_CONFIRMATION';
   const isPmOrAdmin = isAdminOrBod || isAssignedPm;
-  const canAssignTasks = isAdmin || isCurrentProjectAccount;
+  const canAssignTasks = projectHasAccount && (isAdmin || isCurrentProjectAccount);
   const canManageTaskAssignment = useCallback(
     (task: TaskDetail): boolean => {
+      if (!projectHasAccount) return false;
       if (isAdmin) return true;
       if (!isCurrentProjectAccount) return false;
       const hasPerformer = Boolean(
@@ -186,16 +198,16 @@ export default function ProjectDetailScreen() {
       const assignerId = (task as any).assignerId;
       return !assignerId || assignerId === user?.id;
     },
-    [isAdmin, isCurrentProjectAccount, user?.id],
+    [projectHasAccount, isAdmin, isCurrentProjectAccount, user?.id],
   );
 
   // Can create monthly work if Lead, PM, Admin/BOD, or contract creator
   const canCreateMonthlyWork =
-    isCurrentTeamLead ||
-    isAssignedPm ||
-    isAdminOrBod ||
-    project?.contract?.createdById === user?.id ||
-    (project as any)?.createdById === user?.id;
+    projectHasAccount && (isCurrentTeamLead ||
+      isAssignedPm ||
+      isAdminOrBod ||
+      project?.contract?.createdById === user?.id ||
+      (project as any)?.createdById === user?.id);
 
   // Can manage team members if Admin/BOD/PM/Lead, AND project has a PM assigned
   const canManageTeam =
@@ -220,11 +232,11 @@ export default function ProjectDetailScreen() {
     [user?.role, user?.id, isCurrentTeamLead, effectiveTeamMembers, project?.contract?.createdById]
   );
 
-  const canPauseDirectNow = canPauseDirect(project?.status, pauseCtx);
-  const canRequestPauseNow = !canPauseDirectNow && canRequestPause(project?.status, pauseCtx);
-  const canResumeNow = canResume(project?.status, pauseCtx);
-  const canCloseDirectNow = canCloseDirect(project?.status, pauseCtx);
-  const canRequestCloseNow = !canCloseDirectNow && canRequestClose(project?.status, pauseCtx);
+  const canPauseDirectNow = projectHasAccount && canPauseDirect(project?.status, pauseCtx);
+  const canRequestPauseNow = projectHasAccount && !canPauseDirectNow && canRequestPause(project?.status, pauseCtx);
+  const canResumeNow = projectHasAccount && canResume(project?.status, pauseCtx);
+  const canCloseDirectNow = projectHasAccount && canCloseDirect(project?.status, pauseCtx);
+  const canRequestCloseNow = projectHasAccount && !canCloseDirectNow && canRequestClose(project?.status, pauseCtx);
   const hasProjectActions =
     canPauseDirectNow || canRequestPauseNow || canResumeNow || canCloseDirectNow || canRequestCloseNow;
 
@@ -306,7 +318,7 @@ export default function ProjectDetailScreen() {
   };
 
   const handleConfirmProject = async () => {
-    if (!id) return;
+    if (!id || !canConfirmProject) return;
     setIsConfirming(true);
     try {
       await confirmProjectMutation.mutateAsync(id);
@@ -377,6 +389,18 @@ export default function ProjectDetailScreen() {
     });
   }, [assignableTaskIdSet, assignableTasks]);
 
+  const handleAssignTaskAction = useCallback((t: TaskDetail | TaskDetail[]) => {
+    if (!Array.isArray(t)) {
+      setSelectedTaskIds((prev) => prev.filter((taskId) => taskId !== t.id));
+    }
+    setAssigningTask(t);
+    setShowAssignTask(true);
+  }, []);
+
+  const handleOpenAddExtraTaskAction = useCallback(() => {
+    setShowAddExtraTask(true);
+  }, []);
+
   const queryClient = useQueryClient();
 
   const handleRefresh = useCallback(async () => {
@@ -386,6 +410,7 @@ export default function ProjectDetailScreen() {
     // 1. Luôn refetch thông tin chi tiết dự án (bao gồm Mô tả sản phẩm, Lịch sử tạm dừng, Phụ lục)
     const refreshPromises: Promise<any>[] = [
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(projId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.paymentRequests.projectBudgetSummary(projId) }),
     ];
 
     // 2. Phân loại theo activeTab để chỉ refresh đúng API phân hệ đó
@@ -500,17 +525,22 @@ export default function ProjectDetailScreen() {
         </View>
       </View>
 
+      {!projectHasAccount && (
+        <View className="mx-3 mt-3 flex-row items-start gap-2.5 rounded-2xl border border-orange-200 bg-orange-50 p-3.5">
+          <Feather name="lock" size={20} color="#9A3412" />
+          <Text className="flex-1 text-sm text-orange-900">{PROJECT_ACCOUNT_REQUIRED_MESSAGE}</Text>
+        </View>
+      )}
+
       {/* Banner trạng thái tạm dừng / chờ duyệt tạm dừng (P1.11) */}
       {isOnHold && (
         <View
-          className={`mx-3 mt-3 flex-row items-start gap-2.5 rounded-2xl border p-3.5 ${
-            inReminderWindow ? 'border-red-200 bg-red-50/70' : 'border-amber-200 bg-amber-50/70'
-          }`}
+          className={`mx-3 mt-3 flex-row items-start gap-2.5 rounded-2xl border p-3.5 ${inReminderWindow ? 'border-red-200 bg-red-50/70' : 'border-amber-200 bg-amber-50/70'
+            }`}
         >
           <View
-            className={`h-10 w-10 items-center justify-center rounded-xl ${
-              inReminderWindow ? 'bg-red-600' : 'bg-amber-500'
-            }`}
+            className={`h-10 w-10 items-center justify-center rounded-xl ${inReminderWindow ? 'bg-red-600' : 'bg-amber-500'
+              }`}
           >
             <Feather
               name={inReminderWindow ? 'alert-triangle' : 'clock'}
@@ -520,27 +550,24 @@ export default function ProjectDetailScreen() {
           </View>
           <View className="flex-1 gap-0.5">
             <Text
-              className={`text-[13px] font-bold ${
-                inReminderWindow ? 'text-red-900' : 'text-amber-900'
-              }`}
+              className={`text-[13px] font-bold ${inReminderWindow ? 'text-red-900' : 'text-amber-900'
+                }`}
             >
               Dự án đang tạm dừng
               {daysUntilAutoClose !== null ? ` — còn ${daysUntilAutoClose} ngày sẽ tự động đóng` : ''}
             </Text>
             {autoAcceptAt ? (
               <Text
-                className={`text-[11px] font-medium ${
-                  inReminderWindow ? 'text-red-700' : 'text-amber-700'
-                }`}
+                className={`text-[11px] font-medium ${inReminderWindow ? 'text-red-700' : 'text-amber-700'
+                  }`}
               >
                 Tự động đóng lúc: {formatDateToDDMMYYYY(autoAcceptAt, '—')}
               </Text>
             ) : null}
             {pausedByName ? (
               <Text
-                className={`text-[11px] font-medium ${
-                  inReminderWindow ? 'text-red-700' : 'text-amber-700'
-                }`}
+                className={`text-[11px] font-medium ${inReminderWindow ? 'text-red-700' : 'text-amber-700'
+                  }`}
               >
                 Người tạm dừng: {pausedByName}
               </Text>
@@ -578,9 +605,8 @@ export default function ProjectDetailScreen() {
             <View className="flex-row gap-2">
               {canResumeNow && (
                 <TouchableOpacity
-                  className={`h-12 flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-emerald-600 ${
-                    isResuming ? 'opacity-60' : ''
-                  }`}
+                  className={`h-12 flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-emerald-600 ${isResuming ? 'opacity-60' : ''
+                    }`}
                   onPress={handleResumeProject}
                   disabled={isResuming}
                   activeOpacity={0.85}
@@ -657,11 +683,10 @@ export default function ProjectDetailScreen() {
             { key: 'TASKS', label: `Công việc (${tasks.length})`, icon: 'check-square' },
             {
               key: 'MY_TASKS',
-              label: `Công việc của tôi (${
-                tasks.filter(
-                  (t) => t.assigneeId === user?.id || (t as any).assignee?.id === user?.id
-                ).length
-              })`,
+              label: `Công việc của tôi (${tasks.filter(
+                (t) => t.assigneeId === user?.id || (t as any).assignee?.id === user?.id
+              ).length
+                })`,
               icon: 'user-check',
             },
             ...(isCoreMember
@@ -679,11 +704,10 @@ export default function ProjectDetailScreen() {
                 key={tab.key}
                 onPress={() => setActiveTab(tab.key as any)}
                 activeOpacity={0.7}
-                className={`flex-row items-center gap-1.5 px-3.5 py-2 rounded-xl border ${
-                  isActive
-                    ? 'bg-orange-50 border-orange-100'
-                    : 'bg-slate-50 border-slate-200'
-                }`}
+                className={`flex-row items-center gap-1.5 px-3.5 py-2 rounded-xl border ${isActive
+                  ? 'bg-orange-50 border-orange-100'
+                  : 'bg-slate-50 border-slate-200'
+                  }`}
               >
                 <Feather
                   name={tab.icon as any}
@@ -691,9 +715,8 @@ export default function ProjectDetailScreen() {
                   color={isActive ? BrandColors.primary : '#64748B'}
                 />
                 <Text
-                  className={`text-xs ${
-                    isActive ? 'text-primary font-bold' : 'text-slate-600 font-semibold'
-                  }`}
+                  className={`text-xs ${isActive ? 'text-primary font-bold' : 'text-slate-600 font-semibold'
+                    }`}
                 >
                   {tab.label}
                 </Text>
@@ -710,10 +733,26 @@ export default function ProjectDetailScreen() {
           projectName={project?.name}
           onChanged={handleRefresh}
         />
+      ) : activeTab === 'TASKS' ? (
+        <ProjectTasksTab
+          tasks={tasks}
+          isLoading={isTasksLoadingEffective}
+          isRefreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          projectStatus={project?.status}
+          canAssignTasks={canAssignTasks}
+          canCreateProjectWork={projectHasAccount && isPmOrAdmin}
+          canManageTaskAssignment={canManageTaskAssignment}
+          selectedTaskIds={validSelectedTaskIds}
+          onToggleSelectTask={handleToggleSelectTask}
+          onToggleSelectGroup={handleToggleSelectGroup}
+          onAssignTask={handleAssignTaskAction}
+          onOpenAddExtraTask={handleOpenAddExtraTaskAction}
+        />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: activeTab === 'TASKS' && validSelectedTaskIds.length > 0 ? 90 : 30 }}
+          contentContainerStyle={{ paddingBottom: 30 }}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
@@ -724,58 +763,43 @@ export default function ProjectDetailScreen() {
           }
         >
           {activeTab === 'OVERVIEW' && project && (
-            <ProjectOverviewTab
-              project={project}
-              teamMembers={effectiveTeamMembers}
-              user={user}
-              onOpenAssignPm={() => setShowAssignPm(true)}
-              onConfirmProject={handleConfirmProject}
-              isConfirming={isConfirming}
-              canAssignPm={canAssignPm}
-              canConfirmProject={canConfirmProject}
-              taskStats={taskStats}
-              onOpenAddMember={() => setShowAddTeamMember(true)}
-              onRemoveMember={handleRemoveMember}
-              onEditMemberRole={(m) => {
-                setEditingMember(m);
-                setShowEditMemberRole(true);
-              }}
-              canManageTeam={canManageTeam}
-              onOpenCreateMonthlyWork={() => setShowCreateMonthlyWork(true)}
-              canCreateMonthlyWork={canCreateMonthlyWork}
-            />
+            <>
+              <View className="px-4 pt-4">
+                <ProjectBudgetSummaryCard
+                  summary={budgetQuery.data}
+                  isLoading={budgetQuery.isPending}
+                  isError={budgetQuery.isError}
+                  isFetching={budgetQuery.isFetching}
+                  onRetry={() => { void budgetQuery.refetch(); }}
+                />
+              </View>
+              <ProjectOverviewTab
+                project={project}
+                teamMembers={effectiveTeamMembers}
+                user={user}
+                onOpenAssignPm={() => setShowAssignPm(true)}
+                onConfirmProject={handleConfirmProject}
+                isConfirming={isConfirming}
+                canAssignPm={canAssignPm}
+                canConfirmProject={canConfirmProject}
+                taskStats={taskStats}
+                onOpenAddMember={() => setShowAddTeamMember(true)}
+                onRemoveMember={handleRemoveMember}
+                onEditMemberRole={(m) => {
+                  setEditingMember(m);
+                  setShowEditMemberRole(true);
+                }}
+                canManageTeam={canManageTeam}
+                onOpenCreateMonthlyWork={() => setShowCreateMonthlyWork(true)}
+                canCreateMonthlyWork={canCreateMonthlyWork}
+              />
+            </>
           )}
 
           {activeTab === 'PRODUCT_DESC' && project && (
             <View className="p-4">
-              <ProductDescriptionSection projectId={project.id} user={user} project={project} />
+              <ProductDescriptionSection projectId={project.id} user={user} project={effectiveProject} />
             </View>
-          )}
-
-          {activeTab === 'TASKS' && (
-          <ProjectTasksTab
-              tasks={tasks}
-              isLoading={isTasksLoadingEffective}
-              projectStatus={project?.status}
-              canAssignTasks={canAssignTasks}
-              canCreateProjectWork={isPmOrAdmin}
-              canManageTaskAssignment={canManageTaskAssignment}
-              selectedTaskIds={validSelectedTaskIds}
-              onToggleSelectTask={handleToggleSelectTask}
-              onToggleSelectGroup={handleToggleSelectGroup}
-              onOpenUpdateTask={(t) => {
-                setSelectedTask(t);
-                setShowTaskUpdate(true);
-              }}
-              onAssignTask={(t) => {
-                if (!Array.isArray(t)) {
-                  setSelectedTaskIds((prev) => prev.filter((id) => id !== t.id));
-                }
-                setAssigningTask(t);
-                setShowAssignTask(true);
-              }}
-              onOpenAddExtraTask={() => setShowAddExtraTask(true)}
-            />
           )}
 
           {activeTab === 'MY_TASKS' && (
@@ -784,13 +808,19 @@ export default function ProjectDetailScreen() {
               tasks={tasks}
               isLoading={isTasksLoadingEffective}
               currentUserId={user?.id}
+              projectHasAccount={projectHasAccount}
               projectStatus={project?.status}
               onChanged={handleRefresh}
             />
           )}
 
           {activeTab === 'SERVICES' && isCoreMember && (
-            <ProjectServiceAddendumTab project={project} user={user} onChanged={handleRefresh} />
+            <ProjectServiceAddendumTab
+              project={effectiveProject}
+              user={user}
+              budgetSummary={budgetQuery.data}
+              onChanged={handleRefresh}
+            />
           )}
 
           {activeTab === 'EXTRA' && (
@@ -806,6 +836,7 @@ export default function ProjectDetailScreen() {
               acceptances={acceptances}
               isLoading={isLoadingAcceptances}
               projectStatus={project?.status}
+              projectHasAccount={projectHasAccount}
               projectIsOnHold={(project as any)?.isOnHold}
               onOpenCreateAcceptance={() => setShowCreateAcceptance(true)}
               onOpenReviewAcceptance={(item) => {
@@ -911,7 +942,7 @@ export default function ProjectDetailScreen() {
             />
           )}
 
-          {showTaskUpdate && (
+          {showTaskUpdate && projectHasAccount && (
             <TaskUpdateModal
               visible={showTaskUpdate}
               onClose={() => {
@@ -926,7 +957,7 @@ export default function ProjectDetailScreen() {
             />
           )}
 
-          {showAssignTask && (
+          {showAssignTask && projectHasAccount && (
             <TaskAssignModal
               visible={showAssignTask}
               onClose={() => {
@@ -949,7 +980,7 @@ export default function ProjectDetailScreen() {
             />
           )}
 
-          {showAddExtraTask && (
+          {showAddExtraTask && projectHasAccount && (
             <AddExtraTaskModal
               visible={showAddExtraTask}
               onClose={() => setShowAddExtraTask(false)}
@@ -961,7 +992,7 @@ export default function ProjectDetailScreen() {
             />
           )}
 
-          {showCreateAcceptance && (
+          {showCreateAcceptance && projectHasAccount && (
             <CreateAcceptanceModal
               visible={showCreateAcceptance}
               onClose={() => setShowCreateAcceptance(false)}
@@ -974,7 +1005,7 @@ export default function ProjectDetailScreen() {
             />
           )}
 
-          {showReviewAcceptance && (
+          {showReviewAcceptance && projectHasAccount && (
             <AcceptanceReviewModal
               visible={showReviewAcceptance}
               onClose={() => {
@@ -989,7 +1020,7 @@ export default function ProjectDetailScreen() {
             />
           )}
 
-          {showCreateMonthlyWork && (
+          {showCreateMonthlyWork && projectHasAccount && (
             <CreateMonthlyWorkModal
               visible={showCreateMonthlyWork}
               onClose={() => setShowCreateMonthlyWork(false)}

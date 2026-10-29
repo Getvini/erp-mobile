@@ -162,7 +162,7 @@ export interface ContractServiceSummary {
   sellingPrice?: number;
   cost?: number;
   status?: string;
-  service?: { id: string; name?: string; code?: string };
+  service?: { id: string; name?: string; code?: string; isBudget?: boolean };
 }
 
 class ProjectService {
