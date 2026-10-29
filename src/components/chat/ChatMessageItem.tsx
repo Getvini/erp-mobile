@@ -685,7 +685,7 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
 
       <View
         style={{
-          maxWidth: hasDocAttachment ? '88%' : (hasAudioAttachment ? '82%' : '75%'),
+          maxWidth: hasDocAttachment ? '88%' : '82%',
           minWidth: hasDocAttachment ? 260 : undefined,
           alignSelf: isMe ? 'flex-end' : 'flex-start',
         }}
@@ -716,7 +716,7 @@ const ChatMessageItemComponent: React.FC<ChatMessageItemProps> = ({
           onLongPress={handleTriggerActionSheet}
           style={{
             alignSelf: isMe ? 'flex-end' : 'flex-start',
-            maxWidth: isPureDocOnly ? 340 : (isPureImageOnly ? undefined : '82%'),
+            maxWidth: isPureDocOnly ? 340 : (isPureImageOnly ? undefined : '100%'),
             borderRadius: isPureAudioOnly ? 24 : 16,
             borderBottomRightRadius: (isPureImageOnly || isPureDocOnly) ? 16 : isPureAudioOnly ? 24 : (isMe ? 3 : 16),
             borderBottomLeftRadius: (isPureImageOnly || isPureDocOnly) ? 16 : isPureAudioOnly ? 24 : (!isMe ? 3 : 16),
