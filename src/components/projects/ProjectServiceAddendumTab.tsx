@@ -13,9 +13,11 @@ import {
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { ProjectDetailItem } from '@/services/projectService';
+import type { ProjectBudgetSummary } from '@/services/paymentRequestService';
+import { ProjectServiceBudgetAmounts } from '@/components/projects/ProjectBudgetSummaryCard';
 import { TASK_STATUS_CONFIG } from '@/services/taskService';
 import { useUpdateContractServiceNicknameMutation } from '@/hooks/queries/useContracts';
-import { hasTeamMemberRole, getProjectManagerUser } from '@/utils/teamMember';
+import { hasTeamMemberRole, hasProjectAccount, getProjectManagerUser } from '@/utils/teamMember';
 import { BrandColors } from '@/constants/colors';
 import { formatDateToDDMMYYYY } from '@/utils/formatters';
 
@@ -99,6 +101,7 @@ const sameId = (a: any, b: any): boolean => a != null && b != null && String(a) 
 
 interface ProjectServiceAddendumTabProps {
   project: ProjectDetailItem | null;
+  budgetSummary?: ProjectBudgetSummary | null;
   user?: any;
   /** Danh sách công việc của dự án — dùng để bổ sung thông tin cho công việc trong từng dịch vụ. */
   tasks?: any[];
@@ -108,6 +111,7 @@ interface ProjectServiceAddendumTabProps {
 
 export default function ProjectServiceAddendumTab({
   project,
+  budgetSummary,
   user,
   tasks: projectTasks,
   onChanged,
@@ -153,7 +157,7 @@ export default function ProjectServiceAddendumTab({
    * ACCOUNT (Team lead) / PROJECT_MANAGER. Không đủ quyền ⇒ ẩn hoàn toàn nút.
    */
   const canEditNickname = useMemo(() => {
-    if (!project || !user?.id) return false;
+    if (!project || !user?.id || !hasProjectAccount(project)) return false;
     if (['ADMIN', 'BOD', 'ADMIN_SALE'].includes(user?.role)) return true;
     const isCoreMember = members.some(
       (m) =>
@@ -460,6 +464,10 @@ export default function ProjectServiceAddendumTab({
   };
 
   const renderServiceItem = (item: any) => {
+    // Match the contract line first: a catalog service can occur on multiple lines.
+    const serviceBudget = budgetSummary?.serviceBudgets?.find(
+      (entry) => sameId(entry.contractServiceId, item?.id)
+    );
     const status = item?.status || '';
     const badge = CONTRACT_SERVICE_STATUS_BADGE[status] || { bg: '#F1F5F9', color: '#64748B' };
     const serviceTasks = getServiceTasks(item);
@@ -505,6 +513,10 @@ export default function ProjectServiceAddendumTab({
         </View>
 
         {renderProgress(serviceTasks)}
+
+        {item?.service?.isBudget === true && serviceBudget && (
+          <ProjectServiceBudgetAmounts budget={serviceBudget} />
+        )}
 
         {(canEditNickname || hasDetails) && (
           <View className="flex-row gap-2">
