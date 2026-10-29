@@ -25,10 +25,12 @@ import TaskResultChecksPanel from '@/components/tasks/TaskResultChecksPanel';
 import SubmittedScopeSummary from '@/components/tasks/SubmittedScopeSummary';
 import ConfirmedCheckErrors from '@/components/tasks/ConfirmedCheckErrors';
 import { safeGoBack } from '@/utils/navigation';
-import { useTeamMembersQuery } from '@/hooks/queries/useProjects';
+import { useProjectDetailQuery, useTeamMembersQuery } from '@/hooks/queries/useProjects';
 import { useTaskResultCheckQuery } from '@/hooks/queries/useTaskResultChecks';
 import {
   hasTeamMemberRole,
+  hasProjectAccount,
+  PROJECT_ACCOUNT_REQUIRED_MESSAGE,
   resolveEffectiveTeamMembers,
 } from '@/utils/teamMember';
 import { canDecideTaskOutcome } from '@/utils/taskOutcomeAuthorization';
@@ -136,10 +138,12 @@ export default function TaskDetailScreen() {
   }, [refetchTask, refetchReviews]);
 
   // Thành viên dự án để chọn người thực hiện cho công việc con
-  const { data: teamMembersData } = useTeamMembersQuery(task?.project?.team?.id);
+  const { data: projectData } = useProjectDetailQuery(task?.project?.id || '');
+  const taskProject = projectData || task?.project;
+  const { data: teamMembersData } = useTeamMembersQuery(taskProject?.team?.id);
   const effectiveTeamMembers = resolveEffectiveTeamMembers(
     teamMembersData,
-    (task?.project?.team as any)?.members,
+    (taskProject?.team as any)?.members,
   );
   const currentUserId = user?.id;
   const teamLeadId = task?.project?.team?.teamLead?.id;
@@ -153,11 +157,12 @@ export default function TaskDetailScreen() {
     (task?.project as any)?.projectManager?.id === currentUserId;
   const isManagement = ['ADMIN', 'BOD', 'PM', 'TEAM_LEAD'].includes(user?.role || '');
   const isProjectOnHold = task?.project?.status === 'ON_HOLD' || task?.status === 'ON_HOLD';
+  const projectHasAccount = !task?.project?.id || hasProjectAccount(taskProject, effectiveTeamMembers);
   const canManageProjectTask =
-    !isProjectOnHold &&
+    projectHasAccount && !isProjectOnHold &&
     (isManagement || isProjectLead || isProjectAccount || isProjectPm);
   const canDecideOutcome =
-    !isProjectOnHold &&
+    projectHasAccount && !isProjectOnHold &&
     canDecideTaskOutcome(
       task
         ? {
@@ -432,13 +437,18 @@ export default function TaskDetailScreen() {
         )}
 
         {/* Vòng đời công việc: Bắt đầu / Nộp kết quả / Gửi duyệt / Nhờ hỗ trợ / Khách không mua / Xóa */}
-        <TaskLifecycleActions
+        {!projectHasAccount && (
+          <View className="rounded-2xl border border-orange-200 bg-orange-50 p-3.5">
+            <Text className="text-sm text-orange-900">{PROJECT_ACCOUNT_REQUIRED_MESSAGE}</Text>
+          </View>
+        )}
+        {projectHasAccount && <TaskLifecycleActions
           task={task}
           projectId={task.project?.id}
           onChanged={loadTask}
           onOpenResultModal={() => setIsResultModalOpen(true)}
           onDeleted={() => safeGoBack(router, '/tasks')}
-        />
+        />}
 
         {/* Top Action Buttons Grid */}
         <View className="flex-row flex-wrap gap-2">
@@ -484,7 +494,7 @@ export default function TaskDetailScreen() {
               </TouchableOpacity>
             )}
 
-          {['DOING', 'REWORKING', 'OVERDUE'].includes(task.status || '') &&
+          {projectHasAccount && ['DOING', 'REWORKING', 'OVERDUE'].includes(task.status || '') &&
             (currentUserId === task.assigneeId || currentUserId === task.helperId) &&
             !task.isSupportRequested && (
               <TouchableOpacity
@@ -692,7 +702,7 @@ export default function TaskDetailScreen() {
               <Text className="text-[15px] font-bold text-slate-900">Kết quả</Text>
             </View>
 
-            {canSubmitResult(task.status || '') &&
+            {projectHasAccount && canSubmitResult(task.status || '') &&
               task.assigneeId !== null && (
                 <TouchableOpacity onPress={() => setIsResultModalOpen(true)}>
                   <Text className="text-xs font-bold text-primary">
@@ -1005,27 +1015,27 @@ export default function TaskDetailScreen() {
           </>
         )}
 
-        {activeTab === 'qc' && <TaskResultChecksPanel taskId={task.id} projectId={task.project?.id} />}
+        {activeTab === 'qc' && projectHasAccount && <TaskResultChecksPanel taskId={task.id} projectId={task.project?.id} />}
       </ScrollView>
 
       {/* Modals */}
       <ReworkTaskModal
         key={`${task.id}:${isReworkModalOpen ? 'open' : 'closed'}`}
-        visible={isReworkModalOpen}
+        visible={isReworkModalOpen && projectHasAccount}
         onClose={() => setIsReworkModalOpen(false)}
         task={task}
         onSuccess={loadTask}
       />
 
       <TaskResultModal
-        visible={isResultModalOpen}
+        visible={isResultModalOpen && projectHasAccount}
         onClose={() => setIsResultModalOpen(false)}
         task={task}
         onSuccess={loadTask}
       />
 
       <TaskAssignModal
-        visible={isAssignModalOpen}
+        visible={isAssignModalOpen && projectHasAccount}
         onClose={() => setIsAssignModalOpen(false)}
         task={task}
         project={task.project}
@@ -1034,7 +1044,7 @@ export default function TaskDetailScreen() {
       />
 
       <TaskReviewModal
-        visible={isReviewModalOpen}
+        visible={isReviewModalOpen && projectHasAccount}
         onClose={() => setIsReviewModalOpen(false)}
         task={task}
         onSuccess={loadTask}

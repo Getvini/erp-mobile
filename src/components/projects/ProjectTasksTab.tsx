@@ -1,15 +1,20 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
-  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { TaskDetail, TASK_STATUS_CONFIG } from '@/services/taskService';
 import { BrandColors } from '@/constants/colors';
 import { REWORK_STATUSES } from '@/utils/taskLifecycle';
+
+const codeCollator = new Intl.Collator(undefined, { numeric: true });
+const groupCollator = new Intl.Collator('vi');
 
 const isExtraTaskItem = (t: TaskDetail): boolean =>
   Boolean(t.isExtraTask || (t as any).isExtra);
@@ -65,12 +70,32 @@ const TaskCard = React.memo(function TaskCard({
     <TouchableOpacity
       className={`relative gap-2 overflow-hidden rounded-xl border p-3 ${
         isSelected
-          ? 'border-primary bg-emerald-50'
+          ? 'border-2 border-primary bg-orange-50/90'
           : isExtra
             ? 'border-amber-200 bg-amber-50/60'
             : 'border-slate-200 bg-white'
       }`}
+      style={
+        isSelected
+          ? {
+              borderColor: BrandColors.primary,
+              backgroundColor: '#FFF8EE',
+              shadowColor: '#F38820',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.12,
+              shadowRadius: 6,
+              elevation: 3,
+            }
+          : undefined
+      }
       onPress={() => onPress(item.id)}
+      onLongPress={() => {
+        if (canAssign) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          onToggleSelect(item.id);
+        }
+      }}
+      delayLongPress={350}
       activeOpacity={0.85}
     >
       {isExtra && <View className="absolute bottom-0 left-0 top-0 w-1 bg-amber-400" />}
@@ -78,7 +103,11 @@ const TaskCard = React.memo(function TaskCard({
         {/* Checkbox luôn hiện với task có thể phân công */}
         {canAssign && (
           <TouchableOpacity
-            onPress={(e) => { e.stopPropagation?.(); onToggleSelect(item.id); }}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              Haptics.selectionAsync();
+              onToggleSelect(item.id);
+            }}
             className="pr-0.5"
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
@@ -173,9 +202,59 @@ const TaskCard = React.memo(function TaskCard({
   );
 });
 
+interface GroupHeaderRowProps {
+  group: { id: string; jobName: string; tasks: TaskDetail[]; assignableTaskIds: string[] };
+  isCollapsed: boolean;
+  canAssignTasks: boolean;
+  isAllGroupSelected: boolean;
+  onToggleGroup: (groupId: string) => void;
+  onToggleSelectGroup: (groupTasks: TaskDetail[]) => void;
+}
+
+const GroupHeaderRow = React.memo(function GroupHeaderRow({
+  group,
+  isCollapsed,
+  canAssignTasks,
+  isAllGroupSelected,
+  onToggleGroup,
+  onToggleSelectGroup,
+}: GroupHeaderRowProps) {
+  return (
+    <View className="mb-2.5 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+      <TouchableOpacity
+        className="min-h-12 flex-row items-center gap-2 px-3.5 py-3"
+        onPress={() => onToggleGroup(group.id)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: !isCollapsed }}
+      >
+        <Feather name={isCollapsed ? 'chevron-right' : 'chevron-down'} size={18} color="#475569" />
+        <Text className="flex-1 text-[13px] font-bold text-slate-800" numberOfLines={1}>{group.jobName}</Text>
+        <Text className="text-xs text-slate-600">{group.tasks.length} việc</Text>
+      </TouchableOpacity>
+      {canAssignTasks && group.assignableTaskIds.length > 0 && (
+        <TouchableOpacity
+          onPress={() => onToggleSelectGroup(group.tasks)}
+          className={`min-h-11 flex-row items-center gap-2 border-t px-3.5 py-2 ${
+            isAllGroupSelected ? 'bg-orange-50/70 border-orange-200' : 'border-slate-200'
+          }`}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: isAllGroupSelected }}
+        >
+          <Feather name={isAllGroupSelected ? 'check-square' : 'square'} size={16} color={BrandColors.primary} />
+          <Text className="text-xs font-bold text-primary">
+            {isAllGroupSelected ? 'Bỏ chọn nhóm' : 'Chọn nhóm'}
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+});
+
 interface ProjectTasksTabProps {
   tasks: TaskDetail[];
   isLoading: boolean;
+  isRefreshing?: boolean;
+  onRefresh?: () => void;
   projectStatus?: string;
   canAssignTasks?: boolean;
   canCreateProjectWork?: boolean;
@@ -191,6 +270,8 @@ interface ProjectTasksTabProps {
 export default function ProjectTasksTab({
   tasks,
   isLoading,
+  isRefreshing = false,
+  onRefresh,
   projectStatus,
   canAssignTasks = false,
   canCreateProjectWork = false,
@@ -198,7 +279,6 @@ export default function ProjectTasksTab({
   selectedTaskIds: propSelectedTaskIds,
   onToggleSelectTask,
   onToggleSelectGroup,
-  onOpenUpdateTask,
   onAssignTask,
   onOpenAddExtraTask,
 }: ProjectTasksTabProps) {
@@ -206,7 +286,9 @@ export default function ProjectTasksTab({
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [internalSelectedTaskIds, setInternalSelectedTaskIds] = useState<string[]>([]);
 
-  const selectedTaskIds = propSelectedTaskIds !== undefined ? propSelectedTaskIds : internalSelectedTaskIds;
+  const selectedTaskIds = useMemo(() => propSelectedTaskIds ?? internalSelectedTaskIds.filter(
+    (id) => tasks.some((task) => task.id === id && isTaskAssignable(task)),
+  ), [propSelectedTaskIds, internalSelectedTaskIds, tasks]);
 
   // Set lookup O(1) thay cho Array.includes O(N) khi render hàng loạt item
   const selectedTaskIdsSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds]);
@@ -233,15 +315,6 @@ export default function ProjectTasksTab({
       );
     }
   }, [onToggleSelectTask]);
-
-  // Tự động dọn task đã được phân công khỏi internal selection
-  useEffect(() => {
-    if (propSelectedTaskIds === undefined) {
-      setInternalSelectedTaskIds((prev) =>
-        prev.filter((id) => assignableTaskIdSet.has(id))
-      );
-    }
-  }, [assignableTaskIdSet, propSelectedTaskIds]);
 
   const toggleSelectGroup = useCallback((groupTasks: TaskDetail[]) => {
     if (onToggleSelectGroup) {
@@ -300,140 +373,152 @@ export default function ProjectTasksTab({
         id: key,
         jobName: groups[key].jobName,
         tasks: groups[key].tasks.sort((a, b) =>
-          (a.code || '').localeCompare(b.code || '', undefined, { numeric: true })
+          codeCollator.compare(a.code || '', b.code || '')
         ),
         assignableTaskIds: groups[key].assignableTaskIds,
       }))
-      .sort((a, b) => a.jobName.localeCompare(b.jobName, 'vi'));
+      .sort((a, b) => groupCollator.compare(a.jobName, b.jobName));
   }, [tasks]);
 
-  if (isLoading) {
-    return (
-      <View className="items-center gap-3 py-10">
-        <ActivityIndicator size="large" color={BrandColors.primary} />
-        <Text className="text-[13px] text-slate-500">Đang tải danh sách công việc...</Text>
-      </View>
-    );
-  }
+  // Tách từng task thành một row: nhóm lớn cũng chỉ dựng các thẻ trong vùng nhìn.
+  const rows = useMemo(() => groupedTasks.flatMap((group) => [
+    { key: 'group:' + group.id, group, task: null as TaskDetail | null },
+    ...(collapsedGroups[group.id] ? [] : group.tasks.map((task) => ({
+      key: 'task:' + task.id, group, task: task as TaskDetail | null,
+    }))),
+  ]), [groupedTasks, collapsedGroups]);
+
+  const renderRow = useCallback(
+    ({ item: row }: { item: (typeof rows)[number] }) => {
+      const { group, task } = row;
+      if (task) {
+        return (
+          <View className="mb-2.5">
+            <TaskCard
+              item={task}
+              isSelected={selectedTaskIdsSet.has(task.id)}
+              canAssign={canAssignTasks && assignableTaskIdSet.has(task.id)}
+              isPendingConfirmation={isPendingConfirmation}
+              canManageAssignment={canManageTaskAssignment(task)}
+              onToggleSelect={toggleSelectTask}
+              onPress={handlePressTask}
+              onAssign={handleAssignTask}
+            />
+          </View>
+        );
+      }
+      const isAllGroupSelected =
+        group.assignableTaskIds.length > 0 &&
+        group.assignableTaskIds.every((id) => selectedTaskIdsSet.has(id));
+      return (
+        <GroupHeaderRow
+          group={group}
+          isCollapsed={Boolean(collapsedGroups[group.id])}
+          canAssignTasks={canAssignTasks}
+          isAllGroupSelected={isAllGroupSelected}
+          onToggleGroup={toggleGroup}
+          onToggleSelectGroup={toggleSelectGroup}
+        />
+      );
+    },
+    [
+      selectedTaskIdsSet,
+      canAssignTasks,
+      assignableTaskIdSet,
+      isPendingConfirmation,
+      canManageTaskAssignment,
+      toggleSelectTask,
+      handlePressTask,
+      handleAssignTask,
+      collapsedGroups,
+      toggleGroup,
+      toggleSelectGroup,
+    ],
+  );
+
+  const keyExtractor = useCallback((row: (typeof rows)[number]) => row.key, []);
+  const getItemType = useCallback((row: (typeof rows)[number]) => (row.task ? 'task' : 'group'), []);
 
   return (
-    <View className="relative gap-3 p-4 pb-[90px]">
-      {/* Pending Confirmation Warning Banner */}
-      {isPendingConfirmation && (
-        <View className="flex-row items-start gap-2.5 rounded-xl border border-orange-100 bg-orange-50 p-3">
-          <Feather name="lock" size={18} color="#C2410C" />
-          <View className="flex-1">
-            <Text className="text-[13px] font-bold text-orange-700">Dự án chưa được Account chấp nhận</Text>
-            <Text className="mt-0.5 text-[11px] leading-4 text-orange-800">
-              Tất cả các tính năng phân công, tạo việc phát sinh và cập nhật tiến độ đều bị tạm khóa cho đến khi Lead chấp nhận dự án.
-            </Text>
+    <FlashList
+      data={isLoading ? [] : rows}
+      keyExtractor={keyExtractor}
+      renderItem={renderRow}
+      getItemType={getItemType}
+      contentContainerStyle={{ padding: 16, paddingBottom: 110 }}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={onRefresh}
+          colors={[BrandColors.primary]}
+          tintColor={BrandColors.primary}
+        />
+      }
+      ListHeaderComponent={
+        <View className="gap-3 pb-3">
+          {/* Pending Confirmation Warning Banner */}
+          {isPendingConfirmation && (
+            <View className="flex-row items-start gap-2.5 rounded-xl border border-orange-100 bg-orange-50 p-3">
+              <Feather name="lock" size={18} color="#C2410C" />
+              <View className="flex-1">
+                <Text className="text-[13px] font-bold text-orange-700">Dự án chưa được Account chấp nhận</Text>
+                <Text className="mt-0.5 text-[11px] leading-4 text-orange-800">
+                  Tất cả các tính năng phân công, tạo việc phát sinh và cập nhật tiến độ đều bị tạm khóa cho đến khi Lead chấp nhận dự án.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Top Action Bar */}
+          <View className="flex-row items-center justify-between gap-3">
+            <View className="flex-1">
+              <Text className="text-sm font-bold text-slate-950" numberOfLines={1}>
+                Hạng mục công việc
+              </Text>
+              <Text className="mt-0.5 text-sm text-slate-500" numberOfLines={1}>
+                Tổng cộng {tasks.length}
+              </Text>
+            </View>
+
+            {!isPendingConfirmation && canCreateProjectWork && (
+              <TouchableOpacity
+                className="flex-row items-center gap-1.5 rounded-xl bg-primary px-3 py-2"
+                onPress={onOpenAddExtraTask}
+                activeOpacity={0.8}
+              >
+                <Feather name="plus" size={15} color="#FFFFFF" />
+                <Text className="text-[12px] font-bold text-white" numberOfLines={1}>
+                  Thêm việc
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
-      )}
-
-      {/* Top Action Bar */}
-      <View className="flex-row items-center justify-between gap-3">
-        <View className="flex-1">
-          <Text className="text-sm font-bold text-slate-950" numberOfLines={1}>
-            Hạng mục công việc
-          </Text>
-          <Text className="mt-0.5 text-sm text-slate-500" numberOfLines={1}>
-            Tổng cộng {tasks.length}
-          </Text>
-        </View>
-
-        {!isPendingConfirmation && canCreateProjectWork && (
-          <TouchableOpacity
-            className="flex-row items-center gap-1.5 rounded-xl bg-primary px-3 py-2"
-            onPress={onOpenAddExtraTask}
-            activeOpacity={0.8}
-          >
-            <Feather name="plus" size={15} color="#FFFFFF" />
-            <Text className="text-[12px] font-bold text-white" numberOfLines={1}>
-              Thêm việc
-            </Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {tasks.length === 0 ? (
-        <View className="items-center justify-center gap-2 py-10">
-          <Feather name="check-square" size={40} color="#CBD5E1" />
-          <Text className="text-[15px] font-bold text-slate-600">Chưa có công việc nào</Text>
-          <Text className="max-w-[260px] text-center text-[13px] text-slate-400">
-            Dự án này hiện chưa có công việc triển khai. Bấm "Thêm việc phát sinh" để tạo mới.
-          </Text>
-        </View>
-      ) : (
-        <View className="gap-2.5">
-          {groupedTasks.map((group) => {
-            const isCollapsed = collapsedGroups[group.id];
-            const hasAssignable = group.assignableTaskIds.length > 0;
-            const isAllGroupSelected =
-              hasAssignable && group.assignableTaskIds.every((id) => selectedTaskIdsSet.has(id));
-
-            return (
-              <View key={group.id} className="overflow-hidden rounded-[14px] border border-slate-200 bg-white">
-                <TouchableOpacity
-                  className="flex-row items-center justify-between border-b border-slate-100 bg-slate-50 px-3.5 py-3"
-                  onPress={() => toggleGroup(group.id)}
-                  activeOpacity={0.7}
-                >
-                  <View className="flex-1 flex-row items-center gap-2">
-                    <Feather
-                      name={isCollapsed ? 'chevron-right' : 'chevron-down'}
-                      size={18}
-                      color="#475569"
-                    />
-                    <Text className="flex-1 text-[13px] font-bold text-slate-800" numberOfLines={1}>
-                      {group.jobName}
-                    </Text>
-                  </View>
-
-                  <View className="flex-row items-center gap-2">
-                    {canAssignTasks && hasAssignable && (
-                      <TouchableOpacity
-                        onPress={() => toggleSelectGroup(group.tasks)}
-                        className="flex-row items-center gap-1 rounded-md border border-blue-100 bg-blue-50 px-2 py-[3px]"
-                        activeOpacity={0.7}
-                      >
-                        <Feather
-                          name={isAllGroupSelected ? 'check-square' : 'square'}
-                          size={14}
-                          color={BrandColors.primary}
-                        />
-                        <Text className="text-[11px] font-bold text-primary">Chọn nhóm</Text>
-                      </TouchableOpacity>
-                    )}
-
-                    <View className="rounded-[10px] bg-slate-200 px-2 py-0.5">
-                      <Text className="text-[11px] font-bold text-slate-600">{group.tasks.length} việc</Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-
-                {!isCollapsed && (
-                  <View className="gap-2.5 p-2.5">
-                    {group.tasks.map((item) => (
-                      <TaskCard
-                        key={item.id}
-                        item={item}
-                        isSelected={selectedTaskIdsSet.has(item.id)}
-                        canAssign={canAssignTasks && assignableTaskIdSet.has(item.id)}
-                        isPendingConfirmation={isPendingConfirmation}
-                        canManageAssignment={canManageTaskAssignment(item)}
-                        onToggleSelect={toggleSelectTask}
-                        onPress={handlePressTask}
-                        onAssign={handleAssignTask}
-                      />
-                    ))}
-                  </View>
-                )}
+      }
+      ListEmptyComponent={
+        isLoading ? (
+          <View className="gap-3" accessibilityLabel="Đang tải danh sách công việc">
+            <Text className="text-sm text-slate-500">Đang tải danh sách công việc...</Text>
+            {[0, 1, 2].map((key) => (
+              <View key={key} className="gap-3 rounded-xl border border-slate-200 bg-white p-4">
+                <View className="h-4 w-24 rounded bg-slate-100" />
+                <View className="h-4 w-3/4 rounded bg-slate-100" />
+                <View className="h-3 w-1/2 rounded bg-slate-100" />
+                <View className="h-2 rounded bg-slate-100" />
               </View>
-            );
-          })}
-        </View>
-      )}
-    </View>
+            ))}
+          </View>
+        ) : (
+          <View className="items-center gap-2 py-10">
+            <Feather name="check-square" size={40} color="#CBD5E1" />
+            <Text className="text-[15px] font-bold text-slate-600">Chưa có công việc nào</Text>
+            <Text className="max-w-[260px] text-center text-[13px] text-slate-400">
+              Dự án này hiện chưa có công việc triển khai.
+            </Text>
+          </View>
+        )
+      }
+    />
   );
 }

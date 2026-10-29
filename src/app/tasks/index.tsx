@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,12 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
+  BackHandler,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TaskItem } from '@/services/dashboardService';
 import { TASK_STATUS_CONFIG } from '@/services/taskService';
@@ -20,6 +22,7 @@ import { safeGoBack } from '@/utils/navigation';
 import { useTasksQuery } from '@/hooks/queries/useTasks';
 import { useAuth } from '@/context/AuthContext';
 import { isManagementRole, isProjectManagerRole, isSalesRole } from '@/utils/rbac';
+import TaskAssignModal from '@/components/projects/TaskAssignModal';
 
 type StatusFilter =
   | 'ALL'
@@ -64,62 +67,128 @@ const TaskCardItem = React.memo(function TaskCardItem({
   item,
   getStatusBadge,
   onPress,
+  onLongPress,
+  isSelectionMode,
+  isSelected,
+  onToggleSelect,
 }: {
   item: TaskItem;
   getStatusBadge: (status: string) => { bg: string; text: string; label: string };
   onPress: (id: string) => void;
+  onLongPress?: (item: TaskItem) => void;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) {
   const badge = getStatusBadge(item.status);
   const isExtra = Boolean((item as any).isExtraTask || (item as any).isExtra);
+
+  const handlePress = () => {
+    if (isSelectionMode && onToggleSelect) {
+      onToggleSelect(item.id);
+    } else {
+      onPress(item.id);
+    }
+  };
+
+  const handleLongPress = () => {
+    if (onLongPress) {
+      onLongPress(item);
+    }
+  };
+
   return (
     <TouchableOpacity
-      className={`relative overflow-hidden rounded-2xl border bg-white p-4 shadow-sm ${
-        isExtra ? 'border-amber-200 bg-amber-50/40' : 'border-slate-200'
+      className={`relative overflow-hidden rounded-2xl border p-4 shadow-sm ${
+        isSelected
+          ? 'border-2 border-primary bg-orange-50/90'
+          : isExtra
+            ? 'border-amber-200 bg-amber-50/40'
+            : 'border-slate-200 bg-white'
       }`}
-      onPress={() => onPress(item.id)}
+      style={
+        isSelected
+          ? {
+              borderColor: BrandColors.primary,
+              backgroundColor: '#FFF8EE',
+              shadowColor: '#F38820',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.12,
+              shadowRadius: 6,
+              elevation: 3,
+            }
+          : undefined
+      }
+      onPress={handlePress}
+      onLongPress={handleLongPress}
+      delayLongPress={350}
       activeOpacity={0.75}
     >
       {/* Sọc phát sinh bên trái */}
       {isExtra && <View className="absolute bottom-0 left-0 top-0 w-1 bg-amber-400" />}
 
-      <View className="mb-2 flex-row flex-wrap items-center gap-1.5">
-        <View className="rounded-md px-2 py-[3px]" style={{ backgroundColor: badge.bg }}>
-          <Text className="text-[11px] font-bold" style={{ color: badge.text }}>{badge.label}</Text>
-        </View>
-        {isExtra && (
-          <View className="rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5">
-            <Text className="text-[10px] font-bold uppercase text-amber-700">Phát sinh</Text>
-          </View>
+      <View className="flex-row items-start">
+        {/* Checkbox tròn lớn khi ở Chế độ chọn */}
+        {isSelectionMode && (
+          <TouchableOpacity
+            className="mr-3 mt-0.5 h-6 w-6 items-center justify-center rounded-full border-2"
+            style={{
+              borderColor: isSelected ? BrandColors.primary : '#CBD5E1',
+              backgroundColor: isSelected ? BrandColors.primary : '#FFFFFF',
+            }}
+            onPress={() => onToggleSelect?.(item.id)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            activeOpacity={0.8}
+          >
+            {isSelected && <Feather name="check" size={13} color="#FFFFFF" />}
+          </TouchableOpacity>
         )}
-        {item.code && <Text className="ml-auto text-xs font-semibold text-slate-400">#{item.code}</Text>}
-      </View>
 
-      <Text className="mb-2.5 text-[15px] font-bold leading-[22px] text-slate-900" numberOfLines={2}>
-        {item.name}
-      </Text>
-
-      <View className="mb-2.5 h-px bg-slate-100" />
-
-      <View className="flex-row items-center justify-between">
-        <View className="flex-1 flex-row items-center gap-3.5">
-          {item.project?.name && (
-            <View className="flex-row items-center gap-[5px]">
-              <Feather name="folder" size={12} color="#64748B" />
-              <Text className="max-w-[160px] text-xs text-slate-500" numberOfLines={1}>
-                {item.project.name}
-              </Text>
+        <View className="flex-1">
+          <View className="mb-2 flex-row flex-wrap items-center gap-1.5">
+            <View className="rounded-md px-2 py-[3px]" style={{ backgroundColor: badge.bg }}>
+              <Text className="text-[11px] font-bold" style={{ color: badge.text }}>{badge.label}</Text>
             </View>
-          )}
-          {item.plannedEndDate && (
-            <View className="flex-row items-center gap-[5px]">
-              <Feather name="clock" size={12} color="#64748B" />
-              <Text className="max-w-[160px] text-xs text-slate-500">
-                {new Date(item.plannedEndDate).toLocaleDateString('vi-VN')}
+            {isExtra && (
+              <View className="rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5">
+                <Text className="text-[10px] font-bold uppercase text-amber-700">Phát sinh</Text>
+              </View>
+            )}
+            {item.code && (
+              <Text className={`ml-auto text-xs font-semibold ${isSelected ? 'text-primary font-bold' : 'text-slate-400'}`}>
+                #{item.code}
               </Text>
+            )}
+          </View>
+
+          <Text className="mb-2.5 text-[15px] font-bold leading-[22px] text-slate-900" numberOfLines={2}>
+            {item.name}
+          </Text>
+
+          <View className="mb-2.5 h-px bg-slate-100" />
+
+          <View className="flex-row items-center justify-between">
+            <View className="flex-1 flex-row items-center gap-3.5">
+              {item.project?.name && (
+                <View className="flex-row items-center gap-[5px]">
+                  <Feather name="folder" size={12} color="#64748B" />
+                  <Text className="max-w-[160px] text-xs text-slate-500" numberOfLines={1}>
+                    {item.project.name}
+                  </Text>
+                </View>
+              )}
+              {item.plannedEndDate && (
+                <View className="flex-row items-center gap-[5px]">
+                  <Feather name="clock" size={12} color="#64748B" />
+                  <Text className="max-w-[160px] text-xs text-slate-500">
+                    {new Date(item.plannedEndDate).toLocaleDateString('vi-VN')}
+                  </Text>
+                </View>
+              )}
             </View>
-          )}
+            {!isSelectionMode && <Feather name="chevron-right" size={16} color="#94A3B8" />}
+          </View>
         </View>
-        <Feather name="chevron-right" size={16} color="#94A3B8" />
       </View>
     </TouchableOpacity>
   );
@@ -134,9 +203,28 @@ export default function TasksScreen() {
   const [page, setPage] = useState(1);
   const PAGE_LIMIT = 50;
 
+  // Multi-select & Bulk Assign states
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+
   const currentUserId = user?.id;
   const userRole = user?.role;
   const canViewAllTasks = isManagementRole(userRole) || isProjectManagerRole(userRole) || isSalesRole(userRole);
+
+  const selectedTaskIdsSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds]);
+  const isSelectionMode = selectedTaskIds.length > 0;
+
+  // Lắng nghe nút Back phần cứng trên Android: nếu đang chọn nhiều, bấm Back chỉ thoát Selection Mode
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (selectedTaskIds.length > 0) {
+        setSelectedTaskIds([]);
+        return true;
+      }
+      return false;
+    });
+    return () => backHandler.remove();
+  }, [selectedTaskIds.length]);
 
   const { data: tasksRes, isLoading, isFetching, refetch } = useTasksQuery({
     status: activeTab !== 'ALL' ? activeTab : undefined,
@@ -195,6 +283,59 @@ export default function TasksScreen() {
     });
   }, [tasks, scopeFilter, currentUserId, searchQuery]);
 
+  // Các thao tác chọn nhiều
+  const handleToggleSelectTask = useCallback((id: string) => {
+    Haptics.selectionAsync();
+    setSelectedTaskIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }, []);
+
+  const handleTaskLongPress = useCallback(
+    (item: TaskItem) => {
+      if (!canViewAllTasks) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setSelectedTaskIds((prev) =>
+        prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]
+      );
+    },
+    [canViewAllTasks]
+  );
+
+  const isAllFilteredSelected = useMemo(() => {
+    return (
+      filteredTasks.length > 0 &&
+      filteredTasks.every((t) => selectedTaskIdsSet.has(t.id))
+    );
+  }, [filteredTasks, selectedTaskIdsSet]);
+
+  const handleToggleSelectAll = useCallback(() => {
+    Haptics.selectionAsync();
+    const allFilteredIds = filteredTasks.map((t) => t.id);
+    const isAllSelected =
+      allFilteredIds.length > 0 && allFilteredIds.every((id) => selectedTaskIdsSet.has(id));
+
+    if (isAllSelected) {
+      setSelectedTaskIds([]);
+    } else {
+      setSelectedTaskIds(allFilteredIds);
+    }
+  }, [filteredTasks, selectedTaskIdsSet]);
+
+  const handleCancelSelection = useCallback(() => {
+    setSelectedTaskIds([]);
+  }, []);
+
+  const selectedTasksForAssign = useMemo(() => {
+    return tasks.filter((t) => selectedTaskIdsSet.has(t.id));
+  }, [tasks, selectedTaskIdsSet]);
+
+  const handleOpenBulkAssignModal = useCallback(() => {
+    if (selectedTasksForAssign.length === 0) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowAssignModal(true);
+  }, [selectedTasksForAssign.length]);
+
   const renderStatusTab = useCallback(
     ({ item }: { item: { id: StatusFilter; label: string } }) => {
       const isActive = activeTab === item.id;
@@ -225,48 +366,114 @@ export default function TasksScreen() {
     router.push(`/tasks/${id}` as any);
   }, [router]);
 
-  const renderTaskCard = useCallback(({ item }: { item: TaskItem }) => {
-    return <TaskCardItem item={item} getStatusBadge={getStatusBadge} onPress={handleTaskPress} />;
-  }, [getStatusBadge, handleTaskPress]);
+  const renderTaskCard = useCallback(
+    ({ item }: { item: TaskItem }) => {
+      return (
+        <TaskCardItem
+          item={item}
+          getStatusBadge={getStatusBadge}
+          onPress={handleTaskPress}
+          onLongPress={handleTaskLongPress}
+          isSelectionMode={isSelectionMode}
+          isSelected={selectedTaskIdsSet.has(item.id)}
+          onToggleSelect={handleToggleSelectTask}
+        />
+      );
+    },
+    [
+      getStatusBadge,
+      handleTaskPress,
+      handleTaskLongPress,
+      isSelectionMode,
+      selectedTaskIdsSet,
+      handleToggleSelectTask,
+    ]
+  );
 
   const keyExtractor = useCallback((item: TaskItem) => item.id, []);
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
-      {/* Top Header */}
-      <View className="flex-row items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
-        <TouchableOpacity
-          className="h-10 w-10 items-center justify-center rounded-[10px] bg-slate-100"
-          onPress={() => safeGoBack(router, '/')}
-          activeOpacity={0.7}
-        >
-          <Feather name="arrow-left" size={20} color="#0F172A" />
-        </TouchableOpacity>
-        <Text className="text-[17px] font-bold text-slate-900">Nhiệm vụ & Tiến độ</Text>
-        <View className="w-10" />
-      </View>
-
-      {/* Search Input */}
-      <View className="bg-white px-4 pb-2 pt-3">
-        <View className="h-[42px] flex-row items-center rounded-xl bg-slate-100 px-3">
-          <Feather name="search" size={18} color="#94A3B8" />
-          <TextInput
-            className="ml-2 flex-1 text-sm text-slate-900"
-            placeholder="Tìm theo tên task, mã hoặc dự án..."
-            placeholderTextColor="#94A3B8"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Feather name="x" size={16} color="#94A3B8" />
+      {/* Top Header — Biến đổi sang Selection Header khi ở Chế độ chọn */}
+      {isSelectionMode ? (
+        <View className="flex-row items-center justify-between border-b border-orange-200 bg-orange-50/80 px-4 py-3">
+          <TouchableOpacity
+            className="flex-row items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-xs"
+            onPress={handleCancelSelection}
+            activeOpacity={0.7}
+          >
+            <Feather name="x" size={15} color="#475569" />
+            <Text className="text-xs font-bold text-slate-700">Hủy</Text>
+          </TouchableOpacity>
+          <View className="flex-row items-center gap-1.5">
+            <View className="h-2 w-2 rounded-full bg-primary" />
+            <Text className="text-[15px] font-bold text-slate-900">
+              Đã chọn {selectedTaskIds.length} việc
+            </Text>
+          </View>
+          <TouchableOpacity
+            className="rounded-xl bg-primary px-3 py-1.5 shadow-xs"
+            onPress={handleToggleSelectAll}
+            activeOpacity={0.8}
+          >
+            <Text className="text-xs font-bold text-white">
+              {isAllFilteredSelected ? 'Bỏ chọn' : 'Chọn hết'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View className="flex-row items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
+          <TouchableOpacity
+            className="h-10 w-10 items-center justify-center rounded-[10px] bg-slate-100"
+            onPress={() => safeGoBack(router, '/')}
+            activeOpacity={0.7}
+          >
+            <Feather name="arrow-left" size={20} color="#0F172A" />
+          </TouchableOpacity>
+          <Text className="text-[17px] font-bold text-slate-900">Nhiệm vụ & Tiến độ</Text>
+          {canViewAllTasks ? (
+            <TouchableOpacity
+              className="flex-row items-center gap-1 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5"
+              onPress={() => {
+                Haptics.selectionAsync();
+                if (filteredTasks.length > 0) {
+                  setSelectedTaskIds([filteredTasks[0].id]);
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Feather name="check-square" size={14} color={BrandColors.primary} />
+              <Text className="text-xs font-bold text-primary">Chọn</Text>
             </TouchableOpacity>
+          ) : (
+            <View className="w-10" />
           )}
         </View>
-      </View>
+      )}
 
-      {/* Scope Filter Switcher (Chỉ hiển thị cho Quản lý / PM / Sales) */}
-      {canViewAllTasks && (
+      {/* Search Input (Tạm ẩn khi đang ở chế độ chọn để giữ màn hình gọn gàng) */}
+      {!isSelectionMode && (
+        <View className="bg-white px-4 pb-2 pt-3">
+          <View className="h-[42px] flex-row items-center rounded-xl bg-slate-100 px-3">
+            <Feather name="search" size={18} color="#94A3B8" />
+            <TextInput
+              className="ml-2 flex-1 text-sm text-slate-900"
+              placeholder="Tìm theo tên task, mã hoặc dự án..."
+              placeholderTextColor="#94A3B8"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Feather name="x" size={16} color="#94A3B8" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* Scope Filter Switcher (Chỉ hiển thị cho Quản lý / PM / Sales khi không chọn nhiều) */}
+      {canViewAllTasks && !isSelectionMode && (
         <View className="bg-white px-4 pb-2">
           <View className="flex-row items-center bg-slate-100 p-1 rounded-xl">
             <TouchableOpacity
@@ -329,19 +536,21 @@ export default function TasksScreen() {
       )}
 
       {/* Filter Tabs */}
-      <View className="border-b border-slate-200 bg-white pb-2">
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={STATUS_TABS}
-          keyExtractor={(item) => item.id}
-          contentContainerClassName="gap-2 px-4"
-          renderItem={renderStatusTab}
-        />
-      </View>
+      {!isSelectionMode && (
+        <View className="border-b border-slate-200 bg-white pb-2">
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={STATUS_TABS}
+            keyExtractor={(item) => item.id}
+            contentContainerClassName="gap-2 px-4"
+            renderItem={renderStatusTab}
+          />
+        </View>
+      )}
 
       {/* Total Count Bar */}
-      {totalTasksCount > 0 && (
+      {totalTasksCount > 0 && !isSelectionMode && (
         <View className="bg-slate-50 px-4 pt-2.5 pb-0.5 flex-row items-center justify-between">
           <Text className="text-[12px] font-medium text-slate-500">
             {searchQuery
@@ -364,7 +573,7 @@ export default function TasksScreen() {
           data={filteredTasks}
           keyExtractor={keyExtractor}
           renderItem={renderTaskCard}
-          contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: isSelectionMode ? 100 : 24 }}
           showsVerticalScrollIndicator={false}
           onEndReachedThreshold={0.4}
           onEndReached={() => {
@@ -399,6 +608,51 @@ export default function TasksScreen() {
               </Text>
             </View>
           }
+        />
+      )}
+
+      {/* Floating Bulk Action Bar — Nằm trong Thumb Zone đáy màn hình */}
+      {selectedTaskIds.length > 0 && (
+        <View
+          className="absolute bottom-20 left-4 right-4 z-50 flex-row items-center justify-between rounded-2xl border border-orange-200 bg-white px-4 py-3"
+          style={{
+            shadowColor: '#F38820',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.22,
+            shadowRadius: 10,
+            elevation: 8,
+          }}
+        >
+          <View className="flex-row items-center gap-2">
+            <View className="rounded-full bg-orange-100 px-2.5 py-0.5">
+              <Text className="text-xs font-black text-orange-700">{selectedTaskIds.length}</Text>
+            </View>
+            <Text className="text-xs font-semibold text-slate-700">việc đã chọn</Text>
+          </View>
+
+          <TouchableOpacity
+            className="flex-row items-center gap-2 rounded-xl bg-primary px-4 py-2.5"
+            onPress={handleOpenBulkAssignModal}
+            activeOpacity={0.8}
+          >
+            <Feather name="users" size={15} color="#FFFFFF" />
+            <Text className="text-[13px] font-bold text-white">
+              Phân công ({selectedTaskIds.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Task Assign Modal (Dùng chung cho cả Phân công hàng loạt) */}
+      {showAssignModal && (
+        <TaskAssignModal
+          visible={showAssignModal}
+          onClose={() => setShowAssignModal(false)}
+          task={selectedTasksForAssign as any}
+          onSuccess={() => {
+            setSelectedTaskIds([]);
+            refetch();
+          }}
         />
       )}
 
