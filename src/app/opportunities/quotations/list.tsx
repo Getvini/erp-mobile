@@ -194,7 +194,22 @@ export default function QuotationsListScreen() {
   const renderQuotationItem = ({ item }: { item: QuotationItem }) => {
     const isThisItemApproved =
       item.status === QuotationStatus.APPROVED || item.status === 'APPROVED';
-    const isExpired = hasApprovedQuote && !isThisItemApproved;
+    const isAddendum = item.type === 'ADDENDUM';
+    const isExpired = hasApprovedQuote && !isThisItemApproved && !isAddendum;
+
+    const oppStatus = opportunity?.status;
+    const isOpportunityInQuoteStage =
+      oppStatus === 'PENDING_QUOTE_APPROVAL' ||
+      oppStatus === 'QUOTATION_DRAFTING' ||
+      isAddendum;
+
+    const canApproveItem =
+      !isExpired &&
+      isOpportunityInQuoteStage &&
+      (item.status === QuotationStatus.DRAFT ||
+        item.status === QuotationStatus.PENDING_APPROVAL ||
+        item.status === 'DRAFT' ||
+        item.status === 'PENDING_APPROVAL');
 
     return (
       <QuotationItemCard
@@ -202,8 +217,8 @@ export default function QuotationsListScreen() {
         isAdminOrBod={isAdminOrBod}
         isExpired={isExpired}
         onPress={handleSelectQuotation}
-        onApprove={isExpired ? undefined : handleApprove}
-        onReject={isExpired ? undefined : handleOpenReject}
+        onApprove={canApproveItem ? handleApprove : undefined}
+        onReject={canApproveItem ? handleOpenReject : undefined}
         onEdit={isExpired ? undefined : handleEditQuotation}
       />
     );

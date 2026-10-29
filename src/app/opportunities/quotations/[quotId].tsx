@@ -226,8 +226,11 @@ export default function QuotationDetailScreen() {
   const isThisApproved =
     quotation?.status === QuotationStatus.APPROVED || quotation?.status === 'APPROVED';
 
+  const isAddendum = quotation?.type === 'ADDENDUM';
+
   const isExpired =
     !isThisApproved &&
+    !isAddendum &&
     (hasApprovedSibling ||
       (quotation?.opportunity as any)?.status === 'QUOTE_APPROVED' ||
       (quotation?.opportunity as any)?.status === 'WON');
@@ -253,12 +256,24 @@ export default function QuotationDetailScreen() {
   };
 
   const statusMeta = getStatusMeta(quotation?.status);
+  const oppStatus = (quotation?.opportunity as any)?.status;
+  const isOpportunityInQuoteStage =
+    oppStatus === 'PENDING_QUOTE_APPROVAL' ||
+    oppStatus === 'QUOTATION_DRAFTING' ||
+    isAddendum;
+
   const isPending =
-    !isExpired &&
     (quotation?.status === QuotationStatus.DRAFT ||
       quotation?.status === QuotationStatus.PENDING_APPROVAL ||
       quotation?.status === 'DRAFT' ||
       quotation?.status === 'PENDING_APPROVAL');
+
+  const canApproveQuotation =
+    !isExpired &&
+    isPending &&
+    isOpportunityInQuoteStage &&
+    isAdminOrBod;
+
   const isRejected =
     quotation?.status === QuotationStatus.REJECTED || quotation?.status === 'REJECTED';
 
@@ -712,8 +727,8 @@ export default function QuotationDetailScreen() {
         <View className="h-[60px]" />
       </ScrollView>
 
-      {/* Sticky Bottom Actions Bar for BOD / Admin Approval */}
-      {!isExpired && isAdminOrBod && isPending && (
+      {/* Sticky Bottom Actions Bar for BOD / Admin Approval - Khớp 100% FE Web */}
+      {canApproveQuotation && (
         <View className="absolute inset-x-0 bottom-0 flex-row gap-3 border-t border-slate-200 bg-white px-4 py-3 shadow-lg">
           <TouchableOpacity
             className="flex-1 flex-row items-center justify-center gap-1.5 rounded-[10px] border border-red-200 bg-red-100 py-3"

@@ -28,6 +28,7 @@ export interface QuotationDetailModalProps {
   visible: boolean;
   quotationId: string | null;
   opportunityDescription?: string;
+  opportunityStatus?: string;
   onClose: () => void;
   onEdit?: (quotation: any) => void;
   onApprovedContract?: (contractId: string) => void;
@@ -37,6 +38,7 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
   visible,
   quotationId,
   opportunityDescription,
+  opportunityStatus,
   onClose,
   onEdit,
   onApprovedContract,
@@ -195,6 +197,19 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
   const status = quotation?.status || 'DRAFT';
   const isApproved = status === 'APPROVED';
   const isPending = status === 'PENDING_APPROVAL';
+
+  // Điều kiện trạng thái Cơ hội hoặc Báo giá phụ lục khớp 100% FE Web
+  const effectiveOppStatus =
+    opportunityStatus ||
+    (quotation?.opportunity as any)?.status;
+  const isOpportunityInQuoteStage =
+    effectiveOppStatus === 'PENDING_QUOTE_APPROVAL' ||
+    effectiveOppStatus === 'QUOTATION_DRAFTING' ||
+    quotation?.type === 'ADDENDUM';
+  const canPerformApprovalAction =
+    (status === 'DRAFT' || status === 'PENDING_APPROVAL') &&
+    isOpportunityInQuoteStage &&
+    canApprove;
 
   // Duyệt báo giá -> chuyển đổi thành Hợp đồng
   const handleApprove = () => {
@@ -718,8 +733,8 @@ export const QuotationDetailModal: React.FC<QuotationDetailModalProps> = ({
                 </TouchableOpacity>
               )}
 
-              {/* Khi chờ duyệt (DRAFT / PENDING_APPROVAL): Đúng 2 nút Duyệt báo giá & Từ chối */}
-              {(status === 'DRAFT' || status === 'PENDING_APPROVAL') && canApprove && (
+              {/* Khi chờ duyệt (DRAFT / PENDING_APPROVAL) và Cơ hội đang ở giai đoạn duyệt báo giá (hoặc là Phụ lục): Đúng 2 nút Duyệt báo giá & Từ chối */}
+              {canPerformApprovalAction && (
                 <>
                   {!isRejectingMode && (
                     <TouchableOpacity

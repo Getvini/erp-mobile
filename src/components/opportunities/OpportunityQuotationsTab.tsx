@@ -209,6 +209,7 @@ export const OpportunityQuotationsTab: React.FC<OpportunityQuotationsTabProps> =
         visible={Boolean(selectedQuotationId)}
         quotationId={selectedQuotationId}
         opportunityDescription={opportunityDescription}
+        opportunityStatus={opportunityStatus}
         onClose={() => setSelectedQuotationId(null)}
         onEdit={handleEditFromDetail}
         onApprovedContract={(contractId) => {
