@@ -84,10 +84,10 @@ const PAYMENT_OPTIONS = [
 ];
 
 const SETTLEMENT_OPTIONS = [
-  { value: 'ALL', label: 'Tất cả trạng thái hoàn ứng' },
-  { value: 'PENDING', label: 'Chờ chi đủ tạm ứng' },
-  { value: 'WAITING_SETTLEMENT', label: 'Chờ nộp hoàn ứng' },
-  { value: 'SETTLEMENT_SUBMITTED', label: 'Đã nộp, chờ duyệt' },
+  { value: 'ALL', label: 'Tất cả trạng thái quyết toán' },
+  { value: 'PENDING', label: 'Đang tạm ứng' },
+  { value: 'WAITING_SETTLEMENT', label: 'Chờ nộp quyết toán' },
+  { value: 'SETTLEMENT_SUBMITTED', label: 'Chờ duyệt quyết toán' },
   { value: 'SETTLED', label: 'Đã hoàn ứng' },
 ];
 

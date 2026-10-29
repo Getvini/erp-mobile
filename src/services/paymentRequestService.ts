@@ -150,9 +150,9 @@ export enum PaymentSettlementStatus {
 
 export const SETTLEMENT_STATUS_LABELS: Record<string, string> = {
   NOT_APPLICABLE: 'Không áp dụng',
-  PENDING: 'Chờ chi đủ tạm ứng',
-  WAITING_SETTLEMENT: 'Chờ nộp hoàn ứng',
-  SETTLEMENT_SUBMITTED: 'Đã nộp, chờ duyệt hoàn ứng',
+  PENDING: 'Đang tạm ứng',
+  WAITING_SETTLEMENT: 'Chờ nộp quyết toán',
+  SETTLEMENT_SUBMITTED: 'Chờ duyệt quyết toán',
   SETTLED: 'Đã hoàn ứng',
 };
 
@@ -167,22 +167,22 @@ export const SETTLEMENT_STATUS_CONFIG: Record<
     border: '#E2E8F0',
   },
   PENDING: {
-    text: 'Chờ chi đủ tạm ứng',
-    color: '#64748B',
-    bg: '#F1F5F9',
-    border: '#E2E8F0',
-  },
-  WAITING_SETTLEMENT: {
-    text: 'Chờ nộp hoàn ứng',
-    color: '#EA580C',
-    bg: '#FFEDD5',
-    border: '#FED7AA',
-  },
-  SETTLEMENT_SUBMITTED: {
-    text: 'Chờ duyệt hoàn ứng',
+    text: 'Đang tạm ứng',
     color: '#D97706',
     bg: '#FEF3C7',
     border: '#FDE68A',
+  },
+  WAITING_SETTLEMENT: {
+    text: 'Chờ nộp quyết toán',
+    color: '#7E22CE',
+    bg: '#F3E8FF',
+    border: '#E9D5FF',
+  },
+  SETTLEMENT_SUBMITTED: {
+    text: 'Chờ duyệt quyết toán',
+    color: '#2563EB',
+    bg: '#EFF6FF',
+    border: '#BFDBFE',
   },
   SETTLED: {
     text: 'Đã hoàn ứng',
@@ -202,6 +202,28 @@ export interface PaymentTransactionRecord {
   cashVoucherInfo?: { voucherNo?: string; notes?: string };
   proofFiles: { id?: string; url: string; name?: string; fileType?: string }[];
   note?: string;
+}
+
+export type BudgetAmount = number | string;
+
+export interface ProjectServiceBudget {
+  contractServiceId: string;
+  serviceId?: string | null;
+  serviceName: string;
+  budget: BudgetAmount;
+  spent: BudgetAmount;
+  remaining?: BudgetAmount | null;
+  status?: string;
+}
+
+export interface ProjectBudgetSummary {
+  projectId: string;
+  projectName: string;
+  totalProjectBudget: BudgetAmount;
+  totalProjectSpent: BudgetAmount;
+  remainingProjectBudget?: BudgetAmount | null;
+  disbursementPercentage?: BudgetAmount | null;
+  serviceBudgets: ProjectServiceBudget[];
 }
 
 export interface ServiceBudgetInfo {
@@ -552,7 +574,7 @@ class PaymentRequestService {
    * Lấy tổng quan ngân sách dự án
    */
   async getProjectBudgetSummary(projectId: string) {
-    return apiService.get<any>(`/payment-requests/project-budget-summary/${projectId}`);
+    return apiService.get<ProjectBudgetSummary>(`/payment-requests/project-budget-summary/${projectId}`);
   }
 
   /**

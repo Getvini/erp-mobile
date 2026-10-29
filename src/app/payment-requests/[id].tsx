@@ -27,11 +27,7 @@ import {
   useServiceBudgetQuery,
 } from '@/hooks/queries/usePaymentRequests';
 import {
-  APPROVAL_STATUS_CONFIG,
-  PAYMENT_STATUS_CONFIG,
   PAYMENT_REQUEST_TYPE_LABELS,
-  SETTLEMENT_STATUS_LABELS,
-  SETTLEMENT_STATUS_CONFIG,
   paymentRequestService,
 } from '@/services/paymentRequestService';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -43,6 +39,7 @@ import {
 } from '@/utils/formatters';
 import { InvoiceUploadPicker, UploadedFileItem } from '@/components/payment-requests/InvoiceUploadPicker';
 import { DatePickerModal } from '@/components/common/DatePickerModal';
+import { StatusBadge } from '@/components/common/StatusBadge';
 import { CashVoucherBottomSheet, CashVoucherInfo } from '@/components/payment-requests/CashVoucherBottomSheet';
 import { ServiceBudgetBox } from '@/components/payment-requests/ServiceBudgetBox';
 import { PaymentDisbursementBottomSheet } from '@/components/payment-requests/PaymentDisbursementBottomSheet';
@@ -137,20 +134,6 @@ export default function PaymentRequestDetailScreen() {
       </View>
     );
   }
-
-  const approvalCfg = APPROVAL_STATUS_CONFIG[request.approvalStatus] || {
-    text: request.approvalStatus,
-    color: '#64748B',
-    bg: '#F1F5F9',
-    border: '#E2E8F0',
-  };
-
-  const paymentCfg = PAYMENT_STATUS_CONFIG[request.paymentStatus] || {
-    text: request.paymentStatus,
-    color: '#94A3B8',
-    bg: '#F8FAFC',
-    border: '#E2E8F0',
-  };
 
   // RBAC Privileges (Single source of truth theo Master Plan)
   const userRole = (currentUser?.role || '').toUpperCase();
@@ -419,20 +402,7 @@ export default function PaymentRequestDetailScreen() {
             </TouchableOpacity>
           )}
 
-          <View
-            style={{
-              paddingHorizontal: 8,
-              paddingVertical: 3,
-              borderRadius: 6,
-              backgroundColor: approvalCfg.bg,
-              borderWidth: 1,
-              borderColor: approvalCfg.border,
-            }}
-          >
-            <Text style={{ fontSize: 11, fontWeight: '700', color: approvalCfg.color }}>
-              {approvalCfg.text}
-            </Text>
-          </View>
+          <StatusBadge domain="paymentRequest" status={request.approvalStatus} size="sm" />
         </View>
       </View>
 
@@ -477,25 +447,12 @@ export default function PaymentRequestDetailScreen() {
             {formatVND(request.amount)}
           </Text>
 
-          {/* Payment Status Pill */}
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 4,
-              marginTop: 8,
-              paddingHorizontal: 10,
-              paddingVertical: 3,
-              borderRadius: 12,
-              backgroundColor: paymentCfg.bg,
-              borderWidth: 1,
-              borderColor: paymentCfg.border,
-            }}
-          >
-            <Text style={{ fontSize: 11, fontWeight: '700', color: paymentCfg.color }}>
-              {paymentCfg.text}
-            </Text>
-          </View>
+          {/* Payment Status Badge - đồng bộ với Web: chỉ hiển thị khi đã được duyệt */}
+          {request.approvalStatus === 'APPROVED' && request.paymentStatus !== 'NOT_APPLICABLE' && (
+            <View style={{ marginTop: 8 }}>
+              <StatusBadge domain="paymentRequest" status={request.paymentStatus} size="sm" />
+            </View>
+          )}
 
           {/* Tiến độ giải ngân chi tiền từng đợt */}
           {(request.paidAmount || 0) > 0 && (
@@ -651,26 +608,7 @@ export default function PaymentRequestDetailScreen() {
                 </Text>
               </View>
               {request.settlementStatus && (
-                <View
-                  style={{
-                    paddingHorizontal: 8,
-                    paddingVertical: 3,
-                    borderRadius: 6,
-                    backgroundColor: SETTLEMENT_STATUS_CONFIG[request.settlementStatus]?.bg || '#F1F5F9',
-                    borderWidth: 1,
-                    borderColor: SETTLEMENT_STATUS_CONFIG[request.settlementStatus]?.border || '#E2E8F0',
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      fontWeight: '700',
-                      color: SETTLEMENT_STATUS_CONFIG[request.settlementStatus]?.color || '#475569',
-                    }}
-                  >
-                    {SETTLEMENT_STATUS_LABELS[request.settlementStatus] || request.settlementStatus}
-                  </Text>
-                </View>
+                <StatusBadge domain="paymentSettlement" status={request.settlementStatus} size="sm" />
               )}
             </View>
 

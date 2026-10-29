@@ -10,6 +10,7 @@ export type StatusDomain =
   | 'project'
   | 'task'
   | 'paymentRequest'
+  | 'paymentSettlement'
   | 'debt'
   | 'acceptance';
 
@@ -112,19 +113,33 @@ export const STATUS_MAPPINGS: Record<StatusDomain, Record<string, StatusConfig>>
     SUPPORT_AWAITING_RETURN: { label: 'Chờ trả kết quả', tone: 'pending', icon: 'time-outline' },
   },
   paymentRequest: {
+    // Trạng thái phê duyệt (Approval Status)
     DRAFT: { label: 'Nháp', tone: 'neutral', icon: 'document-text-outline' },
-    PENDING_REVIEWER: { label: 'Chờ quản lý duyệt', tone: 'pending', icon: 'time-outline' },
-    NEED_MORE_DOCS: { label: 'Cần bổ sung chứng từ', tone: 'warning', icon: 'alert-circle-outline' },
-    PENDING_BOD: { label: 'Chờ BOD duyệt', tone: 'pending', icon: 'time-outline' },
+    PENDING_REVIEWER: { label: 'Chờ Admin Sale duyệt', tone: 'pending', icon: 'time-outline' },
+    NEED_MORE_DOCS: { label: 'Yêu cầu bổ sung', tone: 'warning', icon: 'alert-circle-outline' },
+    PENDING_BOD: { label: 'Chờ BOD xác nhận', tone: 'pending', icon: 'shield-checkmark-outline' },
     PENDING: { label: 'Chờ duyệt', tone: 'pending', icon: 'time-outline' },
-    APPROVED: { label: 'Đã duyệt chi', tone: 'positive', icon: 'checkmark-circle' },
-    REJECTED: { label: 'Bị từ chối', tone: 'negative', icon: 'close-circle' },
+    APPROVED: { label: 'Đã duyệt', tone: 'positive', icon: 'checkmark-circle' },
+    REJECTED: { label: 'Từ chối', tone: 'negative', icon: 'close-circle' },
     CANCELLED: { label: 'Đã hủy', tone: 'neutral', icon: 'ban-outline' },
-    WAITING: { label: 'Chưa đến hạn', tone: 'neutral', icon: 'calendar-outline' },
-    DUE_SOON: { label: 'Sắp đến hạn', tone: 'warning', icon: 'warning-outline' },
-    OVERDUE: { label: 'Quá hạn thanh toán', tone: 'negative', icon: 'alert-circle-outline' },
+    // Trạng thái thanh toán (Payment Due Status)
+    WAITING: { label: 'Chờ thanh toán', tone: 'neutral', icon: 'calendar-outline' },
+    DUE_SOON: { label: 'Sắp hết hạn', tone: 'warning', icon: 'warning-outline' },
+    OVERDUE: { label: 'Hết hạn', tone: 'negative', icon: 'alert-circle-outline' },
     PARTIALLY_PAID: { label: 'Đã chi một phần', tone: 'active', icon: 'pie-chart-outline' },
-    PAID: { label: 'Đã chi đủ 100%', tone: 'positive', icon: 'checkmark-circle' },
+    PAID: { label: 'Đã thanh toán', tone: 'positive', icon: 'checkmark-circle' },
+    NOT_APPLICABLE: { label: 'Không áp dụng', tone: 'neutral', icon: 'remove-circle-outline' },
+    // Trạng thái hoàn ứng / quyết toán (Aliases hỗ trợ)
+    SETTLED: { label: 'Đã hoàn ứng', tone: 'positive', icon: 'checkmark-circle' },
+    SETTLEMENT_SUBMITTED: { label: 'Chờ duyệt quyết toán', tone: 'active', icon: 'hourglass-outline' },
+    WAITING_SETTLEMENT: { label: 'Chờ nộp quyết toán', tone: 'purple', icon: 'document-text-outline' },
+  },
+  paymentSettlement: {
+    NOT_APPLICABLE: { label: 'Không áp dụng', tone: 'neutral', icon: 'remove-circle-outline' },
+    PENDING: { label: 'Đang tạm ứng', tone: 'pending', icon: 'time-outline' },
+    WAITING_SETTLEMENT: { label: 'Chờ nộp quyết toán', tone: 'purple', icon: 'document-text-outline' },
+    SETTLEMENT_SUBMITTED: { label: 'Chờ duyệt quyết toán', tone: 'active', icon: 'hourglass-outline' },
+    SETTLED: { label: 'Đã hoàn ứng', tone: 'positive', icon: 'checkmark-circle' },
   },
   debt: {
     UNPAID: { label: 'Chưa thanh toán', tone: 'pending', icon: 'time-outline' },

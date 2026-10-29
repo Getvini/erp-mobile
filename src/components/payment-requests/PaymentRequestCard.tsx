@@ -5,8 +5,6 @@ import { Feather, MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import {
   PaymentRequest,
-  APPROVAL_STATUS_CONFIG,
-  PAYMENT_STATUS_CONFIG,
   PAYMENT_REQUEST_TYPE_LABELS,
 } from '@/services/paymentRequestService';
 import { formatVND, formatDateToDDMMYYYY } from '@/utils/formatters';
@@ -27,20 +25,6 @@ export const PaymentRequestCard: React.FC<PaymentRequestCardProps> = React.memo(
     } else {
       router.push(`/payment-requests/${item.id}` as any);
     }
-  };
-
-  const approvalCfg = APPROVAL_STATUS_CONFIG[item.approvalStatus] || {
-    text: item.approvalStatus,
-    color: '#64748B',
-    bg: '#F1F5F9',
-    border: '#E2E8F0',
-  };
-
-  const paymentCfg = PAYMENT_STATUS_CONFIG[item.paymentStatus] || {
-    text: item.paymentStatus,
-    color: '#94A3B8',
-    bg: '#F8FAFC',
-    border: '#E2E8F0',
   };
 
   return (
@@ -191,33 +175,11 @@ export const PaymentRequestCard: React.FC<PaymentRequestCardProps> = React.memo(
           )}
 
           {/* Settlement Status Badge if ADVANCE */}
-          {item.type === 'ADVANCE' && item.settlementStatus && item.settlementStatus !== 'NOT_APPLICABLE' && (
-            <View
-              style={{
-                paddingHorizontal: 7,
-                paddingVertical: 2,
-                borderRadius: 6,
-                backgroundColor: item.settlementStatus === 'SETTLED' ? '#DCFCE7' : '#F3E8FF',
-                borderWidth: 1,
-                borderColor: item.settlementStatus === 'SETTLED' ? '#BBF7D0' : '#E9D5FF',
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 10,
-                  fontWeight: '700',
-                  color: item.settlementStatus === 'SETTLED' ? '#15803D' : '#7E22CE',
-                }}
-              >
-                {item.settlementStatus === 'SETTLED'
-                  ? 'Đã hoàn ứng'
-                  : item.settlementStatus === 'SETTLEMENT_SUBMITTED'
-                  ? 'Chờ duyệt H.Ứ'
-                  : item.settlementStatus === 'WAITING_SETTLEMENT'
-                  ? 'Chờ nộp H.Ứ'
-                  : 'Tạm ứng'}
-              </Text>
-            </View>
+          {item.type === 'ADVANCE' &&
+            !['CANCELLED', 'REJECTED'].includes(item.approvalStatus) &&
+            item.settlementStatus &&
+            item.settlementStatus !== 'NOT_APPLICABLE' && (
+              <StatusBadge domain="paymentSettlement" status={item.settlementStatus} size="sm" />
           )}
         </View>
       </View>
