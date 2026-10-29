@@ -1,10 +1,9 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { BrandColors } from '@/constants/colors';
 import { canAccessOpportunities, canAccessCustomers, canAccessContracts, isManagementRole } from '@/utils/rbac';
-import { formatVND } from '@/utils/formatters';
 
 interface QuickActionGridProps {
   userRole?: string;

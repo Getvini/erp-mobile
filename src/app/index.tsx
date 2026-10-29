@@ -1,11 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
   RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -22,11 +21,10 @@ import { AdminDashboardView } from '@/components/dashboard/views/AdminDashboardV
 import { SalesDashboardView } from '@/components/dashboard/views/SalesDashboardView';
 import { TeamLeadDashboardView } from '@/components/dashboard/views/TeamLeadDashboardView';
 import { MemberDashboardView } from '@/components/dashboard/views/MemberDashboardView';
-import { formatVND } from '@/utils/formatters';
 import { useUnreadNotificationCount } from '@/hooks/queries/useNotifications';
+import { useUnreadAnnouncementsCountQuery } from '@/hooks/queries/useAnnouncements';
 import { useChatStore } from '@/stores/useChatStore';
 import {
-  canAccessCustomers,
   isManagementRole,
   isSalesRole,
 } from '@/utils/rbac';
@@ -38,7 +36,7 @@ import {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading, logout } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
 
   // Month & Year state
   const now = new Date();
@@ -89,26 +87,16 @@ export default function HomeScreen() {
     if (!isLoading && !isAuthenticated) {
       router.replace('/(auth)/login');
     }
-  }, [isAuthenticated, isLoading]);
+  }, [isAuthenticated, isLoading, router]);
 
   const handleRefresh = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     refetchDashboard();
     refetchMyTasks();
+    refetchUnreadAnnouncements();
     if (isLeadOrAdmin) {
       refetchReviewTasks();
     }
-  };
-
-  const handleLogout = () => {
-    Alert.alert(
-      'Đăng xuất',
-      'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản này?',
-      [
-        { text: 'Hủy', style: 'cancel' },
-        { text: 'Đăng xuất', style: 'destructive', onPress: logout },
-      ]
-    );
   };
 
   const handleNotificationPress = () => {
@@ -119,17 +107,17 @@ export default function HomeScreen() {
   // Badge số thông báo chưa đọc trên header (đồng bộ realtime qua SSE).
   const { data: unreadNotificationCount = 0 } =
     useUnreadNotificationCount(Boolean(user));
+  const { data: unreadAnnouncementsCount = 0, refetch: refetchUnreadAnnouncements } =
+    useUnreadAnnouncementsCountQuery(isAuthenticated);
 
-  // Chat realtime socket & unread count
-  const chatRooms = useChatStore((s) => s.rooms);
+  // Keep the chat socket connected for the floating chat bubble.
   const initSocket = useChatStore((s) => s.initSocket);
-  const totalUnreadChats = chatRooms.reduce((sum, r) => sum + (r.unread ? (r.unreadCount || 1) : 0), 0);
 
   useEffect(() => {
     if (user?.id) {
       initSocket(user.id);
     }
-  }, [user?.id]);
+  }, [user?.id, initSocket]);
 
   if (isLoading) {
     return (
@@ -177,22 +165,24 @@ export default function HomeScreen() {
         </View>
 
         <View className="flex-row items-center gap-2">
-          {/* Realtime Chat Button */}
+          {/* Internal news */}
           <TouchableOpacity
+            testID="header-announcements"
             className="w-[38px] h-[38px] rounded-xl bg-slate-100 items-center justify-center relative min-w-[48px] min-h-[48px]"
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push('/chat' as any);
+              router.push('/announcements' as any);
             }}
             accessibilityRole="button"
-            accessibilityLabel="Mở tin nhắn"
+            accessibilityLabel="Tin tức nội bộ"
+            accessibilityHint="Mở danh sách tin tức nội bộ của công ty"
             activeOpacity={0.7}
           >
-            <Feather name="message-circle" size={20} color="#475569" />
-            {totalUnreadChats > 0 ? (
+            <Feather name="file-text" size={20} color="#475569" />
+            {unreadAnnouncementsCount > 0 ? (
               <View className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 items-center justify-center border-[1.5px] border-white">
                 <Text className="text-[10px] font-bold text-white">
-                  {totalUnreadChats > 99 ? '99+' : totalUnreadChats}
+                  {unreadAnnouncementsCount > 9 ? '9+' : unreadAnnouncementsCount}
                 </Text>
               </View>
             ) : null}
@@ -201,6 +191,8 @@ export default function HomeScreen() {
           <TouchableOpacity
             className="w-[38px] h-[38px] rounded-xl bg-slate-100 items-center justify-center relative min-w-[48px] min-h-[48px]"
             onPress={handleNotificationPress}
+            accessibilityRole="button"
+            accessibilityLabel="Thông báo"
             activeOpacity={0.7}
           >
             <Feather name="bell" size={20} color="#475569" />
@@ -214,13 +206,6 @@ export default function HomeScreen() {
             ) : null}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            className="w-[38px] h-[38px] rounded-xl bg-red-50 items-center justify-center"
-            onPress={handleLogout}
-            activeOpacity={0.7}
-          >
-            <Feather name="log-out" size={18} color="#EF4444" />
-          </TouchableOpacity>
         </View>
       </View>
 

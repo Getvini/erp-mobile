@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   FlatList,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -53,6 +52,7 @@ export default function AnnouncementsScreen() {
   const [status, setStatus] = useState<string | undefined>(undefined);
   const [scopeType, setScopeType] = useState<string | undefined>(undefined);
   const [isFormVisible, setFormVisible] = useState(false);
+  const [openFilter, setOpenFilter] = useState<FilterKey | null>(null);
 
   // Debounce ô tìm kiếm để không bắn request mỗi lần gõ phím.
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -116,12 +116,12 @@ export default function AnnouncementsScreen() {
     [handleOpen],
   );
 
-  const toggleFilter = (key: FilterKey, value: string, current?: string) => {
+  const selectFilter = (key: FilterKey, value?: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    const next = current === value ? undefined : value;
-    if (key === 'category') setCategory(next);
-    if (key === 'status') setStatus(next);
-    if (key === 'scopeType') setScopeType(next);
+    if (key === 'category') setCategory(value);
+    if (key === 'status') setStatus(value);
+    if (key === 'scopeType') setScopeType(value);
+    setOpenFilter(null);
   };
 
   const resetFilters = () => {
@@ -131,6 +131,7 @@ export default function AnnouncementsScreen() {
     setCategory(undefined);
     setStatus(undefined);
     setScopeType(undefined);
+    setOpenFilter(null);
   };
 
   const hasActiveFilter = Boolean(search || category || status || scopeType);
@@ -191,28 +192,36 @@ export default function AnnouncementsScreen() {
         ) : null}
       </View>
 
-      {/* 3 bộ lọc chips gửi lên server */}
-      <FilterChipRow
+      {/* Bộ lọc xổ xuống gửi lên server */}
+      <View className="flex-row items-start gap-2 mt-3">
+      <FilterDropdown
         title="Danh mục"
         values={ANNOUNCEMENT_CATEGORY_VALUES}
         labels={ANNOUNCEMENT_CATEGORY_LABELS}
         selected={category}
-        onSelect={(value) => toggleFilter('category', value, category)}
+        expanded={openFilter === 'category'}
+        onToggle={() => setOpenFilter(openFilter === 'category' ? null : 'category')}
+        onSelect={(value) => selectFilter('category', value)}
       />
-      <FilterChipRow
+      <FilterDropdown
         title="Trạng thái"
         values={ANNOUNCEMENT_STATUS_VALUES}
         labels={ANNOUNCEMENT_STATUS_LABELS}
         selected={status}
-        onSelect={(value) => toggleFilter('status', value, status)}
+        expanded={openFilter === 'status'}
+        onToggle={() => setOpenFilter(openFilter === 'status' ? null : 'status')}
+        onSelect={(value) => selectFilter('status', value)}
       />
-      <FilterChipRow
+      <FilterDropdown
         title="Phạm vi"
         values={ANNOUNCEMENT_SCOPE_VALUES}
         labels={ANNOUNCEMENT_SCOPE_LABELS}
         selected={scopeType}
-        onSelect={(value) => toggleFilter('scopeType', value, scopeType)}
+        expanded={openFilter === 'scopeType'}
+        onToggle={() => setOpenFilter(openFilter === 'scopeType' ? null : 'scopeType')}
+        onSelect={(value) => selectFilter('scopeType', value)}
       />
+      </View>
 
       {hasActiveFilter ? (
         <TouchableOpacity
@@ -302,7 +311,7 @@ export default function AnnouncementsScreen() {
             <Feather name="arrow-left" size={18} color="#334155" />
           </TouchableOpacity>
           <View className="flex-1">
-            <Text className="text-base font-extrabold text-slate-900">Bảng tin công ty</Text>
+            <Text className="text-base font-extrabold text-slate-900">Tin tức nội bộ</Text>
             <Text className="text-[10px] font-semibold text-slate-400">
               Thông báo nội bộ & sự kiện
             </Text>
@@ -356,55 +365,67 @@ export default function AnnouncementsScreen() {
   );
 }
 
-interface FilterChipRowProps {
+interface FilterDropdownProps {
   title: string;
   values: string[];
   labels: Record<string, string>;
   selected?: string;
-  onSelect: (value: string) => void;
+  expanded: boolean;
+  onToggle: () => void;
+  onSelect: (value?: string) => void;
 }
 
-const FilterChipRow: React.FC<FilterChipRowProps> = ({
+const FilterDropdown: React.FC<FilterDropdownProps> = ({
   title,
   values,
   labels,
   selected,
+  expanded,
+  onToggle,
   onSelect,
 }) => (
-  <View className="mt-3">
+  <View className="flex-1 min-w-0">
     <Text className="text-[10px] font-extrabold text-slate-400 uppercase mb-1.5">{title}</Text>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-1.5">
-      <TouchableOpacity
-        onPress={() => {
-          if (selected) onSelect(selected);
-        }}
-        className={`px-3 py-2 rounded-xl border min-h-[38px] justify-center ${
-          !selected ? 'bg-primary border-primary' : 'bg-white border-slate-200'
-        }`}
-      >
-        <Text className={`text-[11px] font-bold ${!selected ? 'text-white' : 'text-slate-600'}`}>
-          {ALL_LABEL}
-        </Text>
-      </TouchableOpacity>
+    <TouchableOpacity
+      onPress={onToggle}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}: ${selected ? labels[selected] || selected : ALL_LABEL}`}
+      accessibilityState={{ expanded }}
+      testID={`filter-${title}-dropdown`}
+      className={`flex-row items-center justify-between gap-1 px-2 rounded-xl border min-h-[48px] ${
+        expanded || selected ? 'bg-orange-50 border-primary' : 'bg-white border-slate-200'
+      }`}
+    >
+      <Text className="flex-1 text-xs font-semibold text-slate-700" numberOfLines={1}>
+        {selected ? labels[selected] || selected : ALL_LABEL}
+      </Text>
+      <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color="#64748B" />
+    </TouchableOpacity>
 
-      {values.map((value) => {
+    {expanded ? (
+      <View className="mt-1 rounded-xl border border-slate-200 bg-white overflow-hidden">
+      {[undefined, ...values].map((value) => {
         const isActive = selected === value;
         return (
           <TouchableOpacity
-            key={value}
+            key={value || 'all'}
             onPress={() => onSelect(value)}
-            className={`px-3 py-2 rounded-xl border min-h-[38px] justify-center ${
-              isActive ? 'bg-primary border-primary' : 'bg-white border-slate-200'
+            accessibilityRole="button"
+            accessibilityState={{ selected: isActive }}
+            className={`flex-row items-center justify-between gap-2 px-3 py-3 min-h-[48px] ${
+              isActive ? 'bg-orange-50' : 'bg-white'
             }`}
-            testID={`filter-${title}-${value}`}
+            testID={`filter-${title}-${value || 'all'}`}
           >
-            <Text className={`text-[11px] font-bold ${isActive ? 'text-white' : 'text-slate-600'}`}>
-              {labels[value] || value}
+            <Text className={`flex-1 text-xs font-semibold ${isActive ? 'text-primary' : 'text-slate-600'}`}>
+              {value ? labels[value] || value : ALL_LABEL}
             </Text>
+            {isActive ? <Feather name="check" size={16} color={BrandColors.primary} /> : null}
           </TouchableOpacity>
         );
       })}
-    </ScrollView>
+      </View>
+    ) : null}
   </View>
 );
 
