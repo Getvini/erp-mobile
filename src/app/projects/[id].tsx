@@ -1,3 +1,4 @@
+import { getTaskPolicy } from '@/utils/taskPolicy';
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
@@ -34,13 +35,12 @@ import { ProductDescriptionSection } from '@/components/projects/ProductDescript
 
 import AssignPmModal from '@/components/projects/AssignPmModal';
 import TaskUpdateModal from '@/components/projects/TaskUpdateModal';
-import AddExtraTaskModal from '@/components/projects/AddExtraTaskModal';
+import AddProjectServiceModal from '@/components/projects/AddProjectServiceModal';
 import CreateAcceptanceModal from '@/components/projects/CreateAcceptanceModal';
 import AcceptanceReviewModal from '@/components/projects/AcceptanceReviewModal';
 import AddTeamMemberModal from '@/components/projects/AddTeamMemberModal';
 import EditTeamMemberRoleModal from '@/components/projects/EditTeamMemberRoleModal';
 import TaskAssignModal from '@/components/projects/TaskAssignModal';
-import CreateMonthlyWorkModal from '@/components/projects/CreateMonthlyWorkModal';
 import { safeGoBack } from '@/utils/navigation';
 import {
   getProjectManagerUser,
@@ -57,6 +57,8 @@ import {
   useConfirmProjectMutation,
   useRemoveTeamMemberMutation,
   useResumeProjectMutation,
+  useSyncServiceJobsMutation,
+  useRequestStaffingMutation,
 } from '@/hooks/queries/useProjects';
 import { useTasksByProjectQuery } from '@/hooks/queries/useTasks';
 import { useAcceptancesQuery } from '@/hooks/queries/useAcceptances';
@@ -74,6 +76,7 @@ import {
   shouldShowPauseTab,
 } from '@/utils/projectPause';
 import { formatDateToDDMMYYYY } from '@/utils/formatters';
+import { getAddServiceBlockReason } from '@/utils/projectServiceAddendum';
 
 type TabKey =
   | 'OVERVIEW'
@@ -105,6 +108,11 @@ export default function ProjectDetailScreen() {
   const { data: teamMembersData, refetch: refetchTeamMembers } = useTeamMembersQuery(project?.team?.id);
 
   const confirmProjectMutation = useConfirmProjectMutation();
+  const syncServiceJobsMutation = useSyncServiceJobsMutation();
+  const requestStaffingMutation = useRequestStaffingMutation();
+  const [showProjectStaffingModal, setShowProjectStaffingModal] = useState(false);
+  const [projectStaffingNote, setProjectStaffingNote] = useState('');
+  const isSyncing = syncServiceJobsMutation.isPending;
   const removeTeamMemberMutation = useRemoveTeamMemberMutation();
   const resumeProjectMutation = useResumeProjectMutation();
 
@@ -134,14 +142,13 @@ export default function ProjectDetailScreen() {
   const [selectedTask, setSelectedTask] = useState<TaskDetail | null>(null);
   const [assigningTask, setAssigningTask] = useState<TaskDetail | TaskDetail[] | null>(null);
   const [showAssignTask, setShowAssignTask] = useState(false);
-  const [showAddExtraTask, setShowAddExtraTask] = useState(false);
+  const [showAddService, setShowAddService] = useState(false);
   const [showCreateAcceptance, setShowCreateAcceptance] = useState(false);
   const [showReviewAcceptance, setShowReviewAcceptance] = useState(false);
   const [reviewingAcceptance, setReviewingAcceptance] = useState<AcceptanceItem | null>(null);
   const [showAddTeamMember, setShowAddTeamMember] = useState(false);
   const [editingMember, setEditingMember] = useState<any>(null);
   const [showEditMemberRole, setShowEditMemberRole] = useState(false);
-  const [showCreateMonthlyWork, setShowCreateMonthlyWork] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
 
   // P1.11 — Tạm dừng / Làm tiếp / Đóng dự án
@@ -175,19 +182,43 @@ export default function ProjectDetailScreen() {
       (m) => hasTeamMemberRole(m, 'LEAD') && m.user?.id !== assignedPmId
     )?.user;
   const isCurrentTeamLead = !!user?.id && !!leadUser?.id && user.id === leadUser.id;
+
+  // Mirror Web ProjectDetailPage.jsx:384: isProjectLead = TeamLead (TeamLead hoặc teamLeadId)
+  const isProjectLead =
+    isCurrentTeamLead ||
+    (!!user?.id &&
+      (project?.team?.teamLead?.id === user.id ||
+        (project?.team as any)?.teamLeadId === user.id));
   const isAdmin = user?.role === 'ADMIN';
   const isCurrentProjectAccount = isProjectAccountUser(
     user?.id,
     project?.team?.teamLead?.id,
     effectiveTeamMembers,
   );
-  const canAssignPm = isAdminOrBod;
+  const isOnHold = project?.status === 'ON_HOLD' || Boolean((project as any)?.isOnHold);
+  const isClosed = ['COMPLETED', 'CANCELLED'].includes(project?.status || '');
+  const isProjectInProgress =
+    !isClosed && !isOnHold && ['IN_PROGRESS', 'CONFIRMED'].includes(project?.status || '');
+  const canAssignPm = !isOnHold && !isClosed && isAdminOrBod && !assignedPmId;
+  // Mirror Web ProjectDetailPage.jsx:407-409
   const canConfirmProject =
-    projectHasAccount && (isAdmin || isCurrentProjectAccount) && project?.status === 'PENDING_CONFIRMATION';
-  const isPmOrAdmin = isAdminOrBod || isAssignedPm;
-  const canAssignTasks = projectHasAccount && (isAdmin || isCurrentProjectAccount);
+    !isOnHold &&
+    !isClosed &&
+    project?.status === 'PENDING_CONFIRMATION' &&
+    (isAdmin || isCurrentProjectAccount);
+
+  const canSyncServiceJobs =
+    !isOnHold &&
+    !isClosed &&
+    (isAdmin || user?.role === 'PM') &&
+    !isProjectLead;
+  const addServiceBlockReason = getAddServiceBlockReason(
+    user?.role, project?.status, Boolean((project as any)?.isOnHold),
+  );
+  const canAssignTasks = isProjectInProgress && (isAdmin || isCurrentProjectAccount || Boolean(user?.id && tasks.some(task => (task as any).supportLeadId === user.id)));
   const canManageTaskAssignment = useCallback(
     (task: TaskDetail): boolean => {
+      if (!isProjectInProgress) return false;
       if (!projectHasAccount) return false;
       if (isAdmin) return true;
       if (!isCurrentProjectAccount) return false;
@@ -198,20 +229,16 @@ export default function ProjectDetailScreen() {
       const assignerId = (task as any).assignerId;
       return !assignerId || assignerId === user?.id;
     },
-    [projectHasAccount, isAdmin, isCurrentProjectAccount, user?.id],
+    [isProjectInProgress, projectHasAccount, isAdmin, isCurrentProjectAccount, user?.id],
   );
 
-  // Can create monthly work if Lead, PM, Admin/BOD, or contract creator
-  const canCreateMonthlyWork =
-    projectHasAccount && (isCurrentTeamLead ||
-      isAssignedPm ||
-      isAdminOrBod ||
-      project?.contract?.createdById === user?.id ||
-      (project as any)?.createdById === user?.id);
-
-  // Can manage team members if Admin/BOD/PM/Lead, AND project has a PM assigned
-  const canManageTeam =
-    (isAdminOrBod || isAssignedPm || isCurrentTeamLead) && !!assignedPmId;
+  // Can manage team members: Admin OR (role PM AND project team role PROJECT_MANAGER), when project is active
+  const isCurrentProjectManager =
+    user?.role === 'PM' &&
+    effectiveTeamMembers.some(
+      (m: any) => m.user?.id === user?.id && hasTeamMemberRole(m, 'PROJECT_MANAGER')
+    );
+  const canManageTeam = !isClosed && !isOnHold && (isAdmin || isCurrentProjectManager);
 
   // ── P1.11: Tạm dừng / Làm tiếp / Đóng dự án ─────────────────────────────
   const projectExtras = project as any;
@@ -238,9 +265,14 @@ export default function ProjectDetailScreen() {
   const canCloseDirectNow = projectHasAccount && canCloseDirect(project?.status, pauseCtx);
   const canRequestCloseNow = projectHasAccount && !canCloseDirectNow && canRequestClose(project?.status, pauseCtx);
   const hasProjectActions =
-    canPauseDirectNow || canRequestPauseNow || canResumeNow || canCloseDirectNow || canRequestCloseNow;
+    canSyncServiceJobs ||
+    canConfirmProject ||
+    canPauseDirectNow ||
+    canRequestPauseNow ||
+    canResumeNow ||
+    canCloseDirectNow ||
+    canRequestCloseNow;
 
-  const isOnHold = project?.status === 'ON_HOLD';
   const isPendingPauseApproval = project?.status === 'PENDING_PAUSE_APPROVAL';
   const autoAcceptAt: string | undefined = projectExtras?.autoAcceptAt;
   const pausedByName: string | undefined = projectExtras?.pausedBy?.fullName;
@@ -317,6 +349,31 @@ export default function ProjectDetailScreen() {
     ]);
   };
 
+  const handleSyncServiceJobs = async () => {
+    if (!id || !canSyncServiceJobs) return;
+    try {
+      await syncServiceJobsMutation.mutateAsync(id);
+      Alert.alert('Thành công', 'Đã đồng bộ công việc dịch vụ thành công.');
+    } catch (err: any) {
+      Alert.alert('Lỗi', err?.message || 'Có lỗi xảy ra khi đồng bộ công việc dịch vụ.');
+    }
+  };
+
+  const handleRequestProjectStaffing = async () => {
+    if (!id || !projectStaffingNote.trim()) {
+      Alert.alert('Cảnh báo', 'Vui lòng nhập lý do hoặc yêu cầu nhân sự');
+      return;
+    }
+    try {
+      await requestStaffingMutation.mutateAsync({ id, note: projectStaffingNote.trim() });
+      Alert.alert('Thành công', 'Đã gửi yêu cầu bổ sung nhân sự cho dự án');
+      setShowProjectStaffingModal(false);
+      setProjectStaffingNote('');
+    } catch (err: any) {
+      Alert.alert('Lỗi', err?.message || 'Có lỗi xảy ra khi gửi yêu cầu bổ sung nhân sự');
+    }
+  };
+
   const handleConfirmProject = async () => {
     if (!id || !canConfirmProject) return;
     setIsConfirming(true);
@@ -343,11 +400,10 @@ export default function ProjectDetailScreen() {
     refetchAcceptances();
   }, [refetchAcceptances]);
 
-  const isTaskAssignable = useCallback((t: TaskDetail): boolean => {
-    if (t.assigneeId || (t as any).assignee?.id) return false;
-    const st = t.status || 'PENDING';
-    return ['PENDING', 'REJECTED', 'AWAITING_SUPPORT'].includes(st);
-  }, []);
+  const isTaskAssignable = useCallback((task: TaskDetail): boolean =>
+    getTaskPolicy(task, user, { project, members: effectiveTeamMembers, assignmentContext: 'batch' }).assign.enabled,
+    [user, project, effectiveTeamMembers],
+  );
 
   const assignableTasks = useMemo(() => tasks.filter(isTaskAssignable), [tasks, isTaskAssignable]);
   const assignableTaskIdSet = useMemo(
@@ -360,10 +416,11 @@ export default function ProjectDetailScreen() {
   }, [selectedTaskIds, assignableTaskIdSet]);
 
   const handleToggleSelectTask = useCallback((taskId: string) => {
+    if (!tasks.some(task => task.id === taskId && isTaskAssignable(task))) return;
     setSelectedTaskIds((prev) =>
       prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]
     );
-  }, []);
+  }, [tasks, isTaskAssignable]);
 
   const handleToggleSelectGroup = useCallback((groupTasks: TaskDetail[]) => {
     const assignableIds = groupTasks.filter(isTaskAssignable).map((t) => t.id);
@@ -390,16 +447,22 @@ export default function ProjectDetailScreen() {
   }, [assignableTaskIdSet, assignableTasks]);
 
   const handleAssignTaskAction = useCallback((t: TaskDetail | TaskDetail[]) => {
+    if ((Array.isArray(t) ? t : [t]).some(item => !getTaskPolicy(item, user, { project, members: effectiveTeamMembers, assignmentContext: Array.isArray(t) ? 'batch' : undefined })[
+      Array.isArray(t) ? 'assign' : item.assigneeId || item.assignee?.id || (item as any).vendor ? 'reassign' : 'assign'].enabled)) return;
     if (!Array.isArray(t)) {
       setSelectedTaskIds((prev) => prev.filter((taskId) => taskId !== t.id));
     }
     setAssigningTask(t);
     setShowAssignTask(true);
-  }, []);
+  }, [user, project, effectiveTeamMembers]);
 
-  const handleOpenAddExtraTaskAction = useCallback(() => {
-    setShowAddExtraTask(true);
-  }, []);
+  const handleOpenAddServiceAction = useCallback(() => {
+    if (addServiceBlockReason) {
+      Alert.alert('Không thể thêm dịch vụ', addServiceBlockReason);
+      return;
+    }
+    setShowAddService(true);
+  }, [addServiceBlockReason]);
 
   const queryClient = useQueryClient();
 
@@ -601,6 +664,54 @@ export default function ProjectDetailScreen() {
       {/* Cụm nút hành động — chỉ render khi đủ quyền (RBAC ẩn hoàn toàn) */}
       {hasProjectActions && (
         <View className="gap-2 border-b border-slate-100 bg-white px-3 pb-3 pt-3">
+          {/* Nút Đồng bộ & Chấp nhận dự án (chuẩn Web) */}
+          {(canSyncServiceJobs || canConfirmProject) && (
+            <View className="flex-row gap-2">
+              {canSyncServiceJobs && (
+                <TouchableOpacity
+                  className={`h-12 flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-primary ${
+                    isSyncing ? 'opacity-60' : ''
+                  }`}
+                  onPress={handleSyncServiceJobs}
+                  disabled={isSyncing}
+                  activeOpacity={0.85}
+                >
+                  {isSyncing ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Feather name="refresh-cw" size={16} color="#FFFFFF" />
+                      <Text className="text-sm font-bold text-white" numberOfLines={1}>
+                        Đồng bộ
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {canConfirmProject && (
+                <TouchableOpacity
+                  className={`h-12 flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-emerald-600 ${
+                    isConfirming ? 'opacity-60' : ''
+                  }`}
+                  onPress={handleConfirmProject}
+                  disabled={isConfirming}
+                  activeOpacity={0.85}
+                >
+                  {isConfirming ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Feather name="check-circle" size={16} color="#FFFFFF" />
+                      <Text className="text-sm font-bold text-white" numberOfLines={1}>
+                        Chấp nhận
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
           {(canResumeNow || canCloseDirectNow || canRequestCloseNow) && (
             <View className="flex-row gap-2">
               {canResumeNow && (
@@ -735,19 +846,22 @@ export default function ProjectDetailScreen() {
         />
       ) : activeTab === 'TASKS' ? (
         <ProjectTasksTab
+          project={{ ...project, team: { ...project?.team, members: effectiveTeamMembers } }}
           tasks={tasks}
           isLoading={isTasksLoadingEffective}
           isRefreshing={isRefreshing}
           onRefresh={handleRefresh}
           projectStatus={project?.status}
           canAssignTasks={canAssignTasks}
-          canCreateProjectWork={projectHasAccount && isPmOrAdmin}
+          canCreateProjectWork={!addServiceBlockReason}
           canManageTaskAssignment={canManageTaskAssignment}
           selectedTaskIds={validSelectedTaskIds}
           onToggleSelectTask={handleToggleSelectTask}
           onToggleSelectGroup={handleToggleSelectGroup}
           onAssignTask={handleAssignTaskAction}
-          onOpenAddExtraTask={handleOpenAddExtraTaskAction}
+          onOpenAddService={handleOpenAddServiceAction}
+          isProjectLead={isProjectInProgress && (isProjectLead || isCurrentProjectAccount)}
+          onOpenRequestStaffing={() => setShowProjectStaffingModal(true)}
         />
       ) : (
         <ScrollView
@@ -790,8 +904,6 @@ export default function ProjectDetailScreen() {
                   setShowEditMemberRole(true);
                 }}
                 canManageTeam={canManageTeam}
-                onOpenCreateMonthlyWork={() => setShowCreateMonthlyWork(true)}
-                canCreateMonthlyWork={canCreateMonthlyWork}
               />
             </>
           )}
@@ -804,6 +916,7 @@ export default function ProjectDetailScreen() {
 
           {activeTab === 'MY_TASKS' && (
             <ProjectMyTasksTab
+              project={{ ...project, team: { ...project?.team, members: effectiveTeamMembers } }}
               projectId={String(id || '')}
               tasks={tasks}
               isLoading={isTasksLoadingEffective}
@@ -818,6 +931,7 @@ export default function ProjectDetailScreen() {
             <ProjectServiceAddendumTab
               project={effectiveProject}
               user={user}
+              tasks={tasks}
               budgetSummary={budgetQuery.data}
               onChanged={handleRefresh}
             />
@@ -957,7 +1071,7 @@ export default function ProjectDetailScreen() {
             />
           )}
 
-          {showAssignTask && projectHasAccount && (
+          {showAssignTask && (
             <TaskAssignModal
               visible={showAssignTask}
               onClose={() => {
@@ -965,6 +1079,7 @@ export default function ProjectDetailScreen() {
                 setAssigningTask(null);
               }}
               task={assigningTask}
+              assignmentContext={Array.isArray(assigningTask) ? 'batch' : undefined}
               project={project}
               teamMembers={effectiveTeamMembers}
               onSuccess={() => {
@@ -980,15 +1095,11 @@ export default function ProjectDetailScreen() {
             />
           )}
 
-          {showAddExtraTask && projectHasAccount && (
-            <AddExtraTaskModal
-              visible={showAddExtraTask}
-              onClose={() => setShowAddExtraTask(false)}
-              projectId={id}
-              onSuccess={() => {
-                loadTasks();
-                loadProjectDetail();
-              }}
+          {showAddService && project && (
+            <AddProjectServiceModal
+              project={project}
+              role={user?.role}
+              onClose={() => setShowAddService(false)}
             />
           )}
 
@@ -1016,18 +1127,6 @@ export default function ProjectDetailScreen() {
               onSuccess={() => {
                 loadAcceptances();
                 loadProjectDetail();
-              }}
-            />
-          )}
-
-          {showCreateMonthlyWork && projectHasAccount && (
-            <CreateMonthlyWorkModal
-              visible={showCreateMonthlyWork}
-              onClose={() => setShowCreateMonthlyWork(false)}
-              projectId={id}
-              onSuccess={() => {
-                loadProjectDetail();
-                loadTasks();
               }}
             />
           )}

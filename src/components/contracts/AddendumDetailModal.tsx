@@ -8,7 +8,6 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Pressable,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import {
@@ -21,8 +20,6 @@ import {
   canResubmitAddendum,
   canSaleReviewAddendum,
   computeAddendumLineTotals,
-  getAddendumMinimumPrice,
-  getAddendumRecommendedPrice,
 } from '@/services/contractAddendumService';
 import {
   useBodApproveAddendumMutation,
@@ -33,17 +30,64 @@ import {
 } from '@/hooks/queries/useContractAddendums';
 import {
   formatDateToDDMMYYYY,
+  formatNumber,
   formatNumberInput,
   parseNumberInput,
   formatVNDFull,
 } from '@/utils/formatters';
-import AddendumRejectModal from './AddendumRejectModal';
+import { getServiceTheme } from '@/services/opportunityService';
+import { ServiceJobAccordion } from '@/components/opportunities/ServiceJobAccordion';
+import AddendumRejectModal from '@/components/contracts/AddendumRejectModal';
+import {
+  getMinimumSellingPrice,
+  getRecommendedSellingPrice,
+  getProfitMargin,
+} from '@/utils/catalogPricing';
 
 const STANDALONE = 'STANDALONE';
 
-type PriceMode = 'recommended' | 'minimum' | 'custom';
+// ---------------------------------------------------------------------------
+// Helpers tính toán tài chính & Định dạng dùng chung
+// ---------------------------------------------------------------------------
 
-interface GroupedService {
+export const calculateProfitMargin = (sellingPrice: number, costPrice: number, budget = 0) =>
+  getProfitMargin(sellingPrice, Number(costPrice || 0) + Number(budget || 0));
+
+export const getPricingValues = (costPrice: number, budget = 0) => {
+  const totalCost = Number(costPrice || 0) + Number(budget || 0);
+  return {
+    minPrice: getMinimumSellingPrice(totalCost),
+    recommendedPrice: getRecommendedSellingPrice(totalCost),
+  };
+};
+
+const getMarginBadgeStyle = (margin: number) => {
+  if (margin >= 40) {
+    return {
+      bg: '#ECFDF5',
+      border: '#A7F3D0',
+      text: '#047857',
+    };
+  }
+  if (margin >= 20) {
+    return {
+      bg: '#FFF7ED',
+      border: '#FDCB9E',
+      text: '#D97010',
+    };
+  }
+  return {
+    bg: '#FEF2F2',
+    border: '#FECACA',
+    text: '#B91C1C',
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Kiểu dữ liệu gom nhóm
+// ---------------------------------------------------------------------------
+
+export interface GroupedService {
   key: string;
   serviceName: string;
   unit: string;
@@ -53,15 +97,22 @@ interface GroupedService {
   lineVat: number;
   lineTotalWithVat: number;
   itemIndexes: number[];
+  norm?: number;
+  jobs?: any[];
+  budget?: number;
+  rawCost?: number;
 }
 
-interface GroupedPackage {
+export interface GroupedPackage {
   key: string;
   packageName: string;
   quantity: number;
-  /** Tổng giá bán của gói (chưa VAT). */
   sellingPrice: number;
   cost: number;
+  rawCostPrice: number;
+  budget: number;
+  minPrice: number;
+  recommendedPrice: number;
   vat: number;
   totalWithVat: number;
   services: GroupedService[];
@@ -73,7 +124,6 @@ const getServiceKey = (item: AddendumServiceLine, index: number): string =>
 
 /**
  * Gom nhóm dòng dịch vụ của phụ lục thành "Gói" và "Dịch vụ lẻ"
- * — mirror erp-UI ContractAddendums.jsx:61-167 (buildGroupedItems).
  */
 export const buildAddendumGroups = (items: AddendumServiceLine[]) => {
   const packages: Record<string, GroupedPackage> = {};
@@ -84,6 +134,9 @@ export const buildAddendumGroups = (items: AddendumServiceLine[]) => {
     const totals = computeAddendumLineTotals({ ...item, quantity });
     const unit = String(item.unit || '');
     const serviceName = String(item.serviceName || item.name || 'Dịch vụ');
+    const cost = Number(item.cost || item.costPrice || 0);
+    const budget = Number(item.budget || 0);
+    const jobs = item.jobs || [];
 
     const packageName = item.packageName ? String(item.packageName) : '';
     const isPackageLine = Boolean(packageName) && packageName !== STANDALONE;
@@ -98,9 +151,12 @@ export const buildAddendumGroups = (items: AddendumServiceLine[]) => {
           quantity: 0,
           sellingPrice: Number(item.sellingPrice || 0),
           lineCost: 0,
+          rawCost: 0,
+          budget: 0,
           lineVat: 0,
           lineTotalWithVat: 0,
           itemIndexes: [],
+          jobs,
         };
       }
       const group = standaloneMap[key];
@@ -108,9 +164,14 @@ export const buildAddendumGroups = (items: AddendumServiceLine[]) => {
       group.sellingPrice = Number(item.sellingPrice || 0);
       group.unit = group.unit || unit;
       group.lineCost += totals.lineCost;
+      group.rawCost = (group.rawCost || 0) + cost * quantity;
+      group.budget = (group.budget || 0) + budget * quantity;
       group.lineVat += totals.lineVat;
       group.lineTotalWithVat += totals.lineTotalWithVat;
       group.itemIndexes.push(index);
+      if (!group.jobs || group.jobs.length === 0) {
+        group.jobs = jobs;
+      }
       return;
     }
 
@@ -122,6 +183,10 @@ export const buildAddendumGroups = (items: AddendumServiceLine[]) => {
         quantity: 1,
         sellingPrice: 0,
         cost: 0,
+        rawCostPrice: 0,
+        budget: 0,
+        minPrice: 0,
+        recommendedPrice: 0,
         vat: 0,
         totalWithVat: 0,
         services: [],
@@ -139,21 +204,32 @@ export const buildAddendumGroups = (items: AddendumServiceLine[]) => {
         quantity: 0,
         sellingPrice: Number(item.sellingPrice || 0),
         lineCost: 0,
+        rawCost: 0,
+        budget: 0,
         lineVat: 0,
         lineTotalWithVat: 0,
         itemIndexes: [],
+        norm: Number(item.norm || (item.packageQuantity ? quantity / item.packageQuantity : 1)) || 1,
+        jobs,
       };
       pkg.services.push(child);
     }
     child.quantity += quantity;
     child.sellingPrice = Number(item.sellingPrice || 0);
     child.lineCost += totals.lineCost;
+    child.rawCost = (child.rawCost || 0) + cost * quantity;
+    child.budget = (child.budget || 0) + budget * quantity;
     child.lineVat += totals.lineVat;
     child.lineTotalWithVat += totals.lineTotalWithVat;
     child.itemIndexes.push(index);
+    if (!child.jobs || child.jobs.length === 0) {
+      child.jobs = jobs;
+    }
 
     pkg.sellingPrice += totals.lineSellingPrice;
     pkg.cost += totals.lineCost;
+    pkg.rawCostPrice += cost * quantity;
+    pkg.budget += budget * quantity;
     pkg.vat += totals.lineVat;
     pkg.totalWithVat += totals.lineTotalWithVat;
     pkg.itemIndexes.push(index);
@@ -170,153 +246,13 @@ export const buildAddendumGroups = (items: AddendumServiceLine[]) => {
 };
 
 // ---------------------------------------------------------------------------
-// Khối hiển thị nhỏ
-// ---------------------------------------------------------------------------
-
-const Field = ({
-  label,
-  value,
-  strong,
-}: {
-  label: string;
-  value: string;
-  strong?: boolean;
-}) => (
-  <View className="flex-row items-center justify-between gap-[8px]">
-    <Text className="text-[11px] text-slate-500">{label}</Text>
-    <Text
-      className={`text-[12px] ${strong ? 'font-black text-slate-900' : 'font-semibold text-slate-700'}`}
-      style={{ flexShrink: 1, textAlign: 'right' }}
-    >
-      {value}
-    </Text>
-  </View>
-);
-
-const PriceChip = ({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) => (
-  <TouchableOpacity
-    onPress={onPress}
-    activeOpacity={0.8}
-    hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-    className={`flex-1 min-h-[40px] items-center justify-center rounded-[8px] border ${
-      active ? 'bg-[#1D4ED8] border-[#1D4ED8]' : 'bg-white border-blue-200'
-    }`}
-  >
-    <Text
-      className={`text-[10px] font-bold ${active ? 'text-white' : 'text-[#1D4ED8]'}`}
-      numberOfLines={1}
-    >
-      {label}
-    </Text>
-  </TouchableOpacity>
-);
-
-const ServiceLineCard = ({
-  serviceName,
-  unit,
-  quantity,
-  sellingPrice,
-  lineCost,
-  lineVat,
-  lineTotalWithVat,
-  quantitySuffix,
-  editable,
-  priceMode,
-  onSelectMode,
-  onChangePrice,
-  compact,
-}: {
-  serviceName: string;
-  unit: string;
-  quantity: number;
-  sellingPrice: number;
-  lineCost: number;
-  lineVat: number;
-  lineTotalWithVat: number;
-  quantitySuffix?: string;
-  editable: boolean;
-  priceMode: PriceMode;
-  onSelectMode: (mode: PriceMode) => void;
-  onChangePrice: (value: number) => void;
-  compact?: boolean;
-}) => (
-  <View
-    className={`rounded-[10px] border p-[10px] gap-[5px] ${
-      compact ? 'bg-white border-[#E0F2FE] ml-[6px]' : 'bg-slate-50 border-slate-200'
-    }`}
-  >
-    <Text
-      className={`${compact ? 'text-[12px] text-[#0C4A6E]' : 'text-[13px] text-slate-800'} font-bold`}
-    >
-      {serviceName}
-    </Text>
-
-    <Field
-      label="Số lượng"
-      value={`${quantity} ${unit}${quantitySuffix ? ` ${quantitySuffix}` : ''}`.trim()}
-    />
-    <Field label="Đơn giá" value={formatVNDFull(Math.round(sellingPrice))} />
-    <Field label="Giá vốn" value={formatVNDFull(lineCost)} />
-    <Field label="VAT (8%)" value={formatVNDFull(lineVat)} />
-    <Field label="Thành tiền" value={formatVNDFull(lineTotalWithVat)} strong />
-
-    {editable && (
-      <View className="gap-[6px] mt-[4px] pt-[8px] border-t border-t-blue-100">
-        <View className="flex-row gap-[6px]">
-          <PriceChip
-            label="Giá đề xuất"
-            active={priceMode === 'recommended'}
-            onPress={() => onSelectMode('recommended')}
-          />
-          <PriceChip
-            label="Giá tối thiểu"
-            active={priceMode === 'minimum'}
-            onPress={() => onSelectMode('minimum')}
-          />
-          <PriceChip
-            label="Tùy chỉnh"
-            active={priceMode === 'custom'}
-            onPress={() => onSelectMode('custom')}
-          />
-        </View>
-        <View className="flex-row items-center gap-[6px]">
-          <TextInput
-            value={formatNumberInput(String(Math.round(sellingPrice)))}
-            onChangeText={(text) => onChangePrice(parseNumberInput(text))}
-            editable={priceMode === 'custom'}
-            keyboardType="numeric"
-            placeholder="0"
-            placeholderTextColor="#94A3B8"
-            className={`flex-1 min-h-[44px] rounded-[10px] border px-[10px] text-right text-[13px] font-bold ${
-              priceMode === 'custom'
-                ? 'border-[#1D4ED8] bg-white text-[#1D4ED8]'
-                : 'border-slate-200 bg-slate-100 text-slate-400'
-            }`}
-          />
-          <Text className="text-[11px] font-bold text-slate-500">VNĐ</Text>
-        </View>
-      </View>
-    )}
-  </View>
-);
-
-// ---------------------------------------------------------------------------
-// Modal chi tiết phụ lục
+// Modal chi tiết & sửa giá phụ lục
 // ---------------------------------------------------------------------------
 
 export interface AddendumDetailModalProps {
   visible: boolean;
   addendum: ContractAddendum | null;
   contractId: string;
-  /** Role hiện tại (đã uppercase) — dùng cho RBAC duyệt / gửi lại / sửa giá. */
   role?: string;
   onClose: () => void;
 }
@@ -334,7 +270,7 @@ export default function AddendumDetailModal({
   }, [addendum]);
 
   const [editableItems, setEditableItems] = useState<AddendumServiceLine[]>(selectedItems);
-  const [priceModes, setPriceModes] = useState<Record<string, PriceMode>>({});
+  const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({});
   const [isRejectVisible, setIsRejectVisible] = useState(false);
 
   const saleApproveMutation = useSaleApproveAddendumMutation();
@@ -350,17 +286,38 @@ export default function AddendumDetailModal({
     bodApproveMutation.isPending ||
     bodRejectMutation.isPending;
 
-  /**
-   * Khởi tạo danh sách dòng có thể sửa mỗi khi mở modal cho một phụ lục khác.
-   * Điều chỉnh state trong lúc render thay vì useEffect (tránh set-state-in-effect).
-   */
+  // Khởi tạo danh sách dòng có thể sửa mỗi khi mở modal
   const editSignature = visible ? `${addendum?.id ?? ''}` : '';
   const [syncedEditSignature, setSyncedEditSignature] = useState(editSignature);
   if (editSignature !== syncedEditSignature) {
     setSyncedEditSignature(editSignature);
     if (visible) {
-      setEditableItems(selectedItems);
-      setPriceModes({});
+      setEditableItems(
+        selectedItems.map((item) => {
+          const costPrice = Number(item.cost || item.costPrice || 0);
+          const budget = Number(item.budget || 0);
+          const pricing = getPricingValues(costPrice, budget);
+          const quantity = Number(item.quantity || 1) || 1;
+          const packageQuantity = Number(item.packageQuantity || 1) || 1;
+          const norm = Number(item.norm || (item.packageName && item.packageName !== STANDALONE ? quantity / packageQuantity : 1)) || 1;
+          const sellingPrice = Number(item.sellingPrice || 0);
+          return {
+            ...item,
+            quantity,
+            packageQuantity,
+            norm,
+            costPrice,
+            budget,
+            minPrice: item.minPrice || pricing.minPrice,
+            recommendedPrice: item.recommendedPrice || pricing.recommendedPrice,
+            customPrice: sellingPrice,
+            selectedPrice: sellingPrice,
+            sellingPrice,
+            profitMargin: calculateProfitMargin(sellingPrice, costPrice, budget),
+          };
+        }),
+      );
+      setExpandedPackages({});
       setIsRejectVisible(false);
     }
   }
@@ -374,82 +331,234 @@ export default function AddendumDetailModal({
   };
   const typeLabel = addendum?.type ? ADDENDUM_TYPE_LABELS[String(addendum.type)] : '';
 
+  const isRejected = status === 'SALE_REJECTED' || status === 'BOD_REJECTED';
+  const isDraft = status === 'DRAFT' || !status;
+  const isPendingSale = status === 'PENDING_SALE';
+
   const canSaleReview = canSaleReviewAddendum(role, status);
   const canBodReview = canBodReviewAddendum(role, status);
-  const canResubmit = canResubmitAddendum(role, status);
-  const canEditPrices = canEditAddendumPrices(role, status);
   const canReview = canSaleReview || canBodReview;
 
-  const grouped = useMemo(() => buildAddendumGroups(editableItems), [editableItems]);
+  // Cho phép sửa giá & ngân sách khi: Phụ lục bị từ chối, là Nháp, đang chờ Sale duyệt, hoặc RBAC cho phép
+  const canEditPrices = isRejected || isDraft || isPendingSale || canEditAddendumPrices(role, status);
 
-  const totalWithVat = useMemo(
-    () =>
-      editableItems.reduce(
-        (sum, line) => sum + computeAddendumLineTotals(line).lineTotalWithVat,
-        0,
-      ),
-    [editableItems],
-  );
+  // Cho phép gửi lại khi phụ lục bị từ chối hoặc DRAFT hoặc canResubmitAddendum
+  const canResubmit = isRejected || isDraft || canResubmitAddendum(role, status);
 
-  // -------------------------------------------------------------------------
-  // Cập nhật giá (giữ NGUYÊN độ dài & thứ tự serviceId của mảng selectedItems)
-  // -------------------------------------------------------------------------
-  const updateLinePrice = (itemIndexes: number[], value: number) => {
+  // Gom nhóm hiển thị Gói & Dịch vụ lẻ
+  const displayGroups = useMemo(() => {
+    const packages: Record<string, {
+      key: string;
+      name: string;
+      quantity: number;
+      rawCostPrice: number;
+      costPrice: number;
+      budget: number;
+      minPrice: number;
+      recommendedPrice: number;
+      customPrice: number;
+      selectedPrice: number;
+      profitMargin: number;
+      totalWithVat: number;
+      items: any[];
+    }> = {};
+    const standalone: any[] = [];
+
+    editableItems.forEach((item, index) => {
+      const isPackage = Boolean(item.packageName) && item.packageName !== STANDALONE;
+      const quantity = Number(item.quantity || 1) || 1;
+      const costPrice = Number(item.cost || item.costPrice || 0);
+      const budget = Number(item.budget || 0);
+      const totalCost = costPrice + budget;
+      const pricing = getPricingValues(costPrice, budget);
+      const minPrice = item.minPrice || pricing.minPrice;
+      const recommendedPrice = item.recommendedPrice || pricing.recommendedPrice;
+      const selectedPrice = Number(item.selectedPrice !== undefined ? item.selectedPrice : item.sellingPrice || 0);
+      const customPrice = Number(item.customPrice !== undefined ? item.customPrice : selectedPrice);
+      const norm = Number(item.norm || (item.packageQuantity ? quantity / item.packageQuantity : 1)) || 1;
+      const profitMargin = calculateProfitMargin(selectedPrice, costPrice, budget);
+
+      const enrichedItem = {
+        ...item,
+        originalIndex: index,
+        quantity,
+        costPrice,
+        budget,
+        totalCost,
+        minPrice,
+        recommendedPrice,
+        selectedPrice,
+        customPrice,
+        norm,
+        profitMargin,
+      };
+
+      if (!isPackage) {
+        standalone.push(enrichedItem);
+      } else {
+        const key = String(item.packageKey || item.servicePackageId || item.packageName);
+        if (!packages[key]) {
+          packages[key] = {
+            key,
+            name: item.packageName || 'Gói dịch vụ',
+            quantity: Number(item.packageQuantity || 1),
+            rawCostPrice: 0,
+            costPrice: 0,
+            budget: 0,
+            minPrice: 0,
+            recommendedPrice: 0,
+            customPrice: 0,
+            selectedPrice: 0,
+            profitMargin: 0,
+            totalWithVat: 0,
+            items: [],
+          };
+        }
+
+        packages[key].rawCostPrice += costPrice * norm;
+        packages[key].costPrice += totalCost * norm;
+        packages[key].budget += budget * norm;
+        packages[key].minPrice += minPrice * norm;
+        packages[key].recommendedPrice += recommendedPrice * norm;
+        packages[key].customPrice += customPrice * norm;
+        packages[key].selectedPrice += selectedPrice * norm;
+        packages[key].items.push(enrichedItem);
+      }
+    });
+
+    return {
+      packages: Object.values(packages).map((pkg) => {
+        const profitMargin = calculateProfitMargin(pkg.selectedPrice, pkg.costPrice);
+        const revenue = pkg.selectedPrice * pkg.quantity;
+        const totalWithVat = revenue * 1.08;
+        return {
+          ...pkg,
+          profitMargin,
+          totalWithVat,
+        };
+      }),
+      standalone,
+    };
+  }, [editableItems]);
+
+  // Tổng kết tài chính
+  const totals = useMemo(() => {
+    const res = editableItems.reduce(
+      (acc, item) => {
+        const selectedPrice = Number(item.selectedPrice !== undefined ? item.selectedPrice : item.sellingPrice || 0);
+        const costPrice = Number(item.cost || item.costPrice || 0);
+        const budget = Number(item.budget || 0);
+        const quantity = Number(item.quantity || 1);
+        const revenue = selectedPrice * quantity;
+        const cost = (costPrice + budget) * quantity;
+        const vat = revenue * 0.08;
+        return {
+          revenue: acc.revenue + revenue,
+          cost: acc.cost + cost,
+          vat: acc.vat + vat,
+          totalWithVat: acc.totalWithVat + revenue + vat,
+        };
+      },
+      { revenue: 0, cost: 0, vat: 0, totalWithVat: 0 }
+    );
+    const margin = res.revenue > 0 ? ((res.revenue - res.cost) / res.revenue) * 100 : 0;
+    return { ...res, margin };
+  }, [editableItems]);
+
+  // Sửa giá bán tùy chỉnh dịch vụ lẻ hoặc con
+  const handleCustomPriceChange = (index: number, valStr: string, packageLine = false) => {
+    const enteredPrice = parseNumberInput(valStr);
     setEditableItems((prev) =>
-      prev.map((item, index) =>
-        itemIndexes.includes(index) ? { ...item, sellingPrice: value } : item,
-      ),
+      prev.map((item, i) => {
+        if (i === index) {
+          const norm = packageLine
+            ? Number(item.norm || (item.packageQuantity ? (item.quantity || 1) / item.packageQuantity : 1)) || 1
+            : 1;
+          const numValue = enteredPrice / norm;
+          const costPrice = Number(item.cost || item.costPrice || 0);
+          const budget = Number(item.budget || 0);
+          return {
+            ...item,
+            customPrice: numValue,
+            selectedPrice: numValue,
+            sellingPrice: numValue,
+            profitMargin: calculateProfitMargin(numValue, costPrice, budget),
+          };
+        }
+        return item;
+      })
     );
   };
 
-  const updatePackagePrice = (pkg: GroupedPackage, value: number) => {
-    const newTotal = Number(value || 0);
+  // Sửa ngân sách dịch vụ lẻ hoặc con
+  const handleBudgetChange = (index: number, valStr: string) => {
+    if (!editableItems[index] || !canEditPrices || isMutating) return;
+    const newBudget = parseNumberInput(valStr);
+    setEditableItems((prev) =>
+      prev.map((item, i) => {
+        if (i === index) {
+          const costPrice = Number(item.cost || item.costPrice || 0);
+          const { minPrice, recommendedPrice } = getPricingValues(costPrice, newBudget);
+          const currentPrice = Number(item.selectedPrice !== undefined ? item.selectedPrice : item.sellingPrice || 0);
+          return {
+            ...item,
+            budget: newBudget,
+            minPrice,
+            recommendedPrice,
+            selectedPrice: currentPrice,
+            sellingPrice: currentPrice,
+            profitMargin: calculateProfitMargin(currentPrice, costPrice, newBudget),
+          };
+        }
+        return item;
+      })
+    );
+  };
+
+  // Sửa giá tổng gói dịch vụ (Phân bổ tỷ lệ)
+  const handlePackageCustomPriceChange = (packageKey: string, valStr: string) => {
+    const totalPrice = parseNumberInput(valStr);
     setEditableItems((prev) => {
-      const indexSet = new Set(pkg.itemIndexes);
-      const currentTotal = pkg.itemIndexes.reduce((sum, index) => {
+      const indexes = prev.reduce<number[]>((result, item, index) => {
+        const key = String(item.packageKey || item.servicePackageId || item.packageName);
+        return key === String(packageKey) ? [...result, index] : result;
+      }, []);
+      if (indexes.length === 0) return prev;
+
+      const weights = indexes.map((index) => {
         const item = prev[index];
-        return sum + Number(item?.sellingPrice || 0) * Number(item?.quantity || 1);
-      }, 0);
-      const totalCost = pkg.itemIndexes.reduce((sum, index) => {
-        const item = prev[index];
-        return sum + Number(item?.cost || 0) * Number(item?.quantity || 1);
-      }, 0);
-      const fallbackShare =
-        pkg.itemIndexes.length > 0 ? newTotal / pkg.itemIndexes.length : 0;
+        const costPrice = Number(item.cost || item.costPrice || 0);
+        const budget = Number(item.budget || 0);
+        const norm = Number(item.norm || (item.packageQuantity ? (item.quantity || 1) / item.packageQuantity : 1)) || 1;
+        const recommended = getPricingValues(costPrice, budget).recommendedPrice;
+        return Number(item.recommendedPrice || recommended || costPrice || 1) * norm;
+      });
+      const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+      let allocated = 0;
 
       return prev.map((item, index) => {
-        if (!indexSet.has(index)) return item;
-        const quantity = Number(item.quantity || 1) || 1;
-        const currentLinePrice = Number(item.sellingPrice || 0) * quantity;
-        const costLine = Number(item.cost || 0) * quantity;
-        // Phân bổ lại theo tỉ lệ doanh thu, fallback theo giá vốn (ContractAddendums.jsx:424-458).
-        const newLinePrice =
-          currentTotal > 0
-            ? currentLinePrice * (newTotal / currentTotal)
-            : totalCost > 0
-              ? newTotal * (costLine / totalCost)
-              : fallbackShare;
-        return { ...item, sellingPrice: newLinePrice / quantity };
+        const position = indexes.indexOf(index);
+        if (position < 0) return item;
+        const norm = Number(item.norm || (item.packageQuantity ? (item.quantity || 1) / item.packageQuantity : 1)) || 1;
+        const linePrice = position === indexes.length - 1
+          ? Math.max(0, totalPrice - allocated)
+          : Math.round(totalPrice * (totalWeight > 0 ? weights[position] / totalWeight : 1 / indexes.length));
+        allocated += linePrice;
+        const newSellingPrice = linePrice / norm;
+        const costPrice = Number(item.cost || item.costPrice || 0);
+        const budget = Number(item.budget || 0);
+        return {
+          ...item,
+          customPrice: newSellingPrice,
+          selectedPrice: newSellingPrice,
+          sellingPrice: newSellingPrice,
+          profitMargin: calculateProfitMargin(newSellingPrice, costPrice, budget),
+        };
       });
     });
   };
 
-  const getMode = (key: string): PriceMode => priceModes[key] || 'custom';
-
-  const selectMode = (
-    key: string,
-    mode: PriceMode,
-    costBase: number,
-    applyPrice: (value: number) => void,
-  ) => {
-    setPriceModes((prev) => ({ ...prev, [key]: mode }));
-    if (mode === 'recommended') applyPrice(getAddendumRecommendedPrice(costBase));
-    else if (mode === 'minimum') applyPrice(getAddendumMinimumPrice(costBase));
-  };
-
-  // -------------------------------------------------------------------------
   // Hành động duyệt / từ chối / gửi lại
-  // -------------------------------------------------------------------------
   const closeAfterAction = (message: string) => {
     setIsRejectVisible(false);
     onClose();
@@ -463,11 +572,16 @@ export default function AddendumDetailModal({
   const runSaleApprove = async () => {
     if (!addendum) return;
     try {
-      // Sale duyệt: gửi selectedItems GIỮ NGUYÊN độ dài & thứ tự serviceId.
+      const payloadItems = editableItems.map((item, index) => ({
+        ...selectedItems[index],
+        ...item,
+        sellingPrice: Math.round(Number(item.selectedPrice !== undefined ? item.selectedPrice : item.sellingPrice || 0)),
+        budget: Number(item.budget || 0),
+      }));
       await saleApproveMutation.mutateAsync({
         id: addendum.id,
         contractId,
-        selectedItems: editableItems,
+        selectedItems: payloadItems,
       });
       closeAfterAction('Đã duyệt phụ lục');
     } catch (err) {
@@ -478,7 +592,6 @@ export default function AddendumDetailModal({
   const runBodApprove = async () => {
     if (!addendum) return;
     try {
-      // BOD duyệt: chỉ gửi note (backend tự sinh công việc).
       await bodApproveMutation.mutateAsync({ id: addendum.id, contractId, note: '' });
       closeAfterAction('Đã duyệt và sinh công việc');
     } catch (err) {
@@ -489,13 +602,18 @@ export default function AddendumDetailModal({
   const runResubmit = async () => {
     if (!addendum) return;
     try {
-      // ⚠️ Backend resubmit chỉ đọc { selectedItems, name, description } — KHÔNG gửi note.
+      const payloadItems = editableItems.map((item, index) => ({
+        ...selectedItems[index],
+        ...item,
+        sellingPrice: Math.round(Number(item.selectedPrice !== undefined ? item.selectedPrice : item.sellingPrice || 0)),
+        budget: Number(item.budget || 0),
+      }));
       await resubmitMutation.mutateAsync({
         id: addendum.id,
         contractId,
-        selectedItems: editableItems,
+        selectedItems: payloadItems,
       });
-      closeAfterAction('Đã gửi lại phụ lục');
+      closeAfterAction('Đã gửi lại phụ lục thành công');
     } catch (err) {
       handleError(err);
     }
@@ -516,7 +634,7 @@ export default function AddendumDetailModal({
   };
 
   const confirmResubmit = () =>
-    Alert.alert('Xác nhận gửi lại', 'Gửi lại phụ lục này để duyệt từ bước Sale?', [
+    Alert.alert('Xác nhận gửi lại', 'Gửi lại phụ lục với giá bán và ngân sách đã cập nhật?', [
       { text: 'Hủy', style: 'cancel' },
       { text: 'Gửi lại', onPress: () => void runResubmit() },
     ]);
@@ -538,14 +656,22 @@ export default function AddendumDetailModal({
 
   if (!addendum) return null;
 
-  const hasServices = grouped.packages.length > 0 || grouped.standalone.length > 0;
+  const hasServices = displayGroups.packages.length > 0 || displayGroups.standalone.length > 0;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable className="flex-1 bg-slate-900/50 justify-end" onPress={onClose}>
-        <Pressable
-          className="bg-white rounded-t-[24px] max-h-[90%]"
-          onPress={(e) => e.stopPropagation()}
+      <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.5)', justifyContent: 'flex-end' }}>
+        {/* Nền mờ bấm ra ngoài để đóng */}
+        <TouchableOpacity
+          activeOpacity={1}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+          onPress={onClose}
+        />
+
+        {/* Khung nội dung Bottom Sheet */}
+        <View
+          style={{ maxHeight: '90%', width: '100%' }}
+          className="bg-white rounded-t-[24px] flex-col"
         >
           {/* Header */}
           <View className="px-[20px] pt-[10px] pb-[12px] border-b border-b-slate-100">
@@ -556,13 +682,13 @@ export default function AddendumDetailModal({
             <View className="flex-row items-start justify-between gap-[10px]">
               <View className="flex-row items-start gap-[10px]" style={{ flex: 1 }}>
                 <View
-                  style={{ backgroundColor: '#F3E8FF' }}
-                  className="w-[38px] h-[38px] rounded-[10px] items-center justify-center"
+                  style={{ backgroundColor: '#FFF7ED', borderColor: '#FDCB9E' }}
+                  className="w-[40px] h-[40px] rounded-[11px] items-center justify-center border"
                 >
-                  <Feather name="file-text" size={18} color="#9333EA" />
+                  <Feather name="file-text" size={19} color="#D97010" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text className="text-[16px] font-extrabold text-slate-900">
+                  <Text className="text-[16px] font-extrabold text-slate-900" numberOfLines={2}>
                     {addendum.name || 'Phụ lục hợp đồng'}
                   </Text>
                   <View className="flex-row flex-wrap items-center gap-[6px] mt-[5px]">
@@ -612,11 +738,13 @@ export default function AddendumDetailModal({
             </View>
           </View>
 
-          {/* Body */}
+          {/* Body ScrollView — hỗ trợ cuộn mượt và nested scroll */}
           <ScrollView
-            style={{ flexShrink: 1 }}
-            contentContainerClassName="p-[16px] gap-[14px]"
-            showsVerticalScrollIndicator={false}
+            style={{ flexGrow: 0 }}
+            contentContainerStyle={{ padding: 16, paddingBottom: 24, gap: 12 }}
+            showsVerticalScrollIndicator={true}
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled={true}
           >
             {/* Ghi chú */}
             {!!addendum.description && (
@@ -649,14 +777,14 @@ export default function AddendumDetailModal({
             {canResubmit && (
               <View className="bg-[#EFF6FF] border border-[#BFDBFE] rounded-[12px] p-[12px]">
                 <Text className="text-[12px] font-semibold text-[#1E3A8A] leading-[17px]">
-                  Phụ lục đã bị từ chối. PM có thể chỉnh đơn giá rồi gửi lại để duyệt từ bước Sale.
+                  Bạn có thể chỉnh sửa giá bán và ngân sách các dịch vụ bên dưới, sau đó bấm nút &quot;Gửi lại&quot; ở cuối để gửi duyệt.
                 </Text>
               </View>
             )}
 
-            {/* Chi tiết dịch vụ — card dọc, KHÔNG bảng ngang trên mobile */}
+            {/* Chi tiết dịch vụ */}
             <View className="gap-[10px]">
-              <Text className="text-[13px] font-extrabold text-slate-900">Chi tiết dịch vụ</Text>
+              <Text className="text-[14px] font-extrabold text-slate-900">Chi tiết dịch vụ</Text>
 
               {!hasServices && (
                 <View className="items-center justify-center gap-[6px] p-[24px] border border-dashed border-slate-200 rounded-[12px]">
@@ -667,140 +795,346 @@ export default function AddendumDetailModal({
                 </View>
               )}
 
-              {/* Nhóm Gói */}
-              {grouped.packages.map((pkg) => (
-                <View
-                  key={`pkg-${pkg.key}`}
-                  className="bg-[#F0F9FF] border border-[#BAE6FD] rounded-[12px] p-[12px] gap-[8px]"
-                >
-                  <View className="flex-row items-center gap-[6px]">
-                    <View className="bg-[#2563EB] px-[6px] py-[2px] rounded-[5px]">
-                      <Text className="text-[9px] font-black uppercase text-white">Gói</Text>
-                    </View>
-                    <Text className="text-[13px] font-extrabold text-[#0C4A6E]" style={{ flex: 1 }}>
-                      {pkg.packageName || pkg.key}
-                    </Text>
-                    <View className="bg-white border border-[#BAE6FD] px-[7px] py-[2px] rounded-[6px]">
-                      <Text className="text-[10px] font-black text-[#0284C7]">
-                        {pkg.quantity} Gói
-                      </Text>
-                    </View>
-                  </View>
+              {/* Nhóm Gói dịch vụ */}
+              {displayGroups.packages.map((pkg) => {
+                const isExpanded = !!expandedPackages[pkg.key];
+                const pkgMarginStyle = getMarginBadgeStyle(pkg.profitMargin);
 
-                  <View className="gap-[3px]">
-                    <Field label="Số lượng" value={`${pkg.quantity} Gói`} />
-                    <Field label="Đơn giá" value={formatVNDFull(Math.round(pkg.sellingPrice))} />
-                    <Field label="Giá vốn" value={formatVNDFull(pkg.cost)} />
-                    <Field label="VAT (8%)" value={formatVNDFull(pkg.vat)} />
-                    <Field label="Thành tiền" value={formatVNDFull(pkg.totalWithVat)} strong />
-                  </View>
-
-                  {canEditPrices && (
-                    <View className="gap-[6px] pt-[8px] border-t border-t-[#BAE6FD]">
-                      <View className="flex-row gap-[6px]">
-                        <PriceChip
-                          label="Giá đề xuất"
-                          active={getMode(`pkg-${pkg.key}`) === 'recommended'}
-                          onPress={() =>
-                            selectMode(`pkg-${pkg.key}`, 'recommended', pkg.cost, (value) =>
-                              updatePackagePrice(pkg, value),
-                            )
-                          }
-                        />
-                        <PriceChip
-                          label="Giá tối thiểu"
-                          active={getMode(`pkg-${pkg.key}`) === 'minimum'}
-                          onPress={() =>
-                            selectMode(`pkg-${pkg.key}`, 'minimum', pkg.cost, (value) =>
-                              updatePackagePrice(pkg, value),
-                            )
-                          }
-                        />
-                        <PriceChip
-                          label="Tùy chỉnh"
-                          active={getMode(`pkg-${pkg.key}`) === 'custom'}
-                          onPress={() =>
-                            setPriceModes((prev) => ({ ...prev, [`pkg-${pkg.key}`]: 'custom' }))
-                          }
-                        />
+                return (
+                  <View
+                    key={`pkg-${pkg.key}`}
+                    className="rounded-[14px] border border-[#FDCB9E]/80 bg-white p-3.5 shadow-xs gap-2"
+                  >
+                    {/* Header Gói */}
+                    <View className="flex-row items-start justify-between">
+                      <View className="flex-1">
+                        <View className="gap-1">
+                          <View className="self-start flex-row items-center gap-1 rounded-md bg-[#FFF7ED] border border-[#FDCB9E] px-2 py-0.5">
+                            <Feather name="package" size={12} color="#D97010" />
+                            <Text className="text-[10px] font-extrabold text-[#D97010]">GÓI DỊCH VỤ</Text>
+                          </View>
+                          <Text className="text-[15px] font-bold text-slate-900">{pkg.name}</Text>
+                        </View>
                       </View>
-                      <View className="flex-row items-center gap-[6px]">
+                      <View className="bg-white border border-[#FDCB9E] px-2.5 py-1 rounded-lg">
+                        <Text className="text-[11px] font-extrabold text-[#D97010]">
+                          {pkg.quantity} Gói
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Giá bán gói (VNĐ) — cho phép sửa trực tiếp */}
+                    <View className="flex-row items-center justify-between border-t border-slate-100 py-1.5">
+                      <Text className="text-[13px] font-semibold text-slate-600">Giá bán gói (VNĐ):</Text>
+                      {canEditPrices ? (
                         <TextInput
-                          value={formatNumberInput(String(Math.round(pkg.sellingPrice)))}
-                          onChangeText={(text) =>
-                            updatePackagePrice(pkg, parseNumberInput(text))
-                          }
-                          editable={getMode(`pkg-${pkg.key}`) === 'custom'}
+                          className="min-w-[140px] rounded-lg border border-orange-500 bg-orange-50 px-2.5 py-1 text-right text-sm font-bold text-slate-900"
                           keyboardType="numeric"
+                          value={formatNumberInput(pkg.selectedPrice)}
+                          onChangeText={(val) => handlePackageCustomPriceChange(pkg.key, val)}
                           placeholder="0"
                           placeholderTextColor="#94A3B8"
-                          className={`flex-1 min-h-[44px] rounded-[10px] border px-[10px] text-right text-[13px] font-bold ${
-                            getMode(`pkg-${pkg.key}`) === 'custom'
-                              ? 'border-[#1D4ED8] bg-white text-[#1D4ED8]'
-                              : 'border-[#BAE6FD] bg-slate-100 text-slate-400'
-                          }`}
                         />
-                        <Text className="text-[11px] font-bold text-slate-500">VNĐ</Text>
-                      </View>
-                      <Text className="text-[10px] text-[#0284C7] leading-[14px]">
-                        Sửa giá gói sẽ phân bổ lại cho các dịch vụ con theo tỉ lệ doanh thu (fallback
-                        theo giá vốn).
-                      </Text>
+                      ) : (
+                        <Text className="text-sm font-bold text-slate-900">
+                          {formatNumber(pkg.selectedPrice)} ₫
+                        </Text>
+                      )}
                     </View>
-                  )}
 
-                  <View className="gap-[8px] pt-[6px] border-t border-t-[#BAE6FD]">
-                    <Text className="text-[10px] font-bold text-[#0284C7] uppercase tracking-[0.3px]">
-                      Số lượng dưới đây là định mức cho 1 gói
-                    </Text>
-                    {pkg.services.map((svc) => (
-                      <ServiceLineCard
-                        key={`svc-${pkg.key}-${svc.key}`}
-                        serviceName={svc.serviceName}
-                        unit={svc.unit}
-                        quantity={svc.quantity}
-                        sellingPrice={svc.sellingPrice}
-                        lineCost={svc.lineCost}
-                        lineVat={svc.lineVat}
-                        lineTotalWithVat={svc.lineTotalWithVat}
-                        quantitySuffix="/ Gói"
-                        editable={false}
-                        priceMode="custom"
-                        onSelectMode={() => undefined}
-                        onChangePrice={() => undefined}
-                        compact
+                    {/* Khối 4 dòng tài chính của gói */}
+                    <View className="gap-1.5 border-t border-slate-100 pt-2">
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-xs text-slate-500">
+                          Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(pkg.rawCostPrice)} ₫</Text>
+                        </Text>
+                        <Text className="text-xs text-slate-500">
+                          Tổng ngân sách: <Text className="font-semibold text-slate-700">{formatNumber(pkg.budget)} ₫</Text>
+                        </Text>
+                      </View>
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-xs text-slate-500">
+                          Tối thiểu: <Text className="font-semibold text-slate-700">{formatNumber(pkg.minPrice)} ₫</Text>
+                        </Text>
+                        <Text className="text-xs text-slate-500">
+                          Đề xuất: <Text className="font-semibold text-slate-700">{formatNumber(pkg.recommendedPrice)} ₫</Text>
+                        </Text>
+                      </View>
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-xs font-semibold text-slate-600">
+                          Đang áp dụng: {formatNumber(pkg.selectedPrice)} ₫
+                        </Text>
+                        <View
+                          style={{ backgroundColor: pkgMarginStyle.bg, borderColor: pkgMarginStyle.border }}
+                          className="rounded-md px-2 py-0.5 border"
+                        >
+                          <Text
+                            style={{ color: pkgMarginStyle.text }}
+                            className="text-[11px] font-bold"
+                          >
+                            Tỉ suất lợi nhuận: {pkg.profitMargin.toFixed(0)}%
+                          </Text>
+                        </View>
+                      </View>
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-[13px] font-bold text-slate-700">Thành tiền (có VAT 8%):</Text>
+                        <Text className="text-sm font-extrabold text-blue-600">
+                          {formatNumber(Math.round(pkg.totalWithVat))} ₫
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Nút Accordion Toggle dịch vụ con */}
+                    <TouchableOpacity
+                      className="mt-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-[#FFF7ED] border border-[#FDCB9E] py-2.5"
+                      onPress={() =>
+                        setExpandedPackages((prev) => ({
+                          ...prev,
+                          [pkg.key]: !prev[pkg.key],
+                        }))
+                      }
+                      activeOpacity={0.7}
+                    >
+                      <Text className="text-xs font-bold text-[#D97010]">
+                        {isExpanded ? 'Thu gọn dịch vụ con' : `Xem ${pkg.items.length} dịch vụ con`}
+                      </Text>
+                      <Feather
+                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                        size={16}
+                        color="#D97010"
                       />
-                    ))}
+                    </TouchableOpacity>
+
+                    {/* Danh sách dịch vụ con khi bung mở */}
+                    {isExpanded && (
+                      <View className="mt-2 gap-2 rounded-xl bg-[#FFF7ED]/50 border border-[#FDCB9E]/50 p-2.5">
+                        {pkg.items.map((sub: any, sIdx: number) => {
+                          const theme = getServiceTheme(sub.serviceName);
+                          const subMarginStyle = getMarginBadgeStyle(sub.profitMargin);
+
+                          return (
+                            <View
+                              key={sub.serviceId || sIdx}
+                              className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs gap-2"
+                            >
+                              <View className="flex-row items-center gap-2">
+                                <View
+                                  style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+                                  className="w-5 h-5 rounded-md border items-center justify-center"
+                                >
+                                  <Feather name="box" size={10} color={theme.color} />
+                                </View>
+                                <Text className="text-xs font-bold text-slate-800 flex-1">
+                                  {sub.serviceName}
+                                </Text>
+                              </View>
+
+                              <Text className="text-[11px] text-slate-500">
+                                Định mức: {formatNumber(sub.norm)} {sub.unit || 'lần'} / gói | Số lượng tổng: {formatNumber(sub.quantity)}
+                              </Text>
+
+                              {/* Giá bán trong 1 gói */}
+                              <View className="flex-row items-center justify-between border-t border-slate-100 pt-1.5">
+                                <Text className="text-xs font-semibold text-slate-600">Giá bán trong 1 gói:</Text>
+                                {canEditPrices ? (
+                                  <TextInput
+                                    className="w-[140px] rounded-md border border-orange-500 bg-orange-50 px-2 py-1 text-right text-[13px] font-bold text-slate-900"
+                                    keyboardType="numeric"
+                                    value={formatNumberInput(sub.selectedPrice * sub.norm)}
+                                    onChangeText={(val) => handleCustomPriceChange(sub.originalIndex, val, true)}
+                                    placeholder="0"
+                                    placeholderTextColor="#94A3B8"
+                                  />
+                                ) : (
+                                  <Text className="text-xs font-bold text-slate-900">
+                                    {formatNumber(sub.selectedPrice * sub.norm)} ₫
+                                  </Text>
+                                )}
+                              </View>
+
+                              {/* Ngân sách của dịch vụ con */}
+                              <View className="flex-row items-center justify-between border-t border-slate-100 pt-1.5">
+                                <Text className="text-xs font-semibold text-slate-600">Ngân sách (VNĐ):</Text>
+                                {canEditPrices ? (
+                                  <TextInput
+                                    className="w-[140px] rounded-md border border-slate-300 bg-white px-2 py-1 text-right text-[13px] font-semibold text-slate-900"
+                                    keyboardType="numeric"
+                                    accessibilityLabel={`Ngân sách ${sub.serviceName}`}
+                                    value={formatNumberInput(sub.budget)}
+                                    onChangeText={(val) => handleBudgetChange(sub.originalIndex, val)}
+                                    placeholder="0"
+                                    placeholderTextColor="#94A3B8"
+                                  />
+                                ) : (
+                                  <View className="flex-row items-center gap-1">
+                                    <Feather name="lock" size={11} color="#64748B" />
+                                    <Text className="text-xs font-semibold text-slate-600">{formatNumber(sub.budget)} ₫</Text>
+                                  </View>
+                                )}
+                              </View>
+
+                              {/* Mốc tài chính con */}
+                              <View className="gap-1 border-t border-slate-100 pt-1.5">
+                                <View className="flex-row items-center justify-between gap-2">
+                                  <Text className="text-[11px] text-slate-500">
+                                    Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(sub.costPrice * sub.norm)} ₫</Text>
+                                  </Text>
+                                  <View
+                                    style={{ backgroundColor: subMarginStyle.bg, borderColor: subMarginStyle.border }}
+                                    className="rounded-md px-1.5 py-0.5 border"
+                                  >
+                                    <Text
+                                      style={{ color: subMarginStyle.text }}
+                                      className="text-[10px] font-bold"
+                                    >
+                                      Lợi nhuận: {sub.profitMargin.toFixed(0)}%
+                                    </Text>
+                                  </View>
+                                </View>
+
+                                <View className="flex-row items-center justify-between">
+                                  <Text className="text-[11px] text-slate-500">
+                                    Tối thiểu: {formatNumber(sub.minPrice * sub.norm)} ₫
+                                  </Text>
+                                  <Text className="text-[11px] text-slate-500">
+                                    Đề xuất: {formatNumber(sub.recommendedPrice * sub.norm)} ₫
+                                  </Text>
+                                </View>
+                              </View>
+
+                              {/* Hạng mục công việc trong dịch vụ con của gói */}
+                              <ServiceJobAccordion jobs={sub.jobs} mode="contract_view" />
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
                   </View>
-                </View>
-              ))}
+                );
+              })}
 
               {/* Nhóm Dịch vụ lẻ */}
-              {grouped.standalone.length > 0 && (
-                <View className="gap-[8px]">
+              {displayGroups.standalone.length > 0 && (
+                <View className="gap-2">
                   <Text className="text-[11px] font-black text-slate-500 uppercase tracking-[0.5px]">
                     Dịch vụ lẻ
                   </Text>
-                  {grouped.standalone.map((svc) => (
-                    <ServiceLineCard
-                      key={`standalone-${svc.key}`}
-                      serviceName={svc.serviceName}
-                      unit={svc.unit}
-                      quantity={svc.quantity}
-                      sellingPrice={svc.sellingPrice}
-                      lineCost={svc.lineCost}
-                      lineVat={svc.lineVat}
-                      lineTotalWithVat={svc.lineTotalWithVat}
-                      editable={canEditPrices}
-                      priceMode={getMode(`std-${svc.key}`)}
-                      onSelectMode={(mode) =>
-                        selectMode(`std-${svc.key}`, mode, svc.lineCost / (svc.quantity || 1), (value) =>
-                          updateLinePrice(svc.itemIndexes, value),
-                        )
-                      }
-                      onChangePrice={(value) => updateLinePrice(svc.itemIndexes, value)}
-                    />
-                  ))}
+                  {displayGroups.standalone.map((item) => {
+                    const theme = getServiceTheme(item.serviceName);
+                    const itemMarginStyle = getMarginBadgeStyle(item.profitMargin);
+
+                    return (
+                      <View
+                        key={`standalone-${item.originalIndex}`}
+                        className="rounded-[14px] border border-[#FDCB9E]/80 bg-white p-3.5 shadow-xs gap-2"
+                      >
+                        <View className="flex-row items-start justify-between">
+                          <View className="flex-row items-center gap-2 flex-1 mr-2">
+                            <View
+                              style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+                              className="w-7 h-7 rounded-lg border items-center justify-center"
+                            >
+                              <Feather name="layers" size={13} color={theme.color} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text className="text-[14px] font-bold text-slate-900">{item.serviceName}</Text>
+                              <Text className="mt-0.5 text-xs text-slate-500">Đơn vị: {item.unit || 'gói'}</Text>
+                            </View>
+                          </View>
+                        </View>
+
+                        {/* Số lượng */}
+                        <View className="flex-row items-center justify-between border-t border-slate-100 py-1.5">
+                          <Text className="text-[13px] font-semibold text-slate-600">Số lượng:</Text>
+                          <Text className="text-sm font-bold text-slate-900">
+                            {formatNumber(item.quantity)} {item.unit || ''}
+                          </Text>
+                        </View>
+
+                        {/* Đơn giá bán (VNĐ) — cho phép sửa */}
+                        <View className="flex-row items-center justify-between border-t border-slate-100 py-1.5">
+                          <Text className="text-[13px] font-semibold text-slate-600">Giá bán (VNĐ):</Text>
+                          {canEditPrices ? (
+                            <TextInput
+                              className="min-w-[130px] rounded-lg border border-orange-400 bg-orange-50 px-2.5 py-1 text-right text-sm font-bold text-slate-900"
+                              keyboardType="numeric"
+                              value={formatNumberInput(item.selectedPrice)}
+                              onChangeText={(val) => handleCustomPriceChange(item.originalIndex, val)}
+                              placeholder="0"
+                              placeholderTextColor="#94A3B8"
+                            />
+                          ) : (
+                            <Text className="text-sm font-bold text-slate-900">
+                              {formatNumber(item.selectedPrice)} ₫
+                            </Text>
+                          )}
+                        </View>
+
+                        {/* Ngân sách (VNĐ) — cho phép sửa */}
+                        <View className="flex-row items-center justify-between border-t border-slate-100 py-1.5">
+                          <Text className="text-[13px] font-semibold text-slate-600">Ngân sách (VNĐ):</Text>
+                          {canEditPrices ? (
+                            <TextInput
+                              className="min-w-[130px] rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-right text-sm font-bold text-slate-900"
+                              keyboardType="numeric"
+                              accessibilityLabel={`Ngân sách ${item.serviceName}`}
+                              value={formatNumberInput(item.budget)}
+                              onChangeText={(val) => handleBudgetChange(item.originalIndex, val)}
+                              placeholder="0"
+                              placeholderTextColor="#94A3B8"
+                            />
+                          ) : (
+                            <View className="flex-row items-center gap-1">
+                              <Feather name="lock" size={12} color="#64748B" />
+                              <Text className="text-sm font-semibold text-slate-700">{formatNumber(item.budget)} ₫</Text>
+                            </View>
+                          )}
+                        </View>
+
+                        {/* 4 dòng tài chính */}
+                        <View className="gap-1.5 border-t border-slate-100 pt-2">
+                          <View className="flex-row items-center justify-between">
+                            <Text className="text-xs text-slate-500">
+                              Giá vốn: <Text className="font-semibold text-slate-700">{formatNumber(item.costPrice)} ₫</Text>
+                            </Text>
+                            <Text className="text-xs text-slate-500">
+                              Đang áp dụng: <Text className="font-semibold text-slate-700">{formatNumber(item.selectedPrice)} ₫</Text>
+                            </Text>
+                          </View>
+                          <View className="flex-row items-center justify-between">
+                            <Text className="text-xs text-slate-500">
+                              Tối thiểu: <Text className="font-semibold text-slate-700">{formatNumber(item.minPrice)} ₫</Text>
+                            </Text>
+                            <Text className="text-xs text-slate-500">
+                              Đề xuất: <Text className="font-semibold text-slate-700">{formatNumber(item.recommendedPrice)} ₫</Text>
+                            </Text>
+                          </View>
+                          <View className="flex-row items-center justify-between">
+                            <View
+                              style={{ backgroundColor: itemMarginStyle.bg, borderColor: itemMarginStyle.border }}
+                              className="rounded-md px-2 py-0.5 border"
+                            >
+                              <Text
+                                style={{ color: itemMarginStyle.text }}
+                                className="text-[11px] font-bold"
+                              >
+                                Tỉ suất lợi nhuận: {item.profitMargin.toFixed(0)}%
+                              </Text>
+                            </View>
+                            <View className="flex-row items-center gap-1">
+                              <Text className="text-[13px] font-bold text-slate-700">Thành tiền:</Text>
+                              <Text className="text-sm font-extrabold text-blue-600">
+                                {formatNumber(Math.round(item.selectedPrice * item.quantity * 1.08))} ₫
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+
+                        {/* Hạng mục công việc */}
+                        <ServiceJobAccordion jobs={item.jobs} mode="contract_view" />
+                      </View>
+                    );
+                  })}
                 </View>
               )}
             </View>
@@ -809,9 +1143,14 @@ export default function AddendumDetailModal({
           {/* Footer: tổng cộng + hành động */}
           <View className="border-t border-t-slate-100 bg-slate-50 px-[16px] pt-[12px] pb-[18px] gap-[10px]">
             <View className="flex-row items-center justify-between gap-[10px]">
-              <Text className="text-[12px] font-bold text-slate-600">Tổng cộng (có VAT):</Text>
-              <Text className="text-[15px] font-black text-[#B45309]" style={{ flexShrink: 1 }}>
-                {formatVNDFull(totalWithVat)}
+              <View>
+                <Text className="text-[12px] font-bold text-slate-600">Tổng cộng (có VAT):</Text>
+                <Text className="text-[10px] text-slate-400">
+                  Biên lợi nhuận: <Text className="font-bold text-[#D97010]">{totals.margin.toFixed(0)}%</Text>
+                </Text>
+              </View>
+              <Text className="text-[17px] font-black text-[#B45309]" style={{ flexShrink: 1 }}>
+                {formatVNDFull(Math.round(totals.totalWithVat))}
               </Text>
             </View>
 
@@ -825,6 +1164,7 @@ export default function AddendumDetailModal({
                 <Text className="text-[14px] font-bold text-slate-600">Đóng</Text>
               </TouchableOpacity>
 
+              {/* Nút Gửi lại khi phụ lục bị từ chối / nháp / PM sửa giá & ngân sách */}
               {canResubmit && (
                 <TouchableOpacity
                   onPress={confirmResubmit}
@@ -843,6 +1183,7 @@ export default function AddendumDetailModal({
                 </TouchableOpacity>
               )}
 
+              {/* Nút Duyệt / Không duyệt cho Sale và BOD */}
               {canReview && (
                 <>
                   <TouchableOpacity
@@ -874,10 +1215,10 @@ export default function AddendumDetailModal({
               )}
             </View>
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
 
-      {/* Bottom sheet nhập lý do không duyệt (lý do BẮT BUỘC) */}
+      {/* Bottom sheet nhập lý do không duyệt */}
       <AddendumRejectModal
         visible={isRejectVisible}
         isLoading={isMutating}

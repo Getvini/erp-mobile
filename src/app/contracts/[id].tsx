@@ -625,9 +625,8 @@ export default function ContractDetailScreen() {
           <TouchableOpacity
             onPress={() => setActiveTab('MAIN')}
             activeOpacity={0.8}
-            className={`flex-1 min-h-[48px] flex-row items-center justify-center gap-[6px] rounded-[10px] border ${
-              activeTab === 'MAIN' ? 'bg-[#FFF4EA] border-[#FDCB9E]' : 'bg-white border-slate-200'
-            }`}
+            className={`flex-1 min-h-[48px] flex-row items-center justify-center gap-[6px] rounded-[10px] border ${activeTab === 'MAIN' ? 'bg-[#FFF4EA] border-[#FDCB9E]' : 'bg-white border-slate-200'
+              }`}
           >
             <Feather
               name="file-text"
@@ -635,9 +634,8 @@ export default function ContractDetailScreen() {
               color={activeTab === 'MAIN' ? BrandColors.primary : '#64748B'}
             />
             <Text
-              className={`text-[13px] font-bold ${
-                activeTab === 'MAIN' ? 'text-[#D97210]' : 'text-slate-500'
-              }`}
+              className={`text-[13px] font-bold ${activeTab === 'MAIN' ? 'text-[#D97210]' : 'text-slate-500'
+                }`}
             >
               Thông tin
             </Text>
@@ -647,9 +645,8 @@ export default function ContractDetailScreen() {
             <TouchableOpacity
               onPress={() => setActiveTab('EXTRA')}
               activeOpacity={0.8}
-              className={`flex-1 min-h-[48px] flex-row items-center justify-center gap-[6px] rounded-[10px] border ${
-                activeTab === 'EXTRA' ? 'bg-[#FFF4EA] border-[#FDCB9E]' : 'bg-white border-slate-200'
-              }`}
+              className={`flex-1 min-h-[48px] flex-row items-center justify-center gap-[6px] rounded-[10px] border ${activeTab === 'EXTRA' ? 'bg-[#FFF4EA] border-[#FDCB9E]' : 'bg-white border-slate-200'
+                }`}
             >
               <Feather
                 name="alert-circle"
@@ -657,9 +654,8 @@ export default function ContractDetailScreen() {
                 color={activeTab === 'EXTRA' ? BrandColors.primary : '#64748B'}
               />
               <Text
-                className={`text-[13px] font-bold ${
-                  activeTab === 'EXTRA' ? 'text-[#D97210]' : 'text-slate-500'
-                }`}
+                className={`text-[13px] font-bold ${activeTab === 'EXTRA' ? 'text-[#D97210]' : 'text-slate-500'
+                  }`}
               >
                 Phát sinh
               </Text>
@@ -673,11 +669,10 @@ export default function ContractDetailScreen() {
             <TouchableOpacity
               onPress={() => setActiveTab('ADDENDUM')}
               activeOpacity={0.8}
-              className={`flex-1 min-h-[48px] flex-row items-center justify-center gap-[6px] rounded-[10px] border ${
-                activeTab === 'ADDENDUM'
+              className={`flex-1 min-h-[48px] flex-row items-center justify-center gap-[6px] rounded-[10px] border ${activeTab === 'ADDENDUM'
                   ? 'bg-[#FFF4EA] border-[#FDCB9E]'
                   : 'bg-white border-slate-200'
-              }`}
+                }`}
             >
               <Feather
                 name="file-plus"
@@ -685,9 +680,8 @@ export default function ContractDetailScreen() {
                 color={activeTab === 'ADDENDUM' ? BrandColors.primary : '#64748B'}
               />
               <Text
-                className={`text-[13px] font-bold ${
-                  activeTab === 'ADDENDUM' ? 'text-[#D97210]' : 'text-slate-500'
-                }`}
+                className={`text-[13px] font-bold ${activeTab === 'ADDENDUM' ? 'text-[#D97210]' : 'text-slate-500'
+                  }`}
               >
                 Phụ lục
               </Text>
@@ -727,6 +721,8 @@ export default function ContractDetailScreen() {
           }
         >
           <ContractExtraTasksSection
+            project={project}
+            opportunityId={contract?.opportunity?.id || (contract as any)?.opportunityId}
             tasks={extraTasks}
             projectId={project?.id}
             contractId={contractId}

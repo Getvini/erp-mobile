@@ -1,3 +1,8 @@
+import Decimal from 'decimal.js';
+import { useAuth } from '@/context/AuthContext';
+import { getTaskActionState, getTaskDisplayName } from '@/utils/taskPolicy';
+import { QuotationDetailModal } from '@/components/quotations/QuotationDetailModal';
+import { useExtraTaskQuotationMutation } from '@/hooks/queries/useExtraTaskQuotation';
 import React, { useState, useCallback } from 'react';
 import {
   View,
@@ -11,13 +16,17 @@ import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { BrandColors } from '@/constants/colors';
 import { useAssessExtraTaskMutation } from '@/hooks/queries/useTasks';
-import { formatNumberInput, parseNumberInput, formatVND } from '@/utils/formatters';
+import { formatNumberInput, formatVND } from '@/utils/formatters';
 
 export interface ExtraTaskItem {
   id: string;
   name?: string;
   title?: string;
   status?: string;
+  nickname?: string;
+  quotation?: { id: string };
+  quotationId?: string;
+  project?: any;
   pricingStatus?: 'BILLABLE' | 'NON_BILLABLE' | 'PENDING' | string;
   sellingPrice?: number;
   cost?: number;
@@ -42,6 +51,8 @@ export interface ContractExtraTasksSectionProps {
   tasks: ExtraTaskItem[];
   projectId?: string;
   contractId?: string;
+  opportunityId?: string;
+  project?: any;
   onRefresh?: () => void;
 }
 
@@ -49,15 +60,22 @@ export const ContractExtraTasksSection: React.FC<ContractExtraTasksSectionProps>
   tasks,
   projectId,
   contractId,
+  opportunityId,
+  project,
   onRefresh,
 }) => {
   const assessMutation = useAssessExtraTaskMutation();
+  const { user } = useAuth();
+  const quotationMutation = useExtraTaskQuotationMutation();
+  const [viewQuotationId, setViewQuotationId] = useState<string | null>(null);
+  const [billingDraft, setBillingDraft] = useState<ExtraTaskItem | null>(null);
+  const policyFor = (task: ExtraTaskItem) => getTaskActionState(task, user, 'assessExtraTask', { project: project || task.project });
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
-  const [prices, setPrices] = useState<Record<string, number>>({});
+  const [prices, setPrices] = useState<Record<string, string>>({});
   const [billableModes, setBillableModes] = useState<Record<string, boolean>>({});
 
   const handlePriceChange = (taskId: string, text: string) => {
-    const rawNum = parseNumberInput(text);
+    const rawNum = text.replace(/\D/g, '');
     setPrices((prev) => ({
       ...prev,
       [taskId]: rawNum,
@@ -65,6 +83,7 @@ export const ContractExtraTasksSection: React.FC<ContractExtraTasksSectionProps>
   };
 
   const handleConfirmFreeSupport = async (task: ExtraTaskItem) => {
+    if (!policyFor(task).enabled || assessMutation.isPending || quotationMutation.isPending) return;
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setActiveTaskId(task.id);
@@ -86,37 +105,29 @@ export const ContractExtraTasksSection: React.FC<ContractExtraTasksSectionProps>
   };
 
   const handleConfirmBillable = async (task: ExtraTaskItem) => {
-    const priceNum = prices[task.id] !== undefined ? prices[task.id] : Number(task.sellingPrice || 0);
-
-    if (priceNum <= 0) {
-      Alert.alert('Thiếu thông tin', 'Vui lòng nhập đơn giá tính phí lớn hơn 0 VNĐ.');
+    if (!policyFor(task).enabled || assessMutation.isPending || quotationMutation.isPending) return;
+    const rawPrice = prices[task.id] ?? String(task.sellingPrice || '0');
+    const price = new Decimal(rawPrice || '0');
+    if (!price.isFinite() || price.lte(0) || price.gt(Number.MAX_SAFE_INTEGER)) {
+      Alert.alert('Thiếu thông tin', 'Vui lòng nhập đơn giá hợp lệ lớn hơn 0 VNĐ.');
       return;
     }
-
+    if (!opportunityId) { Alert.alert('Thiếu thông tin', 'Hợp đồng chưa có cơ hội để tạo báo giá phụ lục.'); return; }
+    setBillingDraft(task);
+    setActiveTaskId(task.id);
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      setActiveTaskId(task.id);
-      await assessMutation.mutateAsync({
-        id: task.id,
-        isBillable: true,
-        sellingPrice: priceNum,
-        isRejected: false,
-        projectId,
-      });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(
-        'Thành công',
-        `Đã xác nhận tính phí ${formatVND(priceNum)} cho công việc "${task.name || task.title || 'N/A'}". Vui lòng tạo Phụ lục hợp đồng để khách hàng ký duyệt.`
-      );
+      const quotation = await quotationMutation.mutateAsync({ taskId: task.id, opportunityId, sellingPrice: price.toNumber(), project: project || task.project });
+      setBillingDraft(null);
+      if (quotation?.id) setViewQuotationId(quotation.id);
+      Alert.alert('Thành công', 'Đã tạo báo giá công việc phát sinh.');
       onRefresh?.();
     } catch (err: any) {
-      Alert.alert('Lỗi đánh giá', err?.message || 'Không thể cập nhật giá tính phí.');
-    } finally {
-      setActiveTaskId(null);
-    }
+      Alert.alert('Chưa tạo được báo giá', err?.message || 'Vui lòng thử lại. Giá đang nhập được giữ nguyên.');
+    } finally { setActiveTaskId(null); }
   };
 
   const handleRejectTask = (task: ExtraTaskItem) => {
+    if (!policyFor(task).enabled || assessMutation.isPending || quotationMutation.isPending) return;
     Alert.alert(
       'Từ chối phát sinh',
       `Bạn có chắc chắn muốn từ chối thực hiện công việc phát sinh "${task.name || task.title || 'N/A'}"?`,
@@ -149,7 +160,7 @@ export const ContractExtraTasksSection: React.FC<ContractExtraTasksSectionProps>
     );
   };
 
-  if (!tasks || tasks.length === 0) {
+  if ((!tasks || tasks.length === 0) && !billingDraft) {
     return (
       <View className="bg-white rounded-2xl p-6 items-center justify-center border border-slate-200 mt-3">
         <View className="w-12 h-12 rounded-full bg-slate-100 items-center justify-center mb-3">
@@ -167,10 +178,11 @@ export const ContractExtraTasksSection: React.FC<ContractExtraTasksSectionProps>
 
   return (
     <View className="gap-3 mt-3">
-      {tasks.map((task) => {
-        const taskName = task.name || task.title || 'Công việc phát sinh';
-        const isProcessing = assessMutation.isPending && activeTaskId === task.id;
-        const isBillable = billableModes[task.id] ?? (task.pricingStatus === 'BILLABLE');
+      {(billingDraft && !tasks.some(task => task.id === billingDraft.id) ? [...tasks, billingDraft] : tasks).map((task) => {
+        const taskName = getTaskDisplayName(task) || task.title || 'Công việc phát sinh';
+        const policy = policyFor(task);
+        const isProcessing = (assessMutation.isPending || quotationMutation.isPending) && activeTaskId === task.id;
+        const isBillable = billableModes[task.id] ?? (task.pricingStatus !== 'NON_BILLABLE');
         const priceValue = prices[task.id] !== undefined ? prices[task.id] : (task.sellingPrice || '');
         const assigneeName = task.assignee?.fullName || task.assignedTo?.fullName || 'Chưa gán';
 
@@ -195,14 +207,16 @@ export const ContractExtraTasksSection: React.FC<ContractExtraTasksSectionProps>
                 </Text>
               </View>
 
-              <TouchableOpacity
-                onPress={() => handleRejectTask(task)}
-                disabled={isProcessing}
-                className="w-8 h-8 rounded-full bg-red-50 items-center justify-center"
-                activeOpacity={0.7}
-              >
-                <Feather name="x" size={16} color="#EF4444" />
-              </TouchableOpacity>
+              {policy.enabled && (
+                <TouchableOpacity accessibilityLabel="Xử lý công việc phát sinh"
+                  onPress={() => handleRejectTask(task)}
+                  disabled={isProcessing}
+                  className="w-8 h-8 rounded-full bg-red-50 items-center justify-center"
+                  activeOpacity={0.7}
+                  style={[isProcessing ? { opacity: 0.5 } : undefined]} accessibilityRole="button">
+                  <Feather name="x" size={16} color="#EF4444" />
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Description or Job Info */}
@@ -226,6 +240,11 @@ export const ContractExtraTasksSection: React.FC<ContractExtraTasksSectionProps>
               ) : null}
             </View>
 
+            {task.quotation?.id || task.quotationId ? (
+              <TouchableOpacity className="rounded-xl bg-purple-50 px-4 py-3" onPress={() => setViewQuotationId(task.quotation?.id || task.quotationId || null)}>
+                <Text className="font-bold text-purple-700">Xem báo giá</Text>
+              </TouchableOpacity>
+            ) : <>
             {/* Pricing Selection Mode */}
             <View className="mb-3">
               <Text className="text-xs font-bold text-slate-700 mb-1.5">Hình thức xử lý:</Text>
@@ -297,25 +316,31 @@ export const ContractExtraTasksSection: React.FC<ContractExtraTasksSectionProps>
                 <Text className="text-xs font-semibold text-slate-600">Đang cập nhật...</Text>
               </View>
             ) : isBillable ? (
-              <TouchableOpacity
-                onPress={() => handleConfirmBillable(task)}
-                className="bg-primary py-2.5 rounded-xl items-center justify-center active:opacity-80"
-                activeOpacity={0.8}
-              >
-                <Text className="text-xs font-extrabold text-white">Xác nhận tính phí</Text>
-              </TouchableOpacity>
+              policy.enabled && (
+                <TouchableOpacity accessibilityLabel="Xử lý công việc phát sinh"
+                  onPress={() => handleConfirmBillable(task)}
+                  className="bg-primary py-2.5 rounded-xl items-center justify-center active:opacity-80"
+                  activeOpacity={0.8}
+                  accessibilityRole="button">
+                  <Text className="text-xs font-extrabold text-white">Tạo báo giá</Text>
+                </TouchableOpacity>
+              )
             ) : (
-              <TouchableOpacity
-                onPress={() => handleConfirmFreeSupport(task)}
-                className="bg-emerald-600 py-2.5 rounded-xl items-center justify-center active:opacity-80"
-                activeOpacity={0.8}
-              >
-                <Text className="text-xs font-extrabold text-white">Xác nhận hỗ trợ miễn phí</Text>
-              </TouchableOpacity>
+              policy.enabled && (
+                <TouchableOpacity accessibilityLabel="Xử lý công việc phát sinh"
+                  onPress={() => handleConfirmFreeSupport(task)}
+                  className="bg-emerald-600 py-2.5 rounded-xl items-center justify-center active:opacity-80"
+                  activeOpacity={0.8}
+                  accessibilityRole="button">
+                  <Text className="text-xs font-extrabold text-white">Xác nhận hỗ trợ miễn phí</Text>
+                </TouchableOpacity>
+              )
             )}
+            </>}
           </View>
         );
       })}
+      <QuotationDetailModal visible={Boolean(viewQuotationId)} quotationId={viewQuotationId} onClose={() => setViewQuotationId(null)} />
     </View>
   );
 };

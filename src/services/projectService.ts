@@ -173,8 +173,8 @@ class ProjectService {
     const items = Array.isArray(raw)
       ? raw
       : raw?.data && Array.isArray(raw.data)
-      ? raw.data
-      : [];
+        ? raw.data
+        : [];
     return { data: items, error: res.error };
   }
 
@@ -408,10 +408,13 @@ class ProjectService {
         isPackageService?: boolean;
         sellingPrice: number;
         cost: number;
+        budget?: number;
       }[];
     },
+    idempotencyKey?: string,
   ): Promise<{ data?: any; error?: string }> {
-    const res = await apiService.post(`/projects/${projectId}/service-addendums`, payload);
+    const res = await apiService.post(`/projects/${projectId}/service-addendums`, payload,
+      idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined);
     return { data: res.data, error: res.error };
   }
 }

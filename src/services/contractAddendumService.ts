@@ -69,6 +69,7 @@ export interface AddendumServiceLine {
   /** Giá bán — CHỈ làm tròn giá bán (Math.round), KHÔNG làm tròn VAT/thành tiền. */
   sellingPrice: number;
   cost?: number;
+  budget?: number;
   quantity?: number;
   packageKey?: string | null;
   packageName?: string | null;

@@ -35,6 +35,7 @@ const invalidateAddendumScope = (
   }
   queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
   queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+  queryClient.invalidateQueries({ queryKey: queryKeys.paymentRequests.all });
   queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
   queryClient.invalidateQueries({ queryKey: queryKeys.debts.all });
   queryClient.invalidateQueries({ queryKey: queryKeys.paymentMilestones.all });

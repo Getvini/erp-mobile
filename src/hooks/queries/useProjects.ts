@@ -854,11 +854,13 @@ export function useCreateProjectServiceAddendumMutation() {
     mutationFn: async ({
       projectId,
       payload,
+      idempotencyKey,
     }: {
       projectId: string;
       payload: Parameters<typeof projectService.createProjectServiceAddendum>[1];
+      idempotencyKey?: string;
     }) => {
-      const res = await projectService.createProjectServiceAddendum(projectId, payload);
+      const res = await projectService.createProjectServiceAddendum(projectId, payload, idempotencyKey);
       if (res.error) throw new Error(res.error);
       return res.data;
     },
