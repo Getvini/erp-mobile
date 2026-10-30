@@ -23,6 +23,7 @@ import { BrandColors } from '@/constants/colors';
 
 import ProjectOverviewTab from '@/components/projects/ProjectOverviewTab';
 import ProjectBudgetSummaryCard from '@/components/projects/ProjectBudgetSummaryCard';
+import ProjectTabHeader from '@/components/projects/ProjectTabHeader';
 import ProjectTasksTab from '@/components/projects/ProjectTasksTab';
 import ProjectAcceptanceTab from '@/components/projects/ProjectAcceptanceTab';
 import ProjectMyTasksTab from '@/components/projects/ProjectMyTasksTab';
@@ -877,16 +878,25 @@ export default function ProjectDetailScreen() {
           }
         >
           {activeTab === 'OVERVIEW' && project && (
-            <>
-              <View className="px-4 pt-4">
-                <ProjectBudgetSummaryCard
-                  summary={budgetQuery.data}
-                  isLoading={budgetQuery.isPending}
-                  isError={budgetQuery.isError}
-                  isFetching={budgetQuery.isFetching}
-                  onRetry={() => { void budgetQuery.refetch(); }}
-                />
-              </View>
+            <View className="p-4 gap-3.5">
+              <ProjectTabHeader
+                icon="grid"
+                title="Tổng quan dự án"
+                subtitle={
+                  project.contract?.contractCode
+                    ? `Hợp đồng: ${project.contract.contractCode}`
+                    : project.code
+                      ? `Mã dự án: ${project.code}`
+                      : 'Thông tin chung và tiến độ thực hiện'
+                }
+              />
+              <ProjectBudgetSummaryCard
+                summary={budgetQuery.data}
+                isLoading={budgetQuery.isPending}
+                isError={budgetQuery.isError}
+                isFetching={budgetQuery.isFetching}
+                onRetry={() => { void budgetQuery.refetch(); }}
+              />
               <ProjectOverviewTab
                 project={project}
                 teamMembers={effectiveTeamMembers}
@@ -905,7 +915,7 @@ export default function ProjectDetailScreen() {
                 }}
                 canManageTeam={canManageTeam}
               />
-            </>
+            </View>
           )}
 
           {activeTab === 'PRODUCT_DESC' && project && (

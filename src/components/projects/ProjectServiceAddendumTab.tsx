@@ -20,6 +20,8 @@ import { useUpdateContractServiceNicknameMutation } from '@/hooks/queries/useCon
 import { hasTeamMemberRole, hasProjectAccount, getProjectManagerUser } from '@/utils/teamMember';
 import { BrandColors } from '@/constants/colors';
 import { formatDateToDDMMYYYY } from '@/utils/formatters';
+import { EmptyState } from '@/components/common/EmptyState';
+import { ProjectTabHeader } from '@/components/projects/ProjectTabHeader';
 
 /**
  * Tab "Dịch vụ" (P1.11) — mirror `ContractInfo.jsx` của Web.
@@ -560,19 +562,11 @@ export default function ProjectServiceAddendumTab({
 
   return (
     <View className="gap-3 p-4">
-      <View className="flex-row items-center gap-2.5">
-        <View className="h-11 w-11 items-center justify-center rounded-xl bg-orange-50">
-          <Feather name="package" size={20} color={BrandColors.primary} />
-        </View>
-        <View className="flex-1">
-          <Text className="text-[15px] font-bold text-slate-950">
-            Hạng mục dịch vụ ({visibleServices.length})
-          </Text>
-          <Text className="text-xs text-slate-500">
-            Xem nhanh trạng thái nghiệm thu, tiến độ công việc và kết quả theo từng gói.
-          </Text>
-        </View>
-      </View>
+      <ProjectTabHeader
+        icon="package"
+        title="Hạng mục dịch vụ"
+        subtitle={`Tổng cộng ${visibleServices.length} dịch vụ theo gói hợp đồng`}
+      />
 
       {/* Thống kê */}
       <ScrollView
@@ -629,20 +623,21 @@ export default function ProjectServiceAddendumTab({
       </ScrollView>
 
       {visibleServices.length === 0 ? (
-        <View className="items-center justify-center gap-2 py-10">
-          <Feather name="package" size={40} color="#CBD5E1" />
-          <Text className="text-[15px] font-bold text-slate-600">Chưa có dịch vụ nào</Text>
-          <Text className="max-w-[260px] text-center text-[13px] text-slate-400">
-            {canSeeAllTasks
+        <EmptyState
+          icon="package"
+          title="Chưa có dịch vụ nào"
+          description={
+            canSeeAllTasks
               ? 'Hợp đồng của dự án chưa có hạng mục dịch vụ nào.'
-              : 'Bạn không có công việc nào trong các hạng mục dịch vụ của dự án.'}
-          </Text>
-        </View>
+              : 'Bạn không có công việc nào trong các hạng mục dịch vụ của dự án.'
+          }
+        />
       ) : groupEntries.length === 0 ? (
-        <View className="items-center justify-center gap-2 py-10">
-          <Feather name="filter" size={36} color="#CBD5E1" />
-          <Text className="text-[13px] text-slate-400">Không có dịch vụ phù hợp bộ lọc</Text>
-        </View>
+        <EmptyState
+          icon="filter"
+          title="Không tìm thấy dịch vụ"
+          description="Không có dịch vụ nào phù hợp với bộ lọc đã chọn."
+        />
       ) : (
         <View className="gap-2.5">
           {groupEntries.map(([groupName, items]) => {
@@ -683,8 +678,8 @@ export default function ProjectServiceAddendumTab({
                     </View>
                   </View>
 
-                  <View className="rounded-[10px] bg-slate-200 px-2 py-0.5">
-                    <Text className="text-[11px] font-bold text-slate-600">{items.length}</Text>
+                  <View className="rounded-full bg-slate-200/80 px-2.5 py-0.5">
+                    <Text className="text-[11px] font-bold text-slate-700">{items.length} dịch vụ</Text>
                   </View>
                 </TouchableOpacity>
 

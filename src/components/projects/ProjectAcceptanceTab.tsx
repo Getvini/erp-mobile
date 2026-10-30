@@ -11,6 +11,8 @@ import { formatNumber } from '@/utils/formatters';
 import { canSendAcceptance } from '@/utils/rbac';
 import { isProjectClosed, isProjectOnHold } from '@/utils/acceptance';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { EmptyState } from '@/components/common/EmptyState';
+import { ProjectTabHeader } from '@/components/projects/ProjectTabHeader';
 
 interface ProjectAcceptanceTabProps {
   acceptances: AcceptanceItem[];
@@ -84,29 +86,29 @@ export default function ProjectAcceptanceTab({
         </View>
       )}
 
-      {/* Top Action Bar */}
-      <View className="flex-row justify-between items-center">
-        <Text className="text-sm font-bold text-text-primary">Biên bản nghiệm thu ({acceptances.length})</Text>
-        {!isPendingConfirmation && canCreateAcceptance && !isProjectLockedForAcceptance && (
-          <TouchableOpacity
-            className="flex-row items-center gap-1 bg-primary px-3 py-2 rounded-xl"
-            onPress={onOpenCreateAcceptance}
-            activeOpacity={0.8}
-          >
-            <Feather name="plus" size={14} color="#FFFFFF" />
-            <Text className="text-xs font-bold text-white">Tạo nghiệm thu</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      {/* Top Action Bar chuẩn hóa */}
+      <ProjectTabHeader
+        icon="award"
+        title="Biên bản nghiệm thu"
+        subtitle={`Tổng cộng ${acceptances.length} biên bản nghiệm thu`}
+        actionLabel={
+          !isPendingConfirmation && canCreateAcceptance && !isProjectLockedForAcceptance
+            ? 'Tạo nghiệm thu'
+            : undefined
+        }
+        actionIcon="plus"
+        onAction={onOpenCreateAcceptance}
+      />
 
       {acceptances.length === 0 ? (
-        <View className="py-10 items-center justify-center gap-2">
-          <Feather name="clipboard" size={40} color="#CBD5E1" />
-          <Text className="text-sm font-bold text-slate-600">Chưa có biên bản nghiệm thu nào</Text>
-          <Text className="text-xs text-slate-400 text-center max-w-[260px]">
-            {'Dự án này chưa gửi biên bản nghiệm thu. Bấm "Tạo nghiệm thu" để tạo yêu cầu mới.'}
-          </Text>
-        </View>
+        <EmptyState
+          icon="award"
+          title="Chưa có biên bản nghiệm thu nào"
+          description="Dự án này chưa gửi biên bản nghiệm thu. Bấm nút bên trên để tạo biên bản mới."
+          actionLabel={!isPendingConfirmation && canCreateAcceptance && !isProjectLockedForAcceptance ? 'Tạo nghiệm thu' : undefined}
+          actionIcon="plus"
+          onAction={onOpenCreateAcceptance}
+        />
       ) : (
         <View className="gap-3">
           {acceptances.map((item) => {

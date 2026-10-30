@@ -18,6 +18,8 @@ import {
 } from '@/services/productDescriptionService';
 import { uploadToCloudinary } from '@/services/cloudinaryService';
 import { BrandColors } from '@/constants/colors';
+import { ProjectTabHeader } from '@/components/projects/ProjectTabHeader';
+import { EmptyState } from '@/components/common/EmptyState';
 import { htmlToEditableText, resolveHtml } from '@/utils/productDescriptionText';
 import ProductDescriptionLegend from './ProductDescriptionLegend';
 import {
@@ -774,55 +776,39 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
   }
 
   return (
-    <View className="bg-surface rounded-2xl border border-border p-4 shadow-sm mb-4">
-      {/* Header */}
-      <View className="flex-row items-center justify-between mb-3">
-        <View className="flex-row items-center flex-1 mr-2">
-          <View className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 items-center justify-center mr-2.5">
-            <Feather name="box" size={16} color={BrandColors.primary} />
-          </View>
-          <View className="flex-1">
-            <Text className="text-sm font-bold text-text-primary" numberOfLines={1}>
-              Thông tin chuẩn sản phẩm
-            </Text>
-            <Text className="text-[11px] text-text-muted" numberOfLines={1}>
-              Cơ sở đối chiếu bắt buộc khi chạy QC
-            </Text>
-          </View>
-        </View>
-
-        <View className="flex-row items-center gap-1.5">
-          {submissions.length > 0 && (
+    <View className="gap-3.5">
+      {/* Header đồng bộ */}
+      <ProjectTabHeader
+        icon="box"
+        title="Thông tin chuẩn sản phẩm"
+        subtitle="Cơ sở đối chiếu bắt buộc khi chạy QC"
+        actionLabel={
+          canManageSubmission && !hasPendingSubmission && !isFormOpen && !isOnHold
+            ? visibleSubmissions.length > 0
+              ? 'Bản gửi mới'
+              : 'Tạo bản gửi'
+            : undefined
+        }
+        actionIcon="plus"
+        onAction={openCreateForm}
+        actionDisabled={isOnHold}
+        extraAction={
+          submissions.length > 0 ? (
             <TouchableOpacity
               onPress={() => setIsHistoryOpen(true)}
-              className="p-1.5 rounded-lg bg-slate-100 items-center justify-center"
+              className="h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white"
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
-              <Feather name="clock" size={14} color="#64748B" />
+              <Feather name="clock" size={16} color="#64748B" />
             </TouchableOpacity>
-          )}
-
-          {canManageSubmission && !hasPendingSubmission && !isFormOpen && (
-            <TouchableOpacity
-              onPress={openCreateForm}
-              disabled={isOnHold}
-              className={`flex-row items-center px-2.5 py-1.5 rounded-xl bg-primary ${
-                isOnHold ? 'opacity-50' : 'active:opacity-80'
-              }`}
-            >
-              <Feather name="plus" size={13} color="#FFFFFF" />
-              <Text className="text-xs font-bold text-white ml-1">
-                {visibleSubmissions.length > 0 ? 'Bản gửi mới' : 'Tạo bản gửi'}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
+          ) : undefined
+        }
+      />
 
       {/* QC Warning Banner */}
-      <View className="mb-3 flex-row items-start p-2.5 rounded-xl bg-amber-50 border border-amber-200">
-        <Feather name="alert-triangle" size={14} color="#D97706" style={{ marginTop: 2, marginRight: 6 }} />
-        <Text className="text-[11px] text-amber-800 font-medium flex-1 leading-4">
+      <View className="flex-row items-start p-3 rounded-2xl bg-amber-50 border border-amber-200">
+        <Feather name="alert-triangle" size={16} color="#D97706" style={{ marginTop: 2, marginRight: 8 }} />
+        <Text className="text-xs text-amber-900 font-medium flex-1 leading-4.5">
           Đây là các thông tin sẽ được dùng để đối chiếu khi chạy QC. Vui lòng upload đầy đủ file thông tin chuẩn (doc/pdf) cho từng sản phẩm để QC đối chiếu chính xác. Hệ thống chỉ trích xuất nội dung chữ trong file, bỏ qua hình ảnh.
         </Text>
       </View>
@@ -972,27 +958,14 @@ export const ProductDescriptionSection: React.FC<ProductDescriptionSectionProps>
         ))}
         </View>
       ) : (
-        <View className="p-5 rounded-xl border border-dashed border-border bg-slate-50/50 items-center justify-center">
-          <Feather name="box" size={20} color="#94A3B8" style={{ marginBottom: 6 }} />
-          <Text className="text-xs font-semibold text-text-secondary text-center mb-0.5">
-            Chưa có thông tin chuẩn sản phẩm
-          </Text>
-          <Text className="text-[11px] text-text-muted text-center max-w-[260px] mb-3">
-            Tạo bản mô tả sản phẩm và tải file chuẩn để làm cơ sở chạy QC.
-          </Text>
-          {canManageSubmission && (
-            <TouchableOpacity
-              onPress={openCreateForm}
-              disabled={isOnHold}
-              className={`flex-row items-center px-3 py-1.5 rounded-xl bg-primary ${
-                isOnHold ? 'opacity-50' : 'active:opacity-80'
-              }`}
-            >
-              <Feather name="plus" size={12} color="#FFFFFF" />
-              <Text className="text-xs font-bold text-white ml-1">Tạo bản gửi đầu tiên</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        <EmptyState
+          icon="box"
+          title="Chưa có thông tin chuẩn sản phẩm"
+          description="Tạo bản mô tả sản phẩm và tải file chuẩn để làm cơ sở chạy QC."
+          actionLabel={canManageSubmission && !isOnHold ? 'Tạo bản gửi đầu tiên' : undefined}
+          actionIcon="plus"
+          onAction={openCreateForm}
+        />
       )}
 
       {/* Modal Form Tạo/Chỉnh sửa mô tả sản phẩm */}

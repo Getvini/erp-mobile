@@ -1,18 +1,18 @@
-import { getTaskDisplayName } from '@/utils/taskPolicy';
-import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
+import React, { useMemo } from 'react';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { TaskDetail, TASK_STATUS_CONFIG } from '@/services/taskService';
 import { BrandColors } from '@/constants/colors';
 import { formatVND } from '@/utils/formatters';
+import { getTaskDisplayName } from '@/utils/taskPolicy';
+import { EmptyState } from '@/components/common/EmptyState';
+import { ProjectTabHeader } from '@/components/projects/ProjectTabHeader';
 
 /**
  * Tab "Công việc phát sinh" (P1.11) — mirror `ExtraTasksSection.jsx` của Web.
- * Nhóm theo trạng thái định giá: Chờ định giá / Có phí (BILLABLE) / Hỗ trợ (NON_BILLABLE).
+ * 4 thẻ thống kê: Tổng, Chờ giá, Có phí, Hỗ trợ (chỉ hiển thị số liệu thuần túy giống Web).
  */
-type PricingFilter = 'ALL' | 'PENDING' | 'BILLABLE' | 'NON_BILLABLE';
-
 const PRICING_LABELS: Record<string, string> = {
   PENDING: 'Chờ định giá',
   BILLABLE: 'Có phí',
@@ -42,10 +42,8 @@ interface ProjectExtraTasksTabProps {
 export default function ProjectExtraTasksTab({
   tasks,
   isLoading = false,
-  projectId,
 }: ProjectExtraTasksTabProps) {
   const router = useRouter();
-  const [pricingFilter, setPricingFilter] = useState<PricingFilter>('ALL');
 
   const extraTasks = useMemo(() => {
     return tasks
@@ -56,26 +54,18 @@ export default function ProjectExtraTasksTab({
   const summary = useMemo(
     () => ({
       total: extraTasks.length,
-      PENDING: extraTasks.filter((t) => getPricingStatus(t) === 'PENDING').length,
-      BILLABLE: extraTasks.filter((t) => getPricingStatus(t) === 'BILLABLE').length,
-      NON_BILLABLE: extraTasks.filter((t) => getPricingStatus(t) === 'NON_BILLABLE').length,
+      pending: extraTasks.filter((t) => getPricingStatus(t) === 'PENDING').length,
+      billable: extraTasks.filter((t) => getPricingStatus(t) === 'BILLABLE').length,
+      support: extraTasks.filter((t) => getPricingStatus(t) === 'NON_BILLABLE').length,
     }),
     [extraTasks]
   );
 
-  const displayedTasks = useMemo(
-    () =>
-      pricingFilter === 'ALL'
-        ? extraTasks
-        : extraTasks.filter((t) => getPricingStatus(t) === pricingFilter),
-    [extraTasks, pricingFilter]
-  );
-
-  const pills: Array<{ key: PricingFilter; label: string; count: number; color: string }> = [
-    { key: 'ALL', label: 'Tổng', count: summary.total, color: '#334155' },
-    { key: 'PENDING', label: 'Chờ định giá', count: summary.PENDING, color: '#C2410C' },
-    { key: 'BILLABLE', label: 'Có phí', count: summary.BILLABLE, color: '#1D4ED8' },
-    { key: 'NON_BILLABLE', label: 'Hỗ trợ', count: summary.NON_BILLABLE, color: '#B45309' },
+  const summaryCards = [
+    { label: 'Tổng', count: summary.total, color: '#334155' },
+    { label: 'Chờ giá', count: summary.pending, color: '#C2410C' },
+    { label: 'Có phí', count: summary.billable, color: '#1D4ED8' },
+    { label: 'Hỗ trợ', count: summary.support, color: '#B45309' },
   ];
 
   const getStatusBadge = (status?: string) => {
@@ -97,72 +87,41 @@ export default function ProjectExtraTasksTab({
   }
 
   return (
-    <View className="gap-3 p-4">
-      <View className="flex-row items-center gap-2.5">
-        <View className="h-11 w-11 items-center justify-center rounded-xl bg-orange-50">
-          <Feather name="alert-circle" size={20} color={BrandColors.primary} />
-        </View>
-        <View className="flex-1">
-          <Text className="text-[15px] font-bold text-slate-950">Công việc phát sinh</Text>
-          <Text className="text-xs text-slate-500">
-            Danh sách công việc ngoài phạm vi ban đầu của dự án.
-          </Text>
-        </View>
+    <View className="gap-3.5 p-4">
+      {/* Header chuẩn hóa */}
+      <ProjectTabHeader
+        icon="alert-circle"
+        title="Công việc phát sinh"
+        subtitle={`Tổng cộng ${extraTasks.length} công việc ngoài hợp đồng`}
+      />
+
+      {/* Thẻ thống kê số liệu chuẩn Web (SummaryPill: hiển thị thuần túy, không phải nút bấm) */}
+      <View className="flex-row items-center gap-2">
+        {summaryCards.map((card) => (
+          <View
+            key={card.label}
+            className="flex-1 rounded-xl border border-slate-100 bg-slate-50 px-2.5 py-2"
+          >
+            <Text className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              {card.label}
+            </Text>
+            <Text className="mt-0.5 text-lg font-extrabold" style={{ color: card.color }}>
+              {card.count}
+            </Text>
+          </View>
+        ))}
       </View>
 
-      {/* Filter pills */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingRight: 16 }}
-        style={{ flexGrow: 0, marginHorizontal: -16 }}
-      >
-        <View style={{ width: 8 }} />
-        {pills.map((pill) => {
-          const isActive = pricingFilter === pill.key;
-          return (
-            <TouchableOpacity
-              key={pill.key}
-              className={`h-10 flex-row items-center gap-2 rounded-xl border px-3 ${
-                isActive ? 'border-primary bg-orange-50' : 'border-slate-200 bg-white'
-              }`}
-              onPress={() => setPricingFilter(pill.key)}
-              activeOpacity={0.8}
-            >
-              <Text
-                className={`text-xs ${isActive ? 'font-bold text-primary' : 'font-semibold text-slate-500'}`}
-                numberOfLines={1}
-              >
-                {pill.label}
-              </Text>
-              <View className={`rounded-full px-2 py-0.5 ${isActive ? 'bg-orange-100' : 'bg-slate-100'}`}>
-                <Text className={`text-[10px] font-bold ${isActive ? 'text-primary' : 'text-slate-500'}`}>
-                  {pill.count}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
+      {/* Danh sách công việc hoặc Empty State */}
       {extraTasks.length === 0 ? (
-        <View className="items-center justify-center gap-2 py-10">
-          <Feather name="file-text" size={40} color="#CBD5E1" />
-          <Text className="text-[15px] font-bold text-slate-600">Chưa có công việc phát sinh</Text>
-          <Text className="max-w-[260px] text-center text-[13px] text-slate-400">
-            Dự án chưa có công việc phát sinh nào ngoài phạm vi hợp đồng.
-          </Text>
-        </View>
-      ) : displayedTasks.length === 0 ? (
-        <View className="items-center justify-center gap-2 py-10">
-          <Feather name="filter" size={36} color="#CBD5E1" />
-          <Text className="text-[13px] text-slate-400">
-            Không có công việc phát sinh ở nhóm này.
-          </Text>
-        </View>
+        <EmptyState
+          icon="file-text"
+          title="Chưa có công việc phát sinh"
+          description="Dự án chưa có công việc phát sinh nào ngoài phạm vi hợp đồng."
+        />
       ) : (
         <View className="gap-2.5">
-          {displayedTasks.map((task) => {
+          {extraTasks.map((task) => {
             const pricingStatus = getPricingStatus(task);
             const pricingBadge = PRICING_BADGE[pricingStatus] || PRICING_BADGE.PENDING;
             const statusInfo = getStatusBadge(task.status);
@@ -212,9 +171,8 @@ export default function ProjectExtraTasksTab({
                 </View>
 
                 <TouchableOpacity
-                  className="h-12 flex-row items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50"
+                  className="h-10 flex-row items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 active:opacity-80"
                   onPress={() => router.push(`/tasks/${task.id}` as any)}
-                  activeOpacity={0.8}
                 >
                   <Feather name="external-link" size={14} color="#475569" />
                   <Text className="text-xs font-bold text-slate-600">Xem công việc</Text>

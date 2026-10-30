@@ -4,6 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import type { ProjectBudgetSummary, ProjectServiceBudget } from '@/services/paymentRequestService';
 import { formatNumber, formatVND } from '@/utils/formatters';
 import { getBudgetSummaryMetrics } from '@/utils/projectBudgetSummary';
+import { BrandColors } from '@/constants/colors';
 
 type Metrics = ReturnType<typeof getBudgetSummaryMetrics>;
 
@@ -53,8 +54,10 @@ export default function ProjectBudgetSummaryCard({ summary, isLoading, isError, 
   return (
     <View className="gap-3 rounded-2xl border border-slate-200 bg-white p-4">
       <View className="flex-row items-center gap-2">
-        <Feather name="credit-card" size={20} color="#9A3412" />
-        <Text className="flex-1 text-base font-bold text-slate-900">Tài chính & Ngân sách</Text>
+        <View className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 items-center justify-center mr-1">
+          <Feather name="credit-card" size={16} color={BrandColors.primary} />
+        </View>
+        <Text className="flex-1 text-[15px] font-bold text-slate-900">Tài chính & Ngân sách</Text>
       </View>
       {isLoading ? (
         <View accessibilityLabel="Đang tải ngân sách" accessibilityState={{ busy: true }} className="gap-3">

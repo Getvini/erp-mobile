@@ -30,6 +30,8 @@ import {
 } from '@/utils/projectPause';
 import { formatDateToDDMMYYYY } from '@/utils/formatters';
 import { BrandColors } from '@/constants/colors';
+import { EmptyState } from '@/components/common/EmptyState';
+import { ProjectTabHeader } from '@/components/projects/ProjectTabHeader';
 
 /** Màu badge trạng thái (Web dùng PAUSE_REQUEST_STATUS_COLORS trong utils). */
 const STATUS_BADGE: Record<string, { bg: string; color: string }> = {
@@ -324,23 +326,19 @@ export default function PauseHistoryTab({
           />
         }
         ListHeaderComponent={
-          projectName ? (
-            <View className="mb-1">
-              <Text className="text-[15px] font-bold text-slate-950">Lịch sử tạm dừng</Text>
-              <Text className="text-xs text-slate-500" numberOfLines={1}>
-                {projectName}
-              </Text>
-            </View>
-          ) : null
+          <ProjectTabHeader
+            icon="clock"
+            title="Lịch sử tạm dừng"
+            subtitle={`Tổng cộng ${history.length} yêu cầu tạm dừng & đóng`}
+            className="mb-2"
+          />
         }
         ListEmptyComponent={
-          <View className="items-center justify-center gap-2 rounded-3xl border border-dashed border-slate-200 bg-slate-50/40 py-14">
-            <Feather name="clock" size={36} color="#CBD5E1" />
-            <Text className="text-[15px] font-bold text-slate-500">Chưa có lịch sử tạm dừng</Text>
-            <Text className="max-w-[260px] text-center text-[13px] text-slate-400">
-              Lịch sử tạm dừng và đóng dự án sẽ hiển thị ở đây.
-            </Text>
-          </View>
+          <EmptyState
+            icon="clock"
+            title="Chưa có lịch sử tạm dừng"
+            description="Lịch sử tạm dừng và đóng dự án sẽ hiển thị ở đây."
+          />
         }
       />
 

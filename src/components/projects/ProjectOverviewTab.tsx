@@ -154,7 +154,7 @@ export default function ProjectOverviewTab({
 
   return (
     <>
-    <View className="p-4 gap-3.5">
+    <View className="gap-3.5">
       {/* 1. Missing PM Banner */}
       {!pm && (
         <View className="bg-amber-100 border border-amber-300 rounded-2xl p-4 gap-3">
