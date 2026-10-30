@@ -65,7 +65,6 @@ export const QuickActionGrid: React.FC<QuickActionGridProps> = ({
       iconType: 'ionicons',
       iconColor: '#D97706',
       bgColor: '#FEF3C7',
-      badge: totalDebt > 0 ? 'Nợ' : undefined,
       onPress: () => router.push('/finance' as any),
       isAllowed: isManagementRole(userRole) || canAccessContracts(userRole),
     },
