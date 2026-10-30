@@ -47,43 +47,44 @@ export default function RootLayout() {
         <AuthProvider>
           <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
             <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-          <SSEManager />
-          <AnimatedSplashOverlay />
-          <Stack
-            unstable_screenErrorBoundary={ScreenErrorBoundary}
-            screenOptions={{
-              headerShown: false,
-              animation: 'fade',
-            }}
-          >
-            <Stack.Screen name="index" options={{ headerShown: false }} />
-            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-            <Stack.Screen name="explore" options={{ headerShown: false }} />
-            <Stack.Screen name="customers" options={{ headerShown: false }} />
-            <Stack.Screen name="opportunities" options={{ headerShown: false }} />
-            <Stack.Screen name="projects" options={{ headerShown: false }} />
-            <Stack.Screen name="contracts" options={{ headerShown: false }} />
-            <Stack.Screen name="tasks" options={{ headerShown: false }} />
-            <Stack.Screen name="acceptances" options={{ headerShown: false }} />
-            <Stack.Screen name="finance" options={{ headerShown: false }} />
-            <Stack.Screen name="notifications" options={{ headerShown: false }} />
-            <Stack.Screen name="profile" options={{ headerShown: false }} />
-            {/* Phase P2 — Danh mục & Đối tác ngoài */}
-            <Stack.Screen name="vendors" options={{ headerShown: false }} />
-            <Stack.Screen name="referral-partners" options={{ headerShown: false }} />
-            <Stack.Screen name="services" options={{ headerShown: false }} />
-            <Stack.Screen name="service-packages" options={{ headerShown: false }} />
-            {/* Phase P3 — Quản trị hành chính & nội bộ */}
-            <Stack.Screen name="users" options={{ headerShown: false }} />
-            <Stack.Screen name="teams" options={{ headerShown: false }} />
-            <Stack.Screen name="jobs" options={{ headerShown: false }} />
-            <Stack.Screen name="announcements" options={{ headerShown: false }} />
-            <Stack.Screen name="documents" options={{ headerShown: false }} />
-          </Stack>
-          <FloatingChatBubble />
-        </ThemeProvider>
-      </AuthProvider>
-    </QueryProvider>
+            <SSEManager />
+            <AnimatedSplashOverlay />
+            <Stack
+              unstable_screenErrorBoundary={ScreenErrorBoundary}
+              screenOptions={{
+                headerShown: false,
+                animation: 'slide_from_right',
+                contentStyle: { backgroundColor: colors.background },
+              }}
+            >
+              <Stack.Screen name="index" options={{ headerShown: false, animation: 'none' }} />
+              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+              <Stack.Screen name="explore" options={{ headerShown: false }} />
+              <Stack.Screen name="customers" options={{ headerShown: false, animation: 'none' }} />
+
+              <Stack.Screen name="opportunities" options={{ headerShown: false }} />
+              <Stack.Screen name="projects" options={{ headerShown: false, animation: 'none' }} />
+              <Stack.Screen name="contracts" options={{ headerShown: false }} />
+              <Stack.Screen name="tasks" options={{ headerShown: false, animation: 'none' }} />
+
+              <Stack.Screen name="acceptances" options={{ headerShown: false }} />
+              <Stack.Screen name="finance" options={{ headerShown: false }} />
+              <Stack.Screen name="notifications" options={{ headerShown: false }} />
+              <Stack.Screen name="profile" options={{ headerShown: false, animation: 'none' }} />
+              <Stack.Screen name="vendors" options={{ headerShown: false }} />
+              <Stack.Screen name="referral-partners" options={{ headerShown: false }} />
+              <Stack.Screen name="services" options={{ headerShown: false }} />
+              <Stack.Screen name="service-packages" options={{ headerShown: false }} />
+              <Stack.Screen name="users" options={{ headerShown: false }} />
+              <Stack.Screen name="teams" options={{ headerShown: false }} />
+              <Stack.Screen name="jobs" options={{ headerShown: false }} />
+              <Stack.Screen name="announcements" options={{ headerShown: false }} />
+              <Stack.Screen name="documents" options={{ headerShown: false }} />
+            </Stack>
+            <FloatingChatBubble />
+          </ThemeProvider>
+        </AuthProvider>
+      </QueryProvider>
     </GestureHandlerRootView>
   );
 }
