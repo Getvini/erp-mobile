@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+﻿import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Linking, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -549,8 +549,8 @@ export default function TaskResultChecksPanel({ taskId, projectId }: TaskResultC
         <>
           {!!record.qcModels && (
             <View className="flex-row flex-wrap gap-1.5">
-              <View className="px-2 py-0.5 bg-purple-100 rounded-full">
-                <Text className="text-[10px] font-medium text-purple-700">Đối chiếu: {record.qcModels.verify}</Text>
+              <View className="px-2 py-0.5 bg-blue-50 rounded-full">
+                <Text className="text-[10px] font-medium text-blue-700">Đối chiếu: {record.qcModels.verify}</Text>
               </View>
             </View>
           )}

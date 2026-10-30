@@ -12,6 +12,12 @@ export interface TaskListFilters {
   assigneeId?: string;
   page?: number;
   limit?: number;
+  dateType?: string;
+  deadline?: string;
+  deadlineFrom?: string;
+  deadlineTo?: string;
+  sortBy?: string;
+  sortDir?: string;
 }
 
 /**

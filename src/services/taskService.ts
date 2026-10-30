@@ -33,25 +33,25 @@ export const TASK_STATUS_CONFIG: Record<
 > = {
 
   NOT_STARTED: { text: 'Chưa thực hiện', color: '#475569', bg: '#F1F5F9' },
-  PENDING: { text: 'Chờ phân công', color: '#D97706', bg: '#FFFBEB' },
-  DOING: { text: 'Đang thực hiện', color: '#2563EB', bg: '#EFF6FF' },
-  DONE: { text: 'Hoàn thành', color: '#059669', bg: '#ECFDF5' },
-  CANCELLED: { text: 'Đã hủy', color: '#E11D48', bg: '#FFF1F2' },
+  PENDING: { text: 'Chờ phân công', color: '#B45309', bg: '#FEF3C7' },
+  DOING: { text: 'Đang thực hiện', color: '#EA580C', bg: '#FFF7ED' },
+  DONE: { text: 'Hoàn thành', color: '#047857', bg: '#ECFDF5' },
+  CANCELLED: { text: 'Đã hủy', color: '#BE123C', bg: '#FFF1F2' },
   AWAITING_PRICING: { text: 'Chờ định giá', color: '#EA580C', bg: '#FFF7ED' },
-  REJECTED: { text: 'Yêu cầu làm lại', color: '#E11D48', bg: '#FFF1F2' },
-  REJECTED_BILLABLE: { text: 'Làm lại (có phí)', color: '#E11D48', bg: '#FFF1F2' },
-  REJECTED_SUPPORT: { text: 'Làm lại (hỗ trợ)', color: '#E11D48', bg: '#FFF1F2' },
-  AWAITING_ACCEPTANCE: { text: 'Chờ nghiệm thu', color: '#D97706', bg: '#FFFBEB' },
-  AWAITING_REVIEW: { text: 'Chờ duyệt', color: '#D97706', bg: '#FFFBEB' },
-  OVERDUE: { text: 'Quá hạn', color: '#DC2626', bg: '#FEF2F2' },
-  AWAITING_SUPPORT: { text: 'Đã nhờ hỗ trợ', color: '#E11D48', bg: '#FFF1F2' },
+  REJECTED: { text: 'Yêu cầu làm lại', color: '#BE123C', bg: '#FFF1F2' },
+  REJECTED_BILLABLE: { text: 'Làm lại (có phí)', color: '#BE123C', bg: '#FFF1F2' },
+  REJECTED_SUPPORT: { text: 'Làm lại (hỗ trợ)', color: '#BE123C', bg: '#FFF1F2' },
+  AWAITING_ACCEPTANCE: { text: 'Chờ nghiệm thu', color: '#047857', bg: '#ECFDF5' },
+  AWAITING_REVIEW: { text: 'Chờ duyệt', color: '#B45309', bg: '#FEF3C7' },
+  OVERDUE: { text: 'Quá hạn', color: '#B91C1C', bg: '#FEF2F2' },
+  AWAITING_SUPPORT: { text: 'Đã nhờ hỗ trợ', color: '#EA580C', bg: '#FFF7ED' },
   SUPPORT_PENDING: { text: 'Chờ xác nhận hỗ trợ', color: '#EA580C', bg: '#FFF7ED' },
-  COMPLETED: { text: 'Hoàn thành', color: '#059669', bg: '#ECFDF5' },
-  REWORKING: { text: 'Đang làm lại', color: '#D97706', bg: '#FFFBEB' },
-  INTERNAL_COMPLETED: { text: 'HT nội bộ', color: '#7C3AED', bg: '#F3E8FF' },
-  ACCEPTED: { text: 'Đã nghiệm thu', color: '#059669', bg: '#ECFDF5' },
-  SUPPORT_AWAITING_RETURN: { text: 'Chờ xác nhận hoàn thành', color: '#2563EB', bg: '#EFF6FF' },
-  ON_HOLD: { text: 'Tạm dừng', color: '#B45309', bg: '#FFFBEB' },
+  COMPLETED: { text: 'Hoàn thành', color: '#047857', bg: '#ECFDF5' },
+  REWORKING: { text: 'Đang làm lại', color: '#B45309', bg: '#FEF3C7' },
+  INTERNAL_COMPLETED: { text: 'HT nội bộ', color: '#047857', bg: '#ECFDF5' },
+  ACCEPTED: { text: 'Đã nghiệm thu', color: '#047857', bg: '#ECFDF5' },
+  SUPPORT_AWAITING_RETURN: { text: 'Chờ xác nhận hoàn thành', color: '#EA580C', bg: '#FFF7ED' },
+  ON_HOLD: { text: 'Tạm dừng', color: '#B45309', bg: '#FEF3C7' },
 };
 
 export interface SubmitTaskResultFileParams {
@@ -65,6 +65,7 @@ export interface SubmitTaskResultFileParams {
 }
 
 export interface TaskDetail extends TaskItem {
+  deadlineChangeReason?: string;
   code?: string;
   nickname?: string;
   projectId?: string;

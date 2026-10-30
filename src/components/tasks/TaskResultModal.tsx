@@ -1,3 +1,5 @@
+import { useAuth } from '@/context/AuthContext';
+import { getTaskPolicy } from '@/utils/taskPolicy';
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -40,6 +42,8 @@ export default function TaskResultModal({
   task,
   onSuccess,
 }: TaskResultModalProps) {
+  const { user } = useAuth();
+  const policy = getTaskPolicy(task, user);
   const [submissionType, setSubmissionType] = useState<SubmissionType>('file');
   const [resultLink, setResultLink] = useState('');
   const [resultFile, setResultFile] = useState<PickedFile | null>(null);
@@ -130,6 +134,7 @@ export default function TaskResultModal({
   };
 
   const handleSubmit = async () => {
+    if (!policy.uploadResult.enabled) return;
     if (!task || isLoadingSheets) return;
 
     try {
@@ -350,19 +355,21 @@ export default function TaskResultModal({
                   <Text className="text-sm font-bold text-slate-500">Quay lại</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  className={`flex-1 py-3.5 rounded-xl bg-primary items-center ${submitDisabled ? 'opacity-50' : ''}`}
-                  onPress={handleSubmit}
-                  disabled={submitDisabled}
-                >
-                  {isPending ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text className="text-sm font-bold text-white">
-                      {isLoadingSheets ? 'Đang đọc sheet...' : 'Lưu kết quả'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
+                {policy.uploadResult.enabled && (
+                  <TouchableOpacity accessibilityLabel="Nộp kết quả"
+                    className={`flex-1 py-3.5 rounded-xl bg-primary items-center ${submitDisabled ? 'opacity-50' : ''}`}
+                    onPress={handleSubmit}
+                    disabled={submitDisabled}
+                    style={[submitDisabled ? { opacity: 0.5 } : undefined]} accessibilityRole="button">
+                    {isPending ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text className="text-sm font-bold text-white">
+                        {isLoadingSheets ? 'Đang đọc sheet...' : 'Lưu kết quả'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                )}
               </View>
             </>
           )}

@@ -1,3 +1,4 @@
+import type { TaskActionState } from '@/utils/taskPolicy';
 import React, { useMemo, useState } from 'react';
 import {
   View,
@@ -37,6 +38,7 @@ export interface SubtaskAssigneeOption {
 }
 
 interface SubtaskAllocationModalProps {
+  policy: TaskActionState;
   visible: boolean;
   onClose: () => void;
   /** ID của task CHA (POST /tasks/:id/subtasks) */
@@ -80,6 +82,7 @@ const parsePercentInput = (value: string | number | undefined | null): number =>
 };
 
 export default function SubtaskAllocationModal({
+  policy,
   visible,
   onClose,
   taskId,
@@ -150,6 +153,7 @@ export default function SubtaskAllocationModal({
   }, [percentInput, editablePercent]);
 
   const handleSubmit = async () => {
+    if (!policy.enabled) return;
     const trimmedName = name.trim();
     if (!trimmedName) {
       setError('Vui lòng nhập tên công việc con');
@@ -404,28 +408,29 @@ export default function SubtaskAllocationModal({
               <Text className="text-sm font-semibold text-slate-600">Hủy bỏ</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              className={`flex-[2] min-h-[48px] flex-row items-center justify-center gap-2 bg-primary py-3.5 rounded-xl ${
-                isPending ? 'opacity-60' : ''
-              }`}
-              onPress={handleSubmit}
-              disabled={isPending}
-              activeOpacity={0.85}
-            >
-              {isPending ? (
-                <>
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                  <Text className="text-sm font-bold text-white">Đang lưu...</Text>
-                </>
-              ) : (
-                <>
-                  <Feather name={isEditing ? 'save' : 'plus'} size={16} color="#FFFFFF" />
-                  <Text className="text-sm font-bold text-white">
-                    {isEditing ? 'Lưu thay đổi' : 'Thêm công việc con'}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {policy.enabled && (
+              <TouchableOpacity accessibilityLabel="Lưu công việc con"
+                className={`flex-[2] min-h-[48px] flex-row items-center justify-center gap-2 bg-primary py-3.5 rounded-xl ${isPending ? 'opacity-60' : ''
+                  }`}
+                onPress={handleSubmit}
+                disabled={isPending}
+                activeOpacity={0.85}
+                style={[isPending ? { opacity: 0.5 } : undefined]} accessibilityRole="button">
+                {isPending ? (
+                  <>
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <Text className="text-sm font-bold text-white">Đang lưu...</Text>
+                  </>
+                ) : (
+                  <>
+                    <Feather name={isEditing ? 'save' : 'plus'} size={16} color="#FFFFFF" />
+                    <Text className="text-sm font-bold text-white">
+                      {isEditing ? 'Lưu thay đổi' : 'Thêm công việc con'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>

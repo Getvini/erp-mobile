@@ -1,3 +1,5 @@
+import { useAuth } from '@/context/AuthContext';
+import { getTaskPolicy, getTaskActionState } from '@/utils/taskPolicy';
 import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -74,10 +76,13 @@ export default function TaskSubtaskSection({
   onChanged,
 }: TaskSubtaskSectionProps) {
   const router = useRouter();
+  const { user } = useAuth();
+  const policy = getTaskPolicy(task, user);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSubtask, setEditingSubtask] = useState<TaskSubtask | null>(null);
 
   const subtasks = useMemo(() => task?.subtasks || [], [task?.subtasks]);
+  const latestEditingSubtask = editingSubtask ? subtasks.find((item: TaskSubtask) => item.id === editingSubtask.id) : undefined;
   const parentBudget = getParentBudget(task);
 
   const allocations: SubtaskAllocation[] = useMemo(
@@ -113,17 +118,20 @@ export default function TaskSubtaskSection({
   const remainingPercent = Math.max(0, 100 - allocatedPercent);
 
   const openCreateModal = () => {
+    if (!policy.createSubtask.enabled) return;
     setEditingSubtask(null);
     setIsModalOpen(true);
   };
 
+  const editPolicy = (subtask: TaskSubtask) => getTaskActionState({ ...subtask, parentTaskId: task?.id, project: task?.project }, user, 'editSubtask', { parentTask: task });
   const openEditModal = (subtask: TaskSubtask) => {
+    if (!editPolicy(subtask).enabled) return;
     setEditingSubtask(subtask);
     setIsModalOpen(true);
   };
 
-  // Chỉ render khi task đã có công việc con HOẶC người dùng đủ quyền quản lý
-  if (subtasks.length === 0 && !canManage) return null;
+  // Chỉ render khi task đã có công việc con HOẶC người dùng có thể tạo công việc con
+  if (subtasks.length === 0 && !policy.createSubtask.enabled) return null;
 
   /** % tối đa của dòng đang sửa = 100% - tổng % của các dòng KHÁC */
   const editingPercent = getPercent(editingSubtask);
@@ -152,12 +160,12 @@ export default function TaskSubtaskSection({
           </View>
         </View>
 
-        {canManage && (
-          <TouchableOpacity
+        {policy.createSubtask.enabled && (
+          <TouchableOpacity accessibilityLabel="Thêm công việc con"
             className="flex-row items-center gap-1.5 bg-primary px-3.5 min-h-[48px] rounded-xl"
             onPress={openCreateModal}
             activeOpacity={0.85}
-          >
+            accessibilityRole="button">
             <Feather name="plus" size={15} color="#FFFFFF" />
             <Text className="text-xs font-bold text-white">Thêm công việc con</Text>
           </TouchableOpacity>
@@ -165,7 +173,7 @@ export default function TaskSubtaskSection({
       </View>
 
       {/* Tổng phân bổ */}
-      <View className="flex-row flex-wrap gap-2">
+      {policy.viewAllocation.visible && <View className="flex-row flex-wrap gap-2">
         <View className="flex-row items-center gap-1.5 bg-orange-50 border border-orange-100 px-2.5 py-1.5 rounded-lg">
           <Feather name="pie-chart" size={12} color="#C2410C" />
           <Text className="text-[11px] font-bold text-orange-700">
@@ -182,8 +190,10 @@ export default function TaskSubtaskSection({
 
       </View>
 
+      }
+
       {/* Cảnh báo tổng vượt 100% */}
-      {!totalValidation.valid && (
+      {policy.viewAllocation.visible && !totalValidation.valid && (
         <View className="flex-row items-start gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
           <Feather name="alert-triangle" size={14} color="#DC2626" />
           <Text className="flex-1 text-[11px] font-bold text-red-600">
@@ -253,21 +263,21 @@ export default function TaskSubtaskSection({
                     {subtask.assignee?.fullName || subtask.assignee?.name || 'Chưa phân công'}
                   </Text>
 
-                  <View className="bg-orange-50 border border-orange-100 px-2 py-0.5 rounded-md">
+                  {policy.viewAllocation.visible && <View className="bg-orange-50 border border-orange-100 px-2 py-0.5 rounded-md">
                     <Text className="text-[10px] font-bold text-orange-700">
                       {formatPercentLabel(percent)}
                     </Text>
-                  </View>
+                  </View>}
 
-                  {canManage && (
-                    <TouchableOpacity
+                  {editPolicy(subtask).enabled && (
+                    <TouchableOpacity accessibilityLabel="Sửa công việc con"
                       className="w-10 h-10 rounded-xl bg-white border border-orange-200 items-center justify-center"
                       onPress={(e) => {
                         e.stopPropagation?.();
                         openEditModal(subtask);
                       }}
                       activeOpacity={0.8}
-                    >
+                      accessibilityRole="button">
                       <Feather name="edit-2" size={14} color={BrandColors.primary} />
                     </TouchableOpacity>
                   )}
@@ -294,6 +304,7 @@ export default function TaskSubtaskSection({
       )}
 
       <SubtaskAllocationModal
+        policy={editingSubtask ? (latestEditingSubtask ? editPolicy(latestEditingSubtask) : { visible: true, enabled: false, reasonCode: 'SUBTASK_MISSING', reason: 'Không tìm thấy công việc con mới nhất.' }) : policy.createSubtask}
         visible={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         taskId={task?.id || ''}
