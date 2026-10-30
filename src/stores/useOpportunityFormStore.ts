@@ -12,7 +12,12 @@ export interface AttachedFile {
 export interface ServiceJobBrief {
   jobId: string;
   name: string;
+  quantity?: number;
+  unit?: string;
+  costPrice?: number;
+  costAtSale?: number;
   isBriefVideo: boolean;
+  isQuotationItem?: boolean;
   included: boolean;
   briefVideo: string;
 }
@@ -277,7 +282,11 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
               jobs: (item.service?.serviceJobs || []).map((serviceJob: any) => ({
                 jobId: serviceJob.job?.id || serviceJob.jobId,
                 name: serviceJob.job?.name || 'Hạng mục',
+                quantity: Number(serviceJob.quantity || 1),
+                unit: serviceJob.job?.unit || serviceJob.unit || '',
+                costPrice: Number(serviceJob.job?.costPrice ?? serviceJob.costPrice ?? serviceJob.costAtSale ?? 0),
                 isBriefVideo: Boolean(serviceJob.job?.isBriefVideo),
+                isQuotationItem: serviceJob.job?.isQuotationItem !== false && serviceJob.isQuotationItem !== false,
                 included: !Boolean(serviceJob.job?.isBriefVideo),
                 briefVideo: '',
               })),
@@ -344,7 +353,11 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
               const jobs = (serviceObj?.serviceJobs || []).map((serviceJob: any) => ({
                 jobId: serviceJob.job?.id || serviceJob.jobId,
                 name: serviceJob.job?.name || 'Hạng mục',
+                quantity: Number(serviceJob.quantity || 1),
+                unit: serviceJob.job?.unit || serviceJob.unit || '',
+                costPrice: Number(serviceJob.job?.costPrice ?? serviceJob.costPrice ?? serviceJob.costAtSale ?? 0),
                 isBriefVideo: Boolean(serviceJob.job?.isBriefVideo),
+                isQuotationItem: serviceJob.job?.isQuotationItem !== false && serviceJob.isQuotationItem !== false,
                 included: !Boolean(serviceJob.job?.isBriefVideo),
                 briefVideo: '',
               }));
@@ -447,7 +460,11 @@ export const useOpportunityFormStore = create<OpportunityFormStore>()(
             const jobs = (serviceObj?.serviceJobs || []).map((serviceJob: any) => ({
               jobId: serviceJob.job?.id || serviceJob.jobId,
               name: serviceJob.job?.name || 'Hạng mục',
+              quantity: Number(serviceJob.quantity || 1),
+              unit: serviceJob.job?.unit || serviceJob.unit || '',
+              costPrice: Number(serviceJob.job?.costPrice ?? serviceJob.costPrice ?? serviceJob.costAtSale ?? 0),
               isBriefVideo: Boolean(serviceJob.job?.isBriefVideo),
+              isQuotationItem: serviceJob.job?.isQuotationItem !== false && serviceJob.isQuotationItem !== false,
               included: !Boolean(serviceJob.job?.isBriefVideo),
               briefVideo: '',
             }));
