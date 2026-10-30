@@ -61,8 +61,8 @@ export const Step5ServicesPackages: React.FC = () => {
     return Array.isArray(rawServ)
       ? rawServ
       : (rawServ as any)?.data && Array.isArray((rawServ as any).data)
-      ? (rawServ as any).data
-      : [];
+        ? (rawServ as any).data
+        : [];
   }, [rawServ]);
 
   const availablePackages = useMemo<Array<any>>(() => {
@@ -70,25 +70,40 @@ export const Step5ServicesPackages: React.FC = () => {
     return Array.isArray(rawPkg)
       ? rawPkg
       : (rawPkg as any)?.data && Array.isArray((rawPkg as any).data)
-      ? (rawPkg as any).data
-      : [];
+        ? (rawPkg as any).data
+        : [];
   }, [rawPkg]);
 
   // Helper functions tính giá vốn chuẩn khớp với Web
-  const getServiceJobsCost = (jobs: any[] = []) =>
+  const getServiceJobsCost = (jobs: any[] = [], serviceObj?: any) =>
     jobs.reduce((total, sj) => {
       if (sj?.included === false) return total;
       const qty = Number(sj.quantity || 1);
+      const fallbackJob = serviceObj?.serviceJobs?.find(
+        (item: any) => String(item.job?.id || item.jobId || item.id) === String(sj.jobId || sj.id)
+      );
       const unitCost = Number(
-        sj.costPrice ?? sj.costAtSale ?? sj.job?.costPrice ?? 0
+        sj.costPrice ??
+        sj.costAtSale ??
+        sj.job?.costPrice ??
+        fallbackJob?.costPrice ??
+        fallbackJob?.costAtSale ??
+        fallbackJob?.job?.costPrice ??
+        0
       );
       return total + unitCost * qty;
     }, 0);
 
   const getServiceBaseCost = (service: any, jobs: any[] = []) => {
-    const jobsCost = getServiceJobsCost(jobs);
-    if (jobsCost > 0 || (jobs && jobs.length > 0)) return jobsCost;
-    return Number(service?.costPrice || 0);
+    // 1. Ưu tiên giá của dịch vụ do API trả ra
+    const serviceCost = Number(service?.costPrice || 0);
+    if (serviceCost > 0) {
+      return serviceCost;
+    }
+
+    // 2. Khi nào giá dịch vụ trả ra là 0 (hoặc <= 0), mới tính đến các hạng mục (jobs) bên trong
+    const jobsToCalculate = jobs && jobs.length > 0 ? jobs : (service?.serviceJobs || service?.jobs || []);
+    return getServiceJobsCost(jobsToCalculate, service);
   };
 
   const getLineCost = (
@@ -343,16 +358,16 @@ export const Step5ServicesPackages: React.FC = () => {
                         serviceItem.jobs && serviceItem.jobs.length > 0
                           ? serviceItem.jobs
                           : (foundSub?.serviceJobs || []).map((sj: any) => ({
-                              jobId: sj.job?.id || sj.jobId || sj.id,
-                              name: sj.job?.name || sj.name || 'Hạng mục',
-                              costPrice: sj.job?.costPrice || sj.costPrice || 0,
-                              unit: sj.job?.unit || sj.unit || '',
-                              isBriefVideo: Boolean(sj.job?.isBriefVideo || sj.isBriefVideo),
-                              isQuotationItem:
-                                sj.job?.isQuotationItem !== false && sj.isQuotationItem !== false,
-                              included: !Boolean(sj.job?.isBriefVideo || sj.isBriefVideo),
-                              briefVideo: '',
-                            }));
+                            jobId: sj.job?.id || sj.jobId || sj.id,
+                            name: sj.job?.name || sj.name || 'Hạng mục',
+                            costPrice: sj.job?.costPrice || sj.costPrice || 0,
+                            unit: sj.job?.unit || sj.unit || '',
+                            isBriefVideo: Boolean(sj.job?.isBriefVideo || sj.isBriefVideo),
+                            isQuotationItem:
+                              sj.job?.isQuotationItem !== false && sj.isQuotationItem !== false,
+                            included: !Boolean(sj.job?.isBriefVideo || sj.isBriefVideo),
+                            briefVideo: '',
+                          }));
 
                       return (
                         <View
@@ -373,9 +388,8 @@ export const Step5ServicesPackages: React.FC = () => {
                             >
                               <Text
                                 numberOfLines={1}
-                                className={`text-[12px] font-semibold flex-1 ${
-                                  foundSub ? 'text-slate-900' : 'text-slate-400 font-normal'
-                                }`}
+                                className={`text-[12px] font-semibold flex-1 ${foundSub ? 'text-slate-900' : 'text-slate-400 font-normal'
+                                  }`}
                               >
                                 {foundSub ? foundSub.name : '-- Chọn dịch vụ --'}
                               </Text>
@@ -494,16 +508,16 @@ export const Step5ServicesPackages: React.FC = () => {
             row.jobs && row.jobs.length > 0
               ? row.jobs
               : (selectedServ?.serviceJobs || []).map((sj: any) => ({
-                  jobId: sj.job?.id || sj.jobId || sj.id,
-                  name: sj.job?.name || sj.name || 'Hạng mục',
-                  costPrice: sj.job?.costPrice || sj.costPrice || 0,
-                  unit: sj.job?.unit || sj.unit || '',
-                  isBriefVideo: Boolean(sj.job?.isBriefVideo || sj.isBriefVideo),
-                  isQuotationItem:
-                    sj.job?.isQuotationItem !== false && sj.isQuotationItem !== false,
-                  included: !Boolean(sj.job?.isBriefVideo || sj.isBriefVideo),
-                  briefVideo: '',
-                }));
+                jobId: sj.job?.id || sj.jobId || sj.id,
+                name: sj.job?.name || sj.name || 'Hạng mục',
+                costPrice: sj.job?.costPrice || sj.costPrice || 0,
+                unit: sj.job?.unit || sj.unit || '',
+                isBriefVideo: Boolean(sj.job?.isBriefVideo || sj.isBriefVideo),
+                isQuotationItem:
+                  sj.job?.isQuotationItem !== false && sj.isQuotationItem !== false,
+                included: !Boolean(sj.job?.isBriefVideo || sj.isBriefVideo),
+                briefVideo: '',
+              }));
 
           const lineCost = getLineCost(row, selectedServ);
 
@@ -520,9 +534,8 @@ export const Step5ServicesPackages: React.FC = () => {
                 >
                   <Text
                     numberOfLines={1}
-                    className={`text-[13px] font-semibold flex-1 ${
-                      selectedServ ? 'text-slate-900' : 'text-slate-400 font-normal'
-                    }`}
+                    className={`text-[13px] font-semibold flex-1 ${selectedServ ? 'text-slate-900' : 'text-slate-400 font-normal'
+                      }`}
                   >
                     {selectedServ ? selectedServ.name : '-- Chọn dịch vụ --'}
                   </Text>
@@ -605,9 +618,8 @@ export const Step5ServicesPackages: React.FC = () => {
       <View className="mt-[14px] bg-[#F38820] rounded-[14px] px-[16px] py-[14px] shadow-sm">
         {/* Hàng 1: Tổng giá vốn */}
         <View
-          className={`flex-row items-center justify-between ${
-            isSmallScreen ? 'flex-col items-start gap-[4px]' : ''
-          }`}
+          className={`flex-row items-center justify-between ${isSmallScreen ? 'flex-col items-start gap-[4px]' : ''
+            }`}
         >
           <Text className="text-[12px] font-medium text-white/95 flex-1">
             Tổng giá vốn của các dịch vụ đã chọn:
@@ -622,9 +634,8 @@ export const Step5ServicesPackages: React.FC = () => {
 
         {/* Hàng 2: Giá bán dự kiến (140% giá vốn) */}
         <View
-          className={`mt-[10px] pt-[10px] border-t border-white/30 flex-row items-center justify-between ${
-            isSmallScreen ? 'flex-col items-start gap-[4px]' : ''
-          }`}
+          className={`mt-[10px] pt-[10px] border-t border-white/30 flex-row items-center justify-between ${isSmallScreen ? 'flex-col items-start gap-[4px]' : ''
+            }`}
         >
           <Text className="text-[12px] font-medium text-white/95 flex-1">
             Giá bán dự kiến (140% giá vốn):
@@ -664,8 +675,8 @@ export const Step5ServicesPackages: React.FC = () => {
             ? activeServiceTarget.type === 'standalone'
               ? services[activeServiceTarget.index]?.serviceId || ''
               : packages[activeServiceTarget.pkgIndex]?.services?.[
-                  activeServiceTarget.serviceIndex
-                ]?.serviceId || ''
+                activeServiceTarget.serviceIndex
+              ]?.serviceId || ''
             : ''
         }
         onSelectService={(serviceId: string) => handleSelectServiceFromModal(serviceId)}

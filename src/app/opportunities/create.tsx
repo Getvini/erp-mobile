@@ -202,6 +202,16 @@ export default function CreateOpportunityScreen() {
           serviceId: s.serviceId || s.service?.id || s.id || '',
           quantity: Number(s.quantity) || 1,
           budget: Number(s.budget) || 0,
+          jobs: (s.jobs || s.service?.serviceJobs || []).map((sj: any) => ({
+            jobId: sj.job?.id || sj.jobId || sj.id,
+            name: sj.job?.name || sj.name || 'Hạng mục',
+            quantity: Number(sj.quantity || 1),
+            unit: sj.job?.unit || sj.unit || '',
+            costPrice: Number(sj.costAtSale ?? sj.job?.costPrice ?? sj.costPrice ?? 0),
+            isBriefVideo: Boolean(sj.job?.isBriefVideo ?? sj.isBriefVideo),
+            included: sj.included !== undefined ? Boolean(sj.included) : !Boolean(sj.job?.isBriefVideo ?? sj.isBriefVideo),
+            briefVideo: sj.briefVideo || '',
+          })),
         }));
 
       const mappedPackages = (clonedOpp.packages || []).map((pkg: any) => ({
@@ -291,6 +301,16 @@ export default function CreateOpportunityScreen() {
           serviceId: s.serviceId || s.service?.id || s.id || '',
           quantity: Number(s.quantity) || 1,
           budget: Number(s.budget) || 0,
+          jobs: (s.jobs || s.service?.serviceJobs || []).map((sj: any) => ({
+            jobId: sj.job?.id || sj.jobId || sj.id,
+            name: sj.job?.name || sj.name || 'Hạng mục',
+            quantity: Number(sj.quantity || 1),
+            unit: sj.job?.unit || sj.unit || '',
+            costPrice: Number(sj.costAtSale ?? sj.job?.costPrice ?? sj.costPrice ?? 0),
+            isBriefVideo: Boolean(sj.job?.isBriefVideo ?? sj.isBriefVideo),
+            included: sj.included !== undefined ? Boolean(sj.included) : !Boolean(sj.job?.isBriefVideo ?? sj.isBriefVideo),
+            briefVideo: sj.briefVideo || '',
+          })),
         }));
 
       const mappedPackages = (oppToEdit.packages || []).map((pkg: any) => ({
