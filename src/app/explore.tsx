@@ -30,14 +30,14 @@ const MODULES = [
   {
     id: 'projects',
     title: 'Quản lý Dự án',
-    desc: 'Theo dõi tiến độ Kanban, phân công công việc, xét duyệt và nghiệm thu nhiệm vụ.',
+    desc: 'Theo dõi dự án.',
     icon: 'briefcase-outline' as const,
     color: BrandColors.primary,
     badge: 'Cốt lõi',
   },
   {
     id: 'tasks',
-    title: 'Nhiệm vụ & Công việc',
+    title: 'Công việc',
     desc: 'Quản lý công việc cá nhân, tiến độ thực hiện, giao task và cập nhật trạng thái.',
     icon: 'checkbox-outline' as const,
     color: '#F59E0B',
@@ -45,16 +45,16 @@ const MODULES = [
   },
   {
     id: 'opportunities',
-    title: 'Cơ hội & Pipeline',
-    desc: 'Theo dõi phễu bán hàng, tỷ lệ thành công, báo giá và phê duyệt cơ hội BOD.',
+    title: 'Cơ hội',
+    desc: 'Theo dõi cơ hội.',
     icon: 'trending-up-outline' as const,
     color: '#8B5CF6',
     badge: 'Kinh doanh',
   },
   {
     id: 'customers',
-    title: 'Khách hàng & CRM',
-    desc: 'Hồ sơ đối tác doanh nghiệp, lịch sử giao dịch và cơ hội hợp tác kinh doanh.',
+    title: 'Khách hàng',
+    desc: 'Hồ sơ khách hàng.',
     icon: 'people-outline' as const,
     color: '#10B981',
     badge: 'Kinh doanh',
@@ -62,7 +62,7 @@ const MODULES = [
   {
     id: 'contracts',
     title: 'Hợp đồng & Phụ lục',
-    desc: 'Quản lý danh sách hợp đồng, điều khoản thanh toán và phụ lục phát sinh.',
+    desc: 'Quản lý danh sách hợp đồng và phụ lục phát sinh.',
     icon: 'document-text-outline' as const,
     color: '#3B82F6',
     badge: 'Pháp lý',
@@ -70,7 +70,7 @@ const MODULES = [
   {
     id: 'acceptances',
     title: 'Yêu cầu Nghiệm thu',
-    desc: 'Quản lý, tạo yêu cầu và phê duyệt các biên bản nghiệm thu hạng mục dịch vụ dự án.',
+    desc: 'Quản lý, tạo yêu cầu và phê duyệt các biên bản nghiệm thu',
     icon: 'checkmark-done-circle-outline' as const,
     color: '#059669',
     badge: 'Dự án',
@@ -83,26 +83,26 @@ const MODULES = [
     color: '#F59E0B',
     badge: 'Kế toán',
   },
-  {
-    id: 'teams',
-    title: 'Đội dự án',
-    desc: 'Cơ cấu đội nhóm theo dự án, vai trò thành viên, tải công việc và Team Lead.',
-    icon: 'people-circle-outline' as const,
-    color: '#EC4899',
-    badge: 'Nhân sự',
-  },
+  // {
+  //   id: 'teams',
+  //   title: 'Đội dự án',
+  //   desc: 'Cơ cấu đội nhóm theo dự án, vai trò thành viên, tải công việc và Team Lead.',
+  //   icon: 'people-circle-outline' as const,
+  //   color: '#EC4899',
+  //   badge: 'Nhân sự',
+  // },
   {
     id: 'users',
     title: 'Nhân sự nội bộ',
-    desc: 'Danh bạ nhân sự toàn công ty, vai trò hệ thống, hợp đồng lao động và công việc.',
+    desc: 'Quản lý nhân sự.',
     icon: 'id-card-outline' as const,
     color: '#DB2777',
     badge: 'Nhân sự',
   },
   {
     id: 'services',
-    title: 'Dịch vụ niêm yết',
-    desc: 'Danh mục dịch vụ, cấu hình hạng mục công việc và giá vốn tự động.',
+    title: 'Dịch vụ',
+    desc: 'Danh mục dịch vụ.',
     icon: 'pricetags-outline' as const,
     color: '#0EA5E9',
     badge: 'Danh mục',
@@ -110,7 +110,7 @@ const MODULES = [
   {
     id: 'service-packages',
     title: 'Gói dịch vụ',
-    desc: 'Gói combo dịch vụ bán theo template, số lượng mặc định và giá vốn gói.',
+    desc: 'Thiết kế và quản lý các gói dịch vụ.',
     icon: 'cube-outline' as const,
     color: '#8B5CF6',
     badge: 'Danh mục',
@@ -118,15 +118,15 @@ const MODULES = [
   {
     id: 'jobs',
     title: 'Hạng mục công việc',
-    desc: 'Hạng mục công việc, giá vốn, Vinicoin, nhóm nghề và tiêu chí nghiệm thu QC.',
+    desc: 'Thiết kế và quản lý các hạng mục công việc.',
     icon: 'list-outline' as const,
     color: '#14B8A6',
     badge: 'Danh mục',
   },
   {
     id: 'vendors',
-    title: 'Nhà cung cấp',
-    desc: 'Hồ sơ nhà cung cấp, KOL/KOC, tài khoản ngân hàng và giá mua ngoài theo hạng mục.',
+    title: 'Vendors',
+    desc: 'Quản lý vendor.',
     icon: 'storefront-outline' as const,
     color: '#F97316',
     badge: 'Đối tác',
@@ -134,7 +134,7 @@ const MODULES = [
   {
     id: 'referral-partners',
     title: 'Đối tác giới thiệu',
-    desc: 'Mạng lưới CTV/đối tác, khách hàng – cơ hội – hợp đồng giới thiệu và hoa hồng.',
+    desc: 'Quản lý các đối tác.',
     icon: 'share-social-outline' as const,
     color: '#0891B2',
     badge: 'Đối tác',
@@ -142,7 +142,7 @@ const MODULES = [
   {
     id: 'announcements',
     title: 'Bảng tin công ty',
-    desc: 'Thông báo nội bộ theo phạm vi, sự kiện, bình luận và thống kê người đã đọc.',
+    desc: 'Thông báo nội bộ.',
     icon: 'megaphone-outline' as const,
     color: '#6366F1',
     badge: 'Nội bộ',
@@ -150,23 +150,23 @@ const MODULES = [
   {
     id: 'documents',
     title: 'Kho biểu mẫu & tài liệu',
-    desc: 'Thư viện biểu mẫu, tải lên – tải về, lịch sử phiên bản và khôi phục file.',
+    desc: 'Thư viện biểu mẫu.',
     icon: 'folder-open-outline' as const,
     color: '#64748B',
     badge: 'Tài liệu',
   },
   {
     id: 'notifications',
-    title: 'Thông báo & SSE Live',
-    desc: 'Nhận thông báo cập nhật công việc và tương tác theo thời gian thực.',
+    title: 'Thông báo',
+    desc: 'Danh sách thông báo.',
     icon: 'notifications-outline' as const,
     color: '#6366F1',
     badge: 'Real-time',
   },
   {
     id: 'chat',
-    title: 'Trò chuyện & Nhắn tin',
-    desc: 'Nhắn tin thời gian thực 1-1 và theo nhóm dự án, cập nhật liên tục qua WebSocket.',
+    title: 'Trò chuyện',
+    desc: 'Nhắn tin.',
     icon: 'chatbubbles-outline' as const,
     color: '#F38820',
     badge: 'Real-time',
@@ -216,7 +216,7 @@ export default function ExploreScreen() {
         } else {
           Alert.alert(
             'Giới hạn quyền truy cập',
-            'Phân hệ Quản lý Cơ hội & Pipeline chỉ dành cho Ban giám đốc và Bộ phận Kinh doanh.'
+            'Phân hệ Quản lý Cơ hội chỉ dành cho Ban giám đốc và Bộ phận Kinh doanh.'
           );
         }
         break;
@@ -227,7 +227,7 @@ export default function ExploreScreen() {
         } else {
           Alert.alert(
             'Giới hạn quyền truy cập',
-            'Phân hệ Khách hàng & CRM chỉ dành cho Ban giám đốc và Bộ phận Kinh doanh.'
+            'Phân hệ Khách hàng chỉ dành cho Ban giám đốc và Bộ phận Kinh doanh.'
           );
         }
         break;
