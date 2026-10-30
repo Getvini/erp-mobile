@@ -53,6 +53,9 @@ export const useSSE = () => {
 
         es.addEventListener('open', () => {
           console.log('[SSE Mobile] Connection established');
+          ['Contracts', 'ContractAddendums', 'Projects', 'Tasks'].forEach((tag) =>
+            sseEventBus.emit(`invalidate_${tag}`, {}),
+          );
         });
 
         es.addEventListener('message', (event: any) => {

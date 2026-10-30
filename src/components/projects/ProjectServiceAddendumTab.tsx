@@ -103,6 +103,7 @@ const sameId = (a: any, b: any): boolean => a != null && b != null && String(a) 
 
 interface ProjectServiceAddendumTabProps {
   project: ProjectDetailItem | null;
+  serviceScope?: 'regular' | 'extra';
   budgetSummary?: ProjectBudgetSummary | null;
   user?: any;
   /** Danh sách công việc của dự án — dùng để bổ sung thông tin cho công việc trong từng dịch vụ. */
@@ -117,6 +118,7 @@ export default function ProjectServiceAddendumTab({
   user,
   tasks: projectTasks,
   onChanged,
+  serviceScope = 'regular',
 }: ProjectServiceAddendumTabProps) {
   const router = useRouter();
 
@@ -131,8 +133,11 @@ export default function ProjectServiceAddendumTab({
 
   const services: any[] = useMemo(() => {
     const contract = project?.contract as any;
-    return Array.isArray(contract?.services) ? (contract.services as any[]) : [];
-  }, [project]);
+    const allServices = Array.isArray(contract?.services) ? (contract.services as any[]) : [];
+    return allServices.filter((item) =>
+      (item.addendumInfo?.type === 'ADD_SERVICES') === (serviceScope === 'extra')
+    );
+  }, [project, serviceScope]);
 
   const members: any[] = useMemo(
     () =>
@@ -564,7 +569,7 @@ export default function ProjectServiceAddendumTab({
     <View className="gap-3 p-4">
       <ProjectTabHeader
         icon="package"
-        title="Hạng mục dịch vụ"
+        title={serviceScope === 'extra' ? 'Dịch vụ phát sinh' : 'Hạng mục dịch vụ'}
         subtitle={`Tổng cộng ${visibleServices.length} dịch vụ theo gói hợp đồng`}
       />
 
@@ -625,10 +630,10 @@ export default function ProjectServiceAddendumTab({
       {visibleServices.length === 0 ? (
         <EmptyState
           icon="package"
-          title="Chưa có dịch vụ nào"
+          title={serviceScope === 'extra' ? 'Chưa có dịch vụ phát sinh' : 'Chưa có dịch vụ nào'}
           description={
             canSeeAllTasks
-              ? 'Hợp đồng của dự án chưa có hạng mục dịch vụ nào.'
+              ? (serviceScope === 'extra' ? 'Dự án chưa có dịch vụ phát sinh.' : 'Dự án chưa có dịch vụ thông thường.')
               : 'Bạn không có công việc nào trong các hạng mục dịch vụ của dự án.'
           }
         />

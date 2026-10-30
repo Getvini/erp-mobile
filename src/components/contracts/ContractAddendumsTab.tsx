@@ -53,6 +53,14 @@ export function ContractAddendumsTab({
   onRefresh,
 }: ContractAddendumsTabProps) {
   const [selectedAddendum, setSelectedAddendum] = useState<ContractAddendum | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const latestAddendum = selectedAddendum && addendums.find((item) => item.id === selectedAddendum.id);
+  const signature = (item: ContractAddendum | null | undefined) => JSON.stringify([item?.status, item?.selectedItems, item?.saleReviewNote, item?.bodReviewNote, item?.name, item?.description]);
+  const hasConflict = Boolean(isDirty && latestAddendum && signature(latestAddendum) !== signature(selectedAddendum));
+  const displayedAddendum = isDirty ? selectedAddendum : (latestAddendum || selectedAddendum);
+  const markDirty = () => { if (!isDirty) { setSelectedAddendum(displayedAddendum); setIsDirty(true); } };
+  const closeDetail = () => { setSelectedAddendum(null); setIsDirty(false); };
+  const reloadDetail = () => { setSelectedAddendum(latestAddendum || null); setIsDirty(false); };
 
   const renderItem = useCallback(
     ({ item }: { item: ContractAddendum }) => {
@@ -128,7 +136,7 @@ export function ContractAddendumsTab({
             </View>
 
             <TouchableOpacity
-              onPress={() => setSelectedAddendum(item)}
+              onPress={() => { setIsDirty(false); setSelectedAddendum(item); }}
               activeOpacity={0.8}
               className="min-h-[48px] flex-row items-center gap-[6px] px-[14px] rounded-[12px] bg-[#F3E8FF] border border-[#E9D5FF]"
             >
@@ -203,11 +211,15 @@ export function ContractAddendumsTab({
       />
 
       <AddendumDetailModal
+        key={signature(displayedAddendum)}
         visible={!!selectedAddendum}
-        addendum={selectedAddendum}
+        addendum={displayedAddendum}
+        onDirty={markDirty}
+        hasConflict={hasConflict}
+        onReload={reloadDetail}
         contractId={contractId}
         role={role}
-        onClose={() => setSelectedAddendum(null)}
+        onClose={closeDetail}
       />
     </View>
   );

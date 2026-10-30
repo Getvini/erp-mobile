@@ -388,7 +388,14 @@ export default function TaskDetailScreen() {
               </TouchableOpacity>
             )}
           </View>
-          {task.code && <Text className="text-[11px] text-slate-500 font-semibold">#{task.code}</Text>}
+          <View className="mt-1 flex-row flex-wrap items-center gap-1.5">
+            {task.code && <Text className="text-[11px] text-slate-500 font-semibold">#{task.code}</Text>}
+            {(task.isExtra || task.isExtraTask) && (
+              <View className="rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5">
+                <Text className="text-[10px] font-bold uppercase text-amber-700">Phát sinh</Text>
+              </View>
+            )}
+          </View>
         </View>
 
         <View className="px-2.5 py-1 rounded-lg border border-amber-200/80" style={{ backgroundColor: statusInfo.bg }}>

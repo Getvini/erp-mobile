@@ -85,6 +85,7 @@ type TabKey =
   | 'TASKS'
   | 'MY_TASKS'
   | 'SERVICES'
+  | 'EXTRA_SERVICES'
   | 'EXTRA'
   | 'ACCEPTANCE'
   | 'PAUSE';
@@ -501,7 +502,7 @@ export default function ProjectDetailScreen() {
           queryClient.invalidateQueries({ queryKey: queryKeys.tasks.byProject(projId) })
         );
         break;
-      // PRODUCT_DESC, SERVICES, PAUSE đã được làm mới qua queryKeys.projects.detail(projId)
+      // PRODUCT_DESC, SERVICES, EXTRA_SERVICES, PAUSE đã được làm mới qua queryKeys.projects.detail(projId)
     }
 
     await Promise.all(refreshPromises);
@@ -802,7 +803,10 @@ export default function ProjectDetailScreen() {
               icon: 'user-check',
             },
             ...(isCoreMember
-              ? [{ key: 'SERVICES', label: 'Dịch vụ', icon: 'package' }]
+              ? [
+                  { key: 'SERVICES', label: 'Dịch vụ', icon: 'package' },
+                  { key: 'EXTRA_SERVICES', label: 'Dịch vụ phát sinh', icon: 'package' },
+                ]
               : []),
             { key: 'EXTRA', label: 'Công việc phát sinh', icon: 'alert-circle' },
             { key: 'ACCEPTANCE', label: `Nghiệm thu (${acceptances.length})`, icon: 'award' },
@@ -944,6 +948,17 @@ export default function ProjectDetailScreen() {
               tasks={tasks}
               budgetSummary={budgetQuery.data}
               onChanged={handleRefresh}
+            />
+          )}
+
+          {activeTab === 'EXTRA_SERVICES' && isCoreMember && (
+            <ProjectServiceAddendumTab
+              project={effectiveProject}
+              user={user}
+              tasks={tasks}
+              budgetSummary={budgetQuery.data}
+              onChanged={handleRefresh}
+              serviceScope="extra"
             />
           )}
 

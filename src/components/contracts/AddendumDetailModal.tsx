@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from 'react';
+import { useQueries } from '@tanstack/react-query';
+import Decimal from 'decimal.js';
 import {
   Modal,
   View,
@@ -38,6 +40,8 @@ import {
 import { getServiceTheme } from '@/services/opportunityService';
 import { ServiceJobAccordion } from '@/components/opportunities/ServiceJobAccordion';
 import AddendumRejectModal from '@/components/contracts/AddendumRejectModal';
+import { catalogService } from '@/services/catalogService';
+import { queryKeys } from '@/services/queryKeys';
 import {
   getMinimumSellingPrice,
   getRecommendedSellingPrice,
@@ -255,6 +259,9 @@ export interface AddendumDetailModalProps {
   contractId: string;
   role?: string;
   onClose: () => void;
+  onDirty: () => void;
+  hasConflict: boolean;
+  onReload: () => void;
 }
 
 export default function AddendumDetailModal({
@@ -263,11 +270,35 @@ export default function AddendumDetailModal({
   contractId,
   role,
   onClose,
+  onDirty,
+  hasConflict,
+  onReload,
 }: AddendumDetailModalProps) {
   const selectedItems: AddendumServiceLine[] = useMemo(() => {
     const raw = (addendum as any)?.selectedItems ?? addendum?.services ?? [];
     return Array.isArray(raw) ? raw : [];
   }, [addendum]);
+  const serviceIds = useMemo(
+    () => [...new Set(selectedItems.map((item) => item.serviceId).filter((id): id is string => Boolean(id)))],
+    [selectedItems],
+  );
+  const serviceQueries = useQueries({
+    queries: serviceIds.map((id) => ({
+      queryKey: queryKeys.services.detail(id),
+      queryFn: async () => {
+        const result = await catalogService.getService(id);
+        if (result.error || !result.data) throw new Error(result.error || 'Không tìm thấy dịch vụ');
+        return result.data;
+      },
+      enabled: visible,
+    })),
+  });
+  const canEditBudget = (item: AddendumServiceLine | undefined) => {
+    if (!item?.serviceId) return false;
+    const index = serviceIds.indexOf(item.serviceId);
+    const query = serviceQueries[index];
+    return Boolean(query && !query.isFetching && !query.isError && query.data?.isBudget === true);
+  };
 
   const [editableItems, setEditableItems] = useState<AddendumServiceLine[]>(selectedItems);
   const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({});
@@ -288,7 +319,7 @@ export default function AddendumDetailModal({
 
   // Khởi tạo danh sách dòng có thể sửa mỗi khi mở modal
   const editSignature = visible ? `${addendum?.id ?? ''}` : '';
-  const [syncedEditSignature, setSyncedEditSignature] = useState(editSignature);
+  const [syncedEditSignature, setSyncedEditSignature] = useState('');
   if (editSignature !== syncedEditSignature) {
     setSyncedEditSignature(editSignature);
     if (visible) {
@@ -467,6 +498,7 @@ export default function AddendumDetailModal({
 
   // Sửa giá bán tùy chỉnh dịch vụ lẻ hoặc con
   const handleCustomPriceChange = (index: number, valStr: string, packageLine = false) => {
+    onDirty();
     const enteredPrice = parseNumberInput(valStr);
     setEditableItems((prev) =>
       prev.map((item, i) => {
@@ -492,7 +524,8 @@ export default function AddendumDetailModal({
 
   // Sửa ngân sách dịch vụ lẻ hoặc con
   const handleBudgetChange = (index: number, valStr: string) => {
-    if (!editableItems[index] || !canEditPrices || isMutating) return;
+    if (!editableItems[index] || !canEditPrices || isMutating || hasConflict || !canEditBudget(editableItems[index])) return;
+    onDirty();
     const newBudget = parseNumberInput(valStr);
     setEditableItems((prev) =>
       prev.map((item, i) => {
@@ -517,6 +550,7 @@ export default function AddendumDetailModal({
 
   // Sửa giá tổng gói dịch vụ (Phân bổ tỷ lệ)
   const handlePackageCustomPriceChange = (packageKey: string, valStr: string) => {
+    onDirty();
     const totalPrice = parseNumberInput(valStr);
     setEditableItems((prev) => {
       const indexes = prev.reduce<number[]>((result, item, index) => {
@@ -569,8 +603,18 @@ export default function AddendumDetailModal({
     Alert.alert('Lỗi', err?.message || 'Có lỗi xảy ra khi xử lý phụ lục');
   };
 
+  const validateBudgetChanges = () => {
+    const invalid = editableItems.some((item, index) =>
+      !canEditBudget(item) && !new Decimal(item.budget ?? 0).eq(selectedItems[index]?.budget ?? 0),
+    );
+    if (invalid) {
+      Alert.alert('Không thể cập nhật ngân sách', 'Quyền nhập ngân sách của dịch vụ đã thay đổi hoặc chưa được xác định. Vui lòng kiểm tra lại trước khi gửi.');
+    }
+    return !invalid;
+  };
+
   const runSaleApprove = async () => {
-    if (!addendum) return;
+    if (!addendum || !validateBudgetChanges()) return;
     try {
       const payloadItems = editableItems.map((item, index) => ({
         ...selectedItems[index],
@@ -600,7 +644,7 @@ export default function AddendumDetailModal({
   };
 
   const runResubmit = async () => {
-    if (!addendum) return;
+    if (!addendum || !validateBudgetChanges()) return;
     try {
       const payloadItems = editableItems.map((item, index) => ({
         ...selectedItems[index],
@@ -747,6 +791,22 @@ export default function AddendumDetailModal({
             nestedScrollEnabled={true}
           >
             {/* Ghi chú */}
+            {hasConflict && (
+              <View className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3">
+                <Text className="text-sm text-amber-900">Phụ lục đã thay đổi. Nội dung đang sửa được giữ lại; hãy xem bản mới nhất trước khi tiếp tục.</Text>
+                <TouchableOpacity onPress={onReload} className="mt-2"><Text className="font-bold text-amber-900 underline">Xem bản mới nhất</Text></TouchableOpacity>
+              </View>
+            )}
+            {visible && (serviceQueries.some((query) => query.isError) || selectedItems.some((item) => !item.serviceId)) && (
+              <View className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <Text className="text-sm text-amber-900">Không xác định được quyền nhập ngân sách của một số dịch vụ. Ngân sách đã lưu được giữ nguyên.</Text>
+                {serviceQueries.some((query) => query.isError) && (
+                  <TouchableOpacity onPress={() => serviceQueries.forEach((query) => { if (query.isError) void query.refetch(); })} className="mt-2">
+                    <Text className="font-bold text-amber-900 underline">Thử tải lại dịch vụ</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
             {!!addendum.description && (
               <View className="bg-[#FAF5FF] border border-[#E9D5FF] rounded-[12px] p-[12px]">
                 <Text className="text-[12px] font-bold text-slate-700 mb-[4px]">Ghi chú:</Text>
@@ -955,7 +1015,7 @@ export default function AddendumDetailModal({
                               {/* Ngân sách của dịch vụ con */}
                               <View className="flex-row items-center justify-between border-t border-slate-100 pt-1.5">
                                 <Text className="text-xs font-semibold text-slate-600">Ngân sách (VNĐ):</Text>
-                                {canEditPrices ? (
+                                {canEditPrices && canEditBudget(sub) && !hasConflict && !isMutating ? (
                                   <TextInput
                                     className="w-[140px] rounded-md border border-slate-300 bg-white px-2 py-1 text-right text-[13px] font-semibold text-slate-900"
                                     keyboardType="numeric"
@@ -1073,7 +1133,7 @@ export default function AddendumDetailModal({
                         {/* Ngân sách (VNĐ) — cho phép sửa */}
                         <View className="flex-row items-center justify-between border-t border-slate-100 py-1.5">
                           <Text className="text-[13px] font-semibold text-slate-600">Ngân sách (VNĐ):</Text>
-                          {canEditPrices ? (
+                          {canEditPrices && canEditBudget(item) && !hasConflict && !isMutating ? (
                             <TextInput
                               className="min-w-[130px] rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-right text-sm font-bold text-slate-900"
                               keyboardType="numeric"
@@ -1168,7 +1228,7 @@ export default function AddendumDetailModal({
               {canResubmit && (
                 <TouchableOpacity
                   onPress={confirmResubmit}
-                  disabled={isMutating}
+                  disabled={isMutating || hasConflict}
                   activeOpacity={0.8}
                   className="flex-1 min-h-[48px] flex-row items-center justify-center gap-[6px] rounded-[12px] bg-[#2563EB]"
                 >
@@ -1187,8 +1247,8 @@ export default function AddendumDetailModal({
               {canReview && (
                 <>
                   <TouchableOpacity
-                    onPress={() => setIsRejectVisible(true)}
-                    disabled={isMutating}
+                    onPress={() => { onDirty(); setIsRejectVisible(true); }}
+                    disabled={isMutating || hasConflict}
                     activeOpacity={0.8}
                     className="flex-1 min-h-[48px] flex-row items-center justify-center gap-[6px] rounded-[12px] bg-white border border-red-200"
                   >
@@ -1198,7 +1258,7 @@ export default function AddendumDetailModal({
 
                   <TouchableOpacity
                     onPress={confirmApprove}
-                    disabled={isMutating}
+                    disabled={isMutating || hasConflict}
                     activeOpacity={0.8}
                     className="flex-1 min-h-[48px] flex-row items-center justify-center gap-[6px] rounded-[12px] bg-emerald-600"
                   >
@@ -1221,7 +1281,7 @@ export default function AddendumDetailModal({
       {/* Bottom sheet nhập lý do không duyệt */}
       <AddendumRejectModal
         visible={isRejectVisible}
-        isLoading={isMutating}
+        isLoading={isMutating || hasConflict}
         reviewerLabel={canSaleReview ? 'Sale' : 'BOD'}
         onClose={() => setIsRejectVisible(false)}
         onSubmit={(note) => void runReject(note)}

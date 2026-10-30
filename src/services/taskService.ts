@@ -65,6 +65,8 @@ export interface SubmitTaskResultFileParams {
 }
 
 export interface TaskDetail extends TaskItem {
+  createdAt?: string;
+  isExtra?: boolean;
   deadlineChangeReason?: string;
   code?: string;
   nickname?: string;
