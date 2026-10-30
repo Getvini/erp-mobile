@@ -116,7 +116,7 @@ export const ProjectWorkingFilesSection: React.FC<ProjectWorkingFilesSectionProp
     project.team?.teamLead?.id === currentUserId;
 
   const canDeleteFile = (file: WorkingFileItem) => {
-    if (!projectHasAccount || isOnHold || isClosed) return false;
+    if (isOnHold || isClosed) return false;
     if (canManageAll || isTeamLead) return true;
     return Boolean(file.createdById && file.createdById === currentUserId);
   };
@@ -395,9 +395,9 @@ export const ProjectWorkingFilesSection: React.FC<ProjectWorkingFilesSectionProp
         {!isClosed && (
           <TouchableOpacity
             onPress={handleOpenModal}
-            disabled={!projectHasAccount || isOnHold}
+            disabled={isOnHold}
             className={`flex-row items-center px-2.5 py-1.5 rounded-xl bg-primary ${
-              !projectHasAccount || isOnHold ? 'opacity-50' : 'active:opacity-80'
+              isOnHold ? 'opacity-50' : 'active:opacity-80'
             }`}
           >
             <Feather name="plus" size={13} color="#FFFFFF" />
@@ -431,9 +431,9 @@ export const ProjectWorkingFilesSection: React.FC<ProjectWorkingFilesSectionProp
           {!isClosed && (
             <TouchableOpacity
               onPress={handleOpenModal}
-              disabled={!projectHasAccount || isOnHold}
+              disabled={isOnHold}
               className={`flex-row items-center px-3 py-1.5 rounded-xl bg-primary/10 ${
-                !projectHasAccount || isOnHold ? 'opacity-50' : 'active:opacity-80'
+                isOnHold ? 'opacity-50' : 'active:opacity-80'
               }`}
             >
               <Feather name="plus" size={12} color={BrandColors.primary} />

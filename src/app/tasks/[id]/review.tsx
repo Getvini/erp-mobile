@@ -1,3 +1,5 @@
+import { useAuth } from '@/context/AuthContext';
+import { getTaskPolicy } from '@/utils/taskPolicy';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
@@ -23,6 +25,7 @@ import {
 import { BrandColors } from '@/constants/colors';
 
 export default function TaskReviewScreen() {
+  const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
@@ -30,6 +33,7 @@ export default function TaskReviewScreen() {
   const { data: reviewsData, isLoading: isLoadingReviews } = useTaskReviewsQuery(String(id || ''));
   const reviews = useMemo(() => (Array.isArray(reviewsData) ? reviewsData : []), [reviewsData]);
 
+  const policy = getTaskPolicy(task, user);
   const [passedIds, setPassedIds] = useState<string[]>([]);
   const [note, setNote] = useState('');
   const [activeTab, setActiveTab] = useState<'TEAM_LEAD' | 'ASSIGNER'>('TEAM_LEAD');
@@ -58,7 +62,12 @@ export default function TaskReviewScreen() {
   const isAllPassed = isLeadPassed && isAssignerPassed;
   const isDualReview = leadReviews.length > 0 && assignerReviews.length > 0;
 
+  const canToggleReview = isDualReview
+    ? (activeTab === 'TEAM_LEAD' ? policy.reviewLead.enabled : policy.reviewAssigner.enabled)
+    : (policy.reviewLead.enabled || policy.reviewAssigner.enabled);
+
   const handleToggleReview = (reviewId: string) => {
+    if (!canToggleReview || isFinalizing || isRejecting) return;
     setPassedIds((prev) =>
       prev.includes(reviewId) ? prev.filter((i) => i !== reviewId) : [...prev, reviewId]
     );
@@ -76,6 +85,7 @@ export default function TaskReviewScreen() {
   };
 
   const handleApprove = async () => {
+    if (!policy.review.enabled || isFinalizing || isRejecting) return;
     if (!id || !task) return;
     if (!isAllPassed && reviews.length > 0) {
       Alert.alert('Cảnh báo', 'Bạn cần tích chọn xác nhận tất cả các tiêu chí trước khi duyệt.');
@@ -100,6 +110,7 @@ export default function TaskReviewScreen() {
   };
 
   const handleReject = async () => {
+    if (!policy.review.enabled || isFinalizing || isRejecting) return;
     if (!id || !task) return;
     if (!note.trim()) {
       Alert.alert('Cảnh báo', 'Vui lòng nhập ghi chú lý do từ chối công việc.');
@@ -265,7 +276,8 @@ export default function TaskReviewScreen() {
                       <TouchableOpacity
                         key={review.id}
                         className={"flex-row items-center gap-3 p-3 rounded-2xl border " + (isChecked ? 'bg-[#ECFDF5] border-[#A7F3D0]' : 'bg-[#F8FAFC] border-[#E2E8F0]')}
-                        onPress={() => handleToggleReview(review.id)}
+                        disabled={!canToggleReview || isFinalizing || isRejecting}
+                          onPress={() => handleToggleReview(review.id)}
                         activeOpacity={0.7}
                       >
                         <View className={"w-5 h-5 rounded-md border-2 items-center justify-center " + (isChecked ? 'bg-primary border-primary' : 'border-[#CBD5E1]')}>
@@ -326,35 +338,39 @@ export default function TaskReviewScreen() {
 
       {/* Footer Actions */}
       <View className="flex-row gap-3 p-4 bg-white border-t border-[#E2E8F0]">
-        <TouchableOpacity
-          className={"flex-1 flex-row items-center justify-center gap-1.5 py-3.5 rounded-2xl bg-[#FEF2F2] border border-[#FECACA] " + (!note.trim() || isRejecting || isFinalizing ? 'opacity-50' : '')}
-          onPress={handleReject}
-          disabled={!note.trim() || isRejecting || isFinalizing}
-        >
-          {isRejecting ? (
-            <ActivityIndicator size="small" color="#EF4444" />
-          ) : (
-            <>
-              <Feather name="x-circle" size={16} color="#EF4444" />
-              <Text className="text-sm font-bold text-red-500">Từ chối</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        {policy.review.enabled && (
+          <TouchableOpacity accessibilityLabel="Từ chối"
+            className={"flex-1 flex-row items-center justify-center gap-1.5 py-3.5 rounded-2xl bg-[#FEF2F2] border border-[#FECACA] " + (!note.trim() || isRejecting || isFinalizing ? 'opacity-50' : '')}
+            onPress={handleReject}
+            disabled={!note.trim() || isRejecting || isFinalizing}
+            style={[(!note.trim() || isRejecting || isFinalizing) ? { opacity: 0.5 } : undefined]} accessibilityRole="button">
+            {isRejecting ? (
+              <ActivityIndicator size="small" color="#EF4444" />
+            ) : (
+              <>
+                <Feather name="x-circle" size={16} color="#EF4444" />
+                <Text className="text-sm font-bold text-red-500">Từ chối</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
 
-        <TouchableOpacity
-          className={"flex-[2] flex-row items-center justify-center gap-1.5 py-3.5 rounded-xl bg-emerald-600 " + (!isAllPassed || isFinalizing || isRejecting ? "opacity-50" : "")}
-          onPress={handleApprove}
-          disabled={!isAllPassed || isFinalizing || isRejecting}
-        >
-          {isFinalizing ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <>
-              <Feather name="check-circle" size={16} color="#FFFFFF" />
-              <Text className="text-sm font-bold text-white">Duyệt hoàn thành</Text>
-            </>
-          )}
-        </TouchableOpacity>
+        {policy.review.enabled && (
+          <TouchableOpacity accessibilityLabel="Duyệt hoàn thành"
+            className={"flex-[2] flex-row items-center justify-center gap-1.5 py-3.5 rounded-xl bg-emerald-600 " + (!isAllPassed || isFinalizing || isRejecting ? "opacity-50" : "")}
+            onPress={handleApprove}
+            disabled={!isAllPassed || isFinalizing || isRejecting}
+            style={[(!isAllPassed || isFinalizing || isRejecting) ? { opacity: 0.5 } : undefined]} accessibilityRole="button">
+            {isFinalizing ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Feather name="check-circle" size={16} color="#FFFFFF" />
+                <Text className="text-sm font-bold text-white">Duyệt hoàn thành</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

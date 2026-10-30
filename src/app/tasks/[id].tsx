@@ -13,6 +13,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { taskService, TaskDetail, TASK_STATUS_CONFIG } from '@/services/taskService';
+import { EditTaskNicknameModal } from '@/components/tasks/EditTaskNicknameModal';
 import { BrandColors } from '@/constants/colors';
 import { useAuth } from '@/context/AuthContext';
 import ReworkTaskModal from '@/components/tasks/ReworkTaskModal';
@@ -21,6 +22,7 @@ import TaskAssignModal from '@/components/projects/TaskAssignModal';
 import TaskReviewModal from '@/components/tasks/TaskReviewModal';
 import TaskSubtaskSection from '@/components/tasks/TaskSubtaskSection';
 import TaskLifecycleActions from '@/components/tasks/TaskLifecycleActions';
+import SubtaskAllocationModal from '@/components/tasks/SubtaskAllocationModal';
 import TaskResultChecksPanel from '@/components/tasks/TaskResultChecksPanel';
 import SubmittedScopeSummary from '@/components/tasks/SubmittedScopeSummary';
 import ConfirmedCheckErrors from '@/components/tasks/ConfirmedCheckErrors';
@@ -34,7 +36,8 @@ import {
   resolveEffectiveTeamMembers,
 } from '@/utils/teamMember';
 import { canDecideTaskOutcome } from '@/utils/taskOutcomeAuthorization';
-import { canSubmitResult } from '@/utils/taskLifecycle';
+import { getTaskPolicy, getTaskDisplayName } from '@/utils/taskPolicy';
+import TaskDeadlineEditor from '@/components/tasks/TaskDeadlineEditor';
 import {
   useTaskDetailQuery,
   useTaskReviewsQuery,
@@ -45,6 +48,7 @@ import {
   useReturnSupportMutation,
   useRequestReturnSupportMutation,
   useSendTaskReminderMutation,
+  useSubmitResultForReviewMutation,
 } from '@/hooks/queries/useTasks';
 
 const PERFORMER_TYPE_LABELS: Record<string, string> = {
@@ -146,53 +150,21 @@ export default function TaskDetailScreen() {
     (taskProject?.team as any)?.members,
   );
   const currentUserId = user?.id;
-  const teamLeadId = task?.project?.team?.teamLead?.id;
-  const isProjectLead = !!currentUserId && !!teamLeadId && currentUserId === teamLeadId;
-  const currentMembership = effectiveTeamMembers.find(
-    (member: any) => member?.user?.id === currentUserId,
-  );
-  const isProjectAccount = hasTeamMemberRole(currentMembership, 'ACCOUNT');
-  const isProjectPm =
-    hasTeamMemberRole(currentMembership, 'PROJECT_MANAGER') ||
-    (task?.project as any)?.projectManager?.id === currentUserId;
-  const isManagement = ['ADMIN', 'BOD', 'PM', 'TEAM_LEAD'].includes(user?.role || '');
-  const isProjectOnHold = task?.project?.status === 'ON_HOLD' || task?.status === 'ON_HOLD';
   const projectHasAccount = !task?.project?.id || hasProjectAccount(taskProject, effectiveTeamMembers);
-  const canManageProjectTask =
-    projectHasAccount && !isProjectOnHold &&
-    (isManagement || isProjectLead || isProjectAccount || isProjectPm);
-  const canDecideOutcome =
-    projectHasAccount && !isProjectOnHold &&
-    canDecideTaskOutcome(
-      task
-        ? {
-            ...task,
-            project: {
-              ...task.project,
-              team: {
-                ...task.project?.team,
-                members: effectiveTeamMembers,
-              },
-            },
-          }
-        : task,
-      currentUserId,
-    );
-  const isAssigneeOrHelper =
-    currentUserId === task?.assigneeId || currentUserId === task?.helperId;
-  const isReviewerForThisTask =
-    canManageProjectTask && !isAssigneeOrHelper && canDecideOutcome;
-  const canEditDescription = canManageProjectTask;
+  const policyTask = task ? { ...task, project: taskProject ? { ...taskProject, team: { ...taskProject.team, members: effectiveTeamMembers } } : undefined } : null;
+  const policy = getTaskPolicy(policyTask, user, { assignmentContext: 'detail' });
+  const canEditDescription = policy.editDescription.enabled;
+  const canManageSubtasks = policy.createSubtask.enabled;
 
   const subtaskAssigneeOptions = useMemo(
     () =>
-      (teamMembersData || [])
-        .filter((member: any) => member?.user?.id)
+      effectiveTeamMembers
+        .filter((member: any) => member?.user?.id && !hasTeamMemberRole(member, 'PROJECT_MANAGER'))
         .map((member: any) => ({
           id: member.user.id as string,
           fullName: (member.user.fullName || member.user.name) as string | undefined,
         })),
-    [teamMembersData]
+    [effectiveTeamMembers]
   );
 
   /**
@@ -203,18 +175,48 @@ export default function TaskDetailScreen() {
     ? ((task as any).subtasks as any[]).length
     : 0;
   // Quyền quản lý công việc con: Account phụ trách (team lead) / ADMIN / PM
-  const canManageSubtasks = canManageProjectTask;
 
   // Tab đang xem: Tổng quan | Công việc con | QC & Kết quả
   const [activeTab, setActiveTab] = useState<'overview' | 'subtasks' | 'qc'>('overview');
+  const [showEditNickname, setShowEditNickname] = useState(false);
+  const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false);
+
+  const isTaskAssigned = Boolean(
+    task?.assigneeId ||
+    task?.assignee?.id ||
+    (task as any)?.vendorId ||
+    (task as any)?.vendor ||
+    task?.performerType === 'VENDOR'
+  );
+  const isProjectOnHold = taskProject?.status === 'ON_HOLD' || Boolean((taskProject as any)?.isOnHold);
+  const canAddSubtask = !isProjectOnHold &&
+    policy.createSubtask.enabled &&
+    !(task as any)?.parentTaskId &&
+    subtaskCount === 0;
+
+  const submitResultForReviewMutation = useSubmitResultForReviewMutation();
+  const handleSubmitResultForReview = async () => {
+    if (!task || isActionLoading || submitResultForReviewMutation.isPending) return;
+    try {
+      await submitResultForReviewMutation.mutateAsync({
+        id: task.id,
+        projectId: task.project?.id,
+      });
+      Alert.alert('Thành công', 'Đã gửi duyệt kết quả');
+      loadTask();
+    } catch (err: any) {
+      Alert.alert('Lỗi', err?.message || 'Có lỗi xảy ra khi gửi duyệt kết quả');
+    }
+  };
 
   const handleStartEditDescription = () => {
+    if (!policy.editDescription.enabled) return;
     setEditedDescription(task?.description || '');
     setIsEditingDescription(true);
   };
 
   const handleSaveDescription = async () => {
-    if (!task) return;
+    if (!task || !policy.editDescription.enabled || isActionLoading) return;
     try {
       await updateTaskMutation.mutateAsync({
         id: task.id,
@@ -232,7 +234,7 @@ export default function TaskDetailScreen() {
   };
 
   const handleCustomerApprove = async () => {
-    if (!task) return;
+    if (!task || !policy.customerApprove.enabled || isActionLoading) return;
     try {
       await approveByCustomerMutation.mutateAsync({
         taskId: task.id,
@@ -246,7 +248,7 @@ export default function TaskDetailScreen() {
   };
 
   const handleRequestSupport = async () => {
-    if (!task) return;
+    if (!task || !policy.requestSupport.enabled || isActionLoading) return;
     try {
       await requestSupportMutation.mutateAsync({
         taskId: task.id,
@@ -305,7 +307,7 @@ export default function TaskDetailScreen() {
   };
 
   const handleSendReminder = async () => {
-    if (!task) return;
+    if (!task || !policy.remind.enabled || isActionLoading) return;
     try {
       await sendTaskReminderMutation.mutateAsync(task.id);
       Alert.alert('Thành công', 'Đã gửi nhắc nhở công việc!');
@@ -371,13 +373,25 @@ export default function TaskDetailScreen() {
         </TouchableOpacity>
 
         <View className="flex-1">
-          <Text className="text-base font-bold text-slate-900" numberOfLines={1}>
-            {task.name}
-          </Text>
+          <View className="flex-row items-center gap-1.5">
+            <Text className="text-base font-bold text-slate-900" numberOfLines={1}>
+              {getTaskDisplayName(task)}
+            </Text>
+            {policy.assign.enabled && (
+              <TouchableOpacity
+                onPress={() => setShowEditNickname(true)}
+                hitSlop={8}
+                className="h-6 w-6 items-center justify-center rounded-md border border-slate-200 bg-slate-50"
+                accessibilityLabel="Đổi tên công việc"
+              >
+                <Feather name="edit-2" size={12} color="#64748B" />
+              </TouchableOpacity>
+            )}
+          </View>
           {task.code && <Text className="text-[11px] text-slate-500 font-semibold">#{task.code}</Text>}
         </View>
 
-        <View className="px-2 py-1 rounded-md" style={{ backgroundColor: statusInfo.bg }}>
+        <View className="px-2.5 py-1 rounded-lg border border-amber-200/80" style={{ backgroundColor: statusInfo.bg }}>
           <Text className="text-[11px] font-bold" style={{ color: statusInfo.color }}>
             {statusInfo.label}
           </Text>
@@ -424,180 +438,63 @@ export default function TaskDetailScreen() {
         {/* Project Back Link Banner */}
         {task.project?.name && (
           <TouchableOpacity
-            className="flex-row items-center gap-2 bg-blue-50 px-3.5 py-2.5 rounded-xl border border-blue-100"
+            className="flex-row items-center gap-2.5 bg-orange-50/70 px-3.5 py-2.5 rounded-xl border border-orange-200/80"
             onPress={() => router.push(`/projects/${task.project?.id}` as any)}
             activeOpacity={0.8}
           >
-            <Feather name="folder" size={14} color={BrandColors.primary} />
-            <Text className="flex-1 text-[13px] font-bold text-primary" numberOfLines={1}>
+            <View className="w-6 h-6 rounded-md bg-white items-center justify-center shadow-xs">
+              <Feather name="folder" size={13} color={BrandColors.primary} />
+            </View>
+            <Text className="flex-1 text-[13px] font-bold text-orange-950" numberOfLines={1}>
               Dự án: {task.project.name}
             </Text>
-            <Feather name="chevron-right" size={16} color="#94A3B8" />
+            <Feather name="chevron-right" size={15} color="#C2410C" />
           </TouchableOpacity>
         )}
 
         {/* Vòng đời công việc: Bắt đầu / Nộp kết quả / Gửi duyệt / Nhờ hỗ trợ / Khách không mua / Xóa */}
         {!projectHasAccount && (
-          <View className="rounded-2xl border border-orange-200 bg-orange-50 p-3.5">
-            <Text className="text-sm text-orange-900">{PROJECT_ACCOUNT_REQUIRED_MESSAGE}</Text>
+          <View className="flex-row items-start gap-2.5 rounded-2xl border border-amber-200 bg-amber-50/90 p-3.5">
+            <Feather name="alert-circle" size={16} color="#D97706" style={{ marginTop: 2 }} />
+            <Text className="flex-1 text-xs font-semibold leading-5 text-amber-900">{PROJECT_ACCOUNT_REQUIRED_MESSAGE}</Text>
           </View>
         )}
-        {projectHasAccount && <TaskLifecycleActions
-          task={task}
+        {<TaskLifecycleActions
+          task={policyTask}
           projectId={task.project?.id}
           onChanged={loadTask}
-          onOpenResultModal={() => setIsResultModalOpen(true)}
+          onOpenResultModal={() => { if (policy.uploadResult.enabled) setIsResultModalOpen(true); }}
           onDeleted={() => safeGoBack(router, '/tasks')}
+          canAddSubtask={canAddSubtask}
+          onOpenSubtaskModal={() => setIsSubtaskModalOpen(true)}
+          canRemind={policy.remind.enabled}
+          onSendReminder={handleSendReminder}
+          canAssign={policy.assign.enabled && !isTaskAssigned}
+          onOpenAssignModal={() => setIsAssignModalOpen(true)}
+          canRework={policy.rework.enabled}
+          onOpenReworkModal={() => setIsReworkModalOpen(true)}
+          canReview={task.status === 'AWAITING_REVIEW' && policy.review.enabled}
+          onOpenReviewModal={() => setIsReviewModalOpen(true)}
+          canCustomerApprove={task.status === 'INTERNAL_COMPLETED' && policy.customerApprove.enabled}
+          onCustomerApprove={handleCustomerApprove}
+          canRequestSupport={policy.requestSupport.enabled}
+          onRequestSupport={handleRequestSupport}
+          isActionLoading={isActionLoading}
         />}
-
-        {/* Top Action Buttons Grid */}
-        <View className="flex-row flex-wrap gap-2">
-          {task.status === 'AWAITING_REVIEW' && isReviewerForThisTask && (
-            <>
-              <TouchableOpacity
-                className="flex-row items-center gap-1.5 bg-purple-50 border border-purple-200 px-3 py-2 rounded-xl"
-                onPress={() => setIsReworkModalOpen(true)}
-              >
-                <Feather name="rotate-ccw" size={14} color="#7C3AED" />
-                <Text className="text-xs font-bold text-purple-600">Yêu cầu làm lại</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                className="flex-row items-center gap-1.5 bg-primary px-3 py-2 rounded-xl"
-                onPress={() => setIsReviewModalOpen(true)}
-              >
-                <Feather name="check-circle" size={14} color="#FFFFFF" />
-                <Text className="text-xs font-bold text-white">Đánh giá & Duyệt</Text>
-              </TouchableOpacity>
-            </>
-          )}
-
-          {task.status === 'INTERNAL_COMPLETED' && canManageProjectTask && (
-            <TouchableOpacity
-              className="flex-row items-center gap-1.5 bg-emerald-600 px-3 py-2 rounded-xl"
-              onPress={handleCustomerApprove}
-              disabled={isActionLoading}
-            >
-              <Feather name="check" size={14} color="#FFFFFF" />
-              <Text className="text-xs font-bold text-white">Khách hàng duyệt</Text>
-            </TouchableOpacity>
-          )}
-
-          {['DONE', 'COMPLETED', 'INTERNAL_COMPLETED'].includes(task.status || '') &&
-            canManageProjectTask && (
-              <TouchableOpacity
-                className="flex-row items-center gap-1.5 bg-purple-50 border border-purple-200 px-3 py-2 rounded-xl"
-                onPress={() => setIsReworkModalOpen(true)}
-              >
-                <Feather name="rotate-ccw" size={14} color="#7C3AED" />
-                <Text className="text-xs font-bold text-purple-600">Yêu cầu làm lại</Text>
-              </TouchableOpacity>
-            )}
-
-          {projectHasAccount && ['DOING', 'REWORKING', 'OVERDUE'].includes(task.status || '') &&
-            (currentUserId === task.assigneeId || currentUserId === task.helperId) &&
-            !task.isSupportRequested && (
-              <TouchableOpacity
-                className="flex-row items-center gap-1.5 bg-red-50 border border-red-200 px-3 py-2 rounded-xl"
-                onPress={handleRequestSupport}
-                disabled={isActionLoading}
-              >
-                <Feather name="help-circle" size={14} color="#DC2626" />
-                <Text className="text-xs font-bold text-red-600">Nhờ hỗ trợ</Text>
-              </TouchableOpacity>
-            )}
-
-          {/* Deprecated cross-team support buttons */}
-          {/*
-          {task.status === 'SUPPORT_PENDING' && currentUserId === task.supportLeadId && (
-            <>
-              <TouchableOpacity
-                className="flex-row items-center gap-1.5 bg-emerald-600 px-3 py-2 rounded-xl"
-                onPress={() => handleRespondSupport('ACCEPT')}
-                disabled={isActionLoading}
-              >
-                <Feather name="check" size={14} color="#FFFFFF" />
-                <Text className="text-xs font-bold text-white">Đồng ý hỗ trợ</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                className="flex-row items-center gap-1.5 bg-red-50 border border-red-200 px-3 py-2 rounded-xl"
-                onPress={() => handleRespondSupport('REJECT')}
-                disabled={isActionLoading}
-              >
-                <Feather name="x" size={14} color="#DC2626" />
-                <Text className="text-xs font-bold text-red-600">Từ chối</Text>
-              </TouchableOpacity>
-            </>
-          )}
-
-          {['DOING', 'REWORKING', 'OVERDUE'].includes(task.status || '') &&
-            currentUserId === task.helperId && (
-              <TouchableOpacity
-                className="flex-row items-center gap-1.5 bg-red-50 border border-red-200 px-3 py-2 rounded-xl"
-                onPress={handleRequestReturnSupport}
-                disabled={isActionLoading}
-              >
-                <Feather name="arrow-left" size={14} color="#DC2626" />
-                <Text className="text-xs font-bold text-red-600">Hỗ trợ</Text>
-              </TouchableOpacity>
-            )}
-
-          {task.isSupportAccepted &&
-            currentUserId === task.supportLeadId &&
-            task.isSupportReturnRequested &&
-            ['DOING', 'REWORKING', 'SUPPORT_AWAITING_RETURN'].includes(task.status || '') && (
-              <>
-                <TouchableOpacity
-                  className="flex-row items-center gap-1.5 bg-amber-50 border border-amber-200 px-3 py-2 rounded-xl"
-                  onPress={() => setIsAssignModalOpen(true)}
-                >
-                  <Feather name="users" size={14} color="#D97706" />
-                  <Text className="text-xs font-bold text-amber-600">Phân công lại</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  className="flex-row items-center gap-1.5 bg-red-600 px-3 py-2 rounded-xl"
-                  onPress={handleReturnSupport}
-                  disabled={isActionLoading}
-                >
-                  <Feather name="arrow-left" size={14} color="#FFFFFF" />
-                  <Text className="text-xs font-bold text-white">Trả lại</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          */}
-
-          {canManageProjectTask &&
-            (task.assigneeId || task.helperId) &&
-            !['COMPLETED', 'ACCEPTED', 'DONE', 'INTERNAL_COMPLETED', 'AWAITING_REVIEW'].includes(
-              task.status || ''
-            ) && (
-              <TouchableOpacity
-                className="flex-row items-center gap-1.5 bg-blue-600 px-3 py-2 rounded-xl"
-                onPress={handleSendReminder}
-                disabled={isActionLoading}
-              >
-                <Feather name="bell" size={14} color="#FFFFFF" />
-                <Text className="text-xs font-bold text-white">Nhắc việc</Text>
-              </TouchableOpacity>
-            )}
-        </View>
-
-        {/* Description & Note Card */}
+                {/* Description & Note Card */}
         <View className="bg-white rounded-2xl p-4 border border-slate-200 gap-3">
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center gap-2.5">
-              <View className="w-8 h-8 rounded-lg bg-indigo-50 items-center justify-center">
-                <Feather name="file-text" size={16} color="#4F46E5" />
+              <View className="w-8 h-8 rounded-lg bg-orange-50 items-center justify-center">
+                <Feather name="file-text" size={16} color={BrandColors.primary} />
               </View>
               <Text className="text-[15px] font-bold text-slate-900">Mô tả & Ghi chú</Text>
             </View>
 
             {canEditDescription && !isEditingDescription && (
-              <TouchableOpacity className="flex-row items-center gap-1 bg-indigo-50 px-2 py-1 rounded-md" onPress={handleStartEditDescription}>
-                <Feather name="edit-2" size={12} color="#4F46E5" />
-                <Text className="text-[11px] font-bold text-indigo-600">Chỉnh sửa</Text>
+              <TouchableOpacity accessibilityLabel="Sửa mô tả" className="flex-row items-center gap-1 bg-orange-50 border border-orange-200/80 px-2.5 py-1 rounded-lg" onPress={handleStartEditDescription} accessibilityRole="button">
+                <Feather name="edit-2" size={12} color={BrandColors.primary} />
+                <Text className="text-[11px] font-bold text-primary">Chỉnh sửa</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -620,17 +517,19 @@ export default function TaskDetailScreen() {
                 >
                   <Text className="text-xs font-semibold text-slate-600">Hủy</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  className="px-3 py-1.5 rounded-lg bg-indigo-600"
-                  onPress={handleSaveDescription}
-                  disabled={isUpdatingDescription}
-                >
-                  {isUpdatingDescription ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text className="text-xs font-bold text-white">Lưu thay đổi</Text>
-                  )}
-                </TouchableOpacity>
+                {policy.editDescription.enabled && (
+                  <TouchableOpacity accessibilityLabel="Sửa mô tả"
+                    className="px-3.5 py-1.5 rounded-lg bg-primary"
+                    onPress={handleSaveDescription}
+                    disabled={isUpdatingDescription}
+                    style={[isUpdatingDescription ? { opacity: 0.5 } : undefined]} accessibilityRole="button">
+                    {isUpdatingDescription ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text className="text-xs font-bold text-white">Lưu thay đổi</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           ) : (
@@ -696,24 +595,23 @@ export default function TaskDetailScreen() {
         <View className="bg-white rounded-2xl p-4 border border-slate-200 gap-3">
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center gap-2.5">
-              <View className="w-8 h-8 rounded-lg bg-blue-50 items-center justify-center">
-                <Feather name="upload" size={16} color="#2563EB" />
+              <View className="w-8 h-8 rounded-lg bg-orange-50 items-center justify-center">
+                <Feather name="upload" size={16} color={BrandColors.primary} />
               </View>
               <Text className="text-[15px] font-bold text-slate-900">Kết quả</Text>
             </View>
 
-            {projectHasAccount && canSubmitResult(task.status || '') &&
-              task.assigneeId !== null && (
-                <TouchableOpacity onPress={() => setIsResultModalOpen(true)}>
-                  <Text className="text-xs font-bold text-primary">
-                    {task.result ? 'Cập nhật kết quả' : 'Thêm kết quả'}
-                  </Text>
-                </TouchableOpacity>
-              )}
+            {policy.uploadResult.enabled && (
+              <TouchableOpacity accessibilityLabel="Nộp kết quả" onPress={() => setIsResultModalOpen(true)} accessibilityRole="button">
+                <Text className="text-xs font-bold text-primary">
+                  {task.result ? 'Cập nhật kết quả' : 'Thêm kết quả'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {task.result ? (
-            <View className="bg-teal-50/50 border border-teal-100 rounded-xl p-3 gap-2.5">
+            <View className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 gap-2.5">
               <View className="flex-row items-start gap-2.5">
                 <View className="w-9 h-9 rounded-xl bg-white items-center justify-center">
                   <Feather
@@ -732,7 +630,7 @@ export default function TaskDetailScreen() {
                     <Text className="text-[11px] text-slate-500 mt-0.5">{task.result.note}</Text>
                   ) : null}
                   {task.lastSubmittedBy?.fullName && (
-                    <Text className="text-[10px] font-extrabold text-primary mt-1">
+                    <Text className="text-[10px] font-extrabold text-emerald-700 mt-1">
                       NGƯỜI LÀM: {task.lastSubmittedBy.fullName}
                     </Text>
                   )}
@@ -740,12 +638,25 @@ export default function TaskDetailScreen() {
               </View>
 
               {task.result.url && (
-                <TouchableOpacity
-                  className="self-start bg-primary px-3 py-1.5 rounded-lg"
-                  onPress={() => handleOpenLink(task.result?.url)}
-                >
-                  <Text className="text-[11px] font-bold text-white">Xem ngay</Text>
-                </TouchableOpacity>
+                <View className="flex-row items-center gap-2">
+                  <TouchableOpacity
+                    className="self-start bg-primary px-3 py-1.5 rounded-lg flex-row items-center gap-1"
+                    onPress={() => handleOpenLink(task.result?.url)}
+                  >
+                    <Feather name="external-link" size={12} color="#FFFFFF" />
+                    <Text className="text-[11px] font-bold text-white">Xem ngay</Text>
+                  </TouchableOpacity>
+                  {policy.submitReview.enabled && (
+                    <TouchableOpacity
+                      className="self-start bg-emerald-600 px-3 py-1.5 rounded-lg flex-row items-center gap-1"
+                      onPress={handleSubmitResultForReview}
+                      disabled={isActionLoading || submitResultForReviewMutation.isPending}
+                    >
+                      <Feather name="send" size={12} color="#FFFFFF" />
+                      <Text className="text-[11px] font-bold text-white">Gửi duyệt</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               )}
 
               {task.result.type === 'CHECKLIST' &&
@@ -796,8 +707,8 @@ export default function TaskDetailScreen() {
           <View className="bg-white rounded-2xl p-4 border border-slate-200 gap-3">
             <View className="flex-row items-center justify-between">
               <View className="flex-row items-center gap-2.5">
-                <View className="w-8 h-8 rounded-lg bg-purple-100 items-center justify-center">
-                  <Feather name="rotate-ccw" size={16} color="#7C3AED" />
+                <View className="w-8 h-8 rounded-lg bg-amber-50 items-center justify-center">
+                  <Feather name="rotate-ccw" size={16} color="#D97706" />
                 </View>
                 <Text className="text-[15px] font-bold text-slate-900">Lịch sử làm lại</Text>
               </View>
@@ -810,8 +721,8 @@ export default function TaskDetailScreen() {
                 .map((iteration) => (
                   <View key={iteration.id} className="bg-slate-50 border border-slate-200 rounded-xl p-3 gap-2">
                     <View className="flex-row items-center gap-2">
-                      <View className="bg-purple-100 px-1.5 py-0.5 rounded">
-                        <Text className="text-[11px] font-extrabold text-purple-600">v{iteration.version}</Text>
+                      <View className="bg-amber-100 px-1.5 py-0.5 rounded">
+                        <Text className="text-[11px] font-extrabold text-amber-800">v{iteration.version}</Text>
                       </View>
                       <Text className="text-[11px] text-slate-500">{formatDateStr(iteration.createdAt)}</Text>
                       {iteration.submittedBy?.fullName && (
@@ -822,7 +733,7 @@ export default function TaskDetailScreen() {
                     </View>
 
                     {iteration.leadFeedback && (
-                      <View className="border-l-4 border-purple-600 pl-2 gap-0.5">
+                      <View className="border-l-4 border-amber-500 pl-2 gap-0.5">
                         <Text className="text-[9px] font-extrabold text-slate-400 tracking-wider">PHẢN HỒI CỦA LEAD</Text>
                         <Text className="text-xs text-slate-900 italic">{`"${iteration.leadFeedback}"`}</Text>
                       </View>
@@ -867,14 +778,14 @@ export default function TaskDetailScreen() {
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center gap-2.5">
               <View className="w-8 h-8 rounded-lg bg-orange-50 items-center justify-center">
-                <Feather name="user" size={16} color="#F97316" />
+                <Feather name="user" size={16} color={BrandColors.primary} />
               </View>
               <Text className="text-[15px] font-bold text-slate-900">Nhân sự thực hiện</Text>
             </View>
           </View>
 
           <View className="flex-row items-center gap-3">
-            <View className="w-11 h-11 rounded-2xl bg-indigo-600 items-center justify-center shadow-sm">
+            <View className="w-11 h-11 rounded-2xl bg-primary items-center justify-center shadow-sm">
               <Text className="text-base font-bold text-white">
                 {task.assignee?.fullName?.charAt(0) || 'U'}
               </Text>
@@ -894,15 +805,15 @@ export default function TaskDetailScreen() {
         <View className="bg-white rounded-2xl p-4 border border-slate-200 gap-3">
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center gap-2.5">
-              <View className="w-8 h-8 rounded-lg bg-indigo-50 items-center justify-center">
-                <Feather name="user-plus" size={16} color="#6366F1" />
+              <View className="w-8 h-8 rounded-lg bg-slate-100 items-center justify-center">
+                <Feather name="user-check" size={16} color="#475569" />
               </View>
               <Text className="text-[15px] font-bold text-slate-900">Nhân sự phân công</Text>
             </View>
           </View>
 
           <View className="flex-row items-center gap-3">
-            <View className="w-11 h-11 rounded-2xl bg-violet-600 items-center justify-center shadow-sm">
+            <View className="w-11 h-11 rounded-2xl bg-slate-700 items-center justify-center shadow-sm">
               <Text className="text-base font-bold text-white">
                 {task.assigner?.fullName?.charAt(0) || (
                   <Feather name="user-plus" size={18} color="#FFFFFF" />
@@ -939,6 +850,7 @@ export default function TaskDetailScreen() {
               <Text className="text-sm font-bold text-slate-800">
                 {formatDateTimeStr(task.plannedEndDate || task.dueDate)}
               </Text>
+              <TaskDeadlineEditor task={policyTask} onChanged={loadTask} />
             </View>
 
             <View className="flex-1 gap-1">
@@ -956,8 +868,8 @@ export default function TaskDetailScreen() {
         <View className="bg-white rounded-2xl p-4 border border-slate-200 gap-3">
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center gap-2.5">
-              <View className="w-8 h-8 rounded-lg bg-purple-100 items-center justify-center">
-                <Feather name="paperclip" size={16} color="#7C3AED" />
+              <View className="w-8 h-8 rounded-lg bg-slate-100 items-center justify-center">
+                <Feather name="paperclip" size={16} color="#475569" />
               </View>
               <Text className="text-[15px] font-bold text-slate-900">Tài liệu ({task.attachments?.length || 0})</Text>
             </View>
@@ -996,7 +908,7 @@ export default function TaskDetailScreen() {
         {activeTab === 'subtasks' && (
           <>
             <TaskSubtaskSection
-              task={task}
+              task={policyTask}
               projectId={task.project?.id}
               canManage={canManageSubtasks}
               assigneeOptions={subtaskAssigneeOptions}
@@ -1023,31 +935,51 @@ export default function TaskDetailScreen() {
         key={`${task.id}:${isReworkModalOpen ? 'open' : 'closed'}`}
         visible={isReworkModalOpen && projectHasAccount}
         onClose={() => setIsReworkModalOpen(false)}
-        task={task}
+        task={policyTask}
         onSuccess={loadTask}
       />
 
       <TaskResultModal
         visible={isResultModalOpen && projectHasAccount}
         onClose={() => setIsResultModalOpen(false)}
-        task={task}
+        task={policyTask}
         onSuccess={loadTask}
       />
 
       <TaskAssignModal
-        visible={isAssignModalOpen && projectHasAccount}
+        visible={isAssignModalOpen}
         onClose={() => setIsAssignModalOpen(false)}
-        task={task}
-        project={task.project}
-        teamMembers={[]}
+        task={policyTask}
+        assignmentContext="detail"
+        project={policyTask?.project}
+        teamMembers={effectiveTeamMembers as any}
         onSuccess={loadTask}
       />
 
+            <SubtaskAllocationModal
+        visible={isSubtaskModalOpen}
+        onClose={() => setIsSubtaskModalOpen(false)}
+        taskId={task?.id || ''}
+        projectId={task?.project?.id}
+        assigneeOptions={subtaskAssigneeOptions}
+        parentBudget={Number((task as any)?.job?.vinicoin || 0)}
+        allocatedPercent={0}
+        onSuccess={() => {
+          setIsSubtaskModalOpen(false);
+          loadTask();
+        }}
+        policy={policy.createSubtask}
+      />
       <TaskReviewModal
         visible={isReviewModalOpen && projectHasAccount}
         onClose={() => setIsReviewModalOpen(false)}
-        task={task}
+        task={policyTask}
         onSuccess={loadTask}
+      />
+      <EditTaskNicknameModal
+        visible={showEditNickname}
+        task={task ? { id: task.id, code: task.code, name: task.name, nickname: (task as any).nickname, projectId: task.projectId } : null}
+        onClose={() => setShowEditNickname(false)}
       />
     </SafeAreaView>
   );

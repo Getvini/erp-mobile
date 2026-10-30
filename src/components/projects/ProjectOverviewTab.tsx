@@ -6,7 +6,7 @@ import { ProjectDetailItem } from '@/services/projectService';
 import { TeamMember, TEAM_MEMBER_ROLE_LABELS, USER_ROLE } from '@/services/teamService';
 import { BrandColors } from '@/constants/colors';
 import { formatNumber, formatDateToDDMMYYYY } from '@/utils/formatters';
-import { getProjectManagerUser, hasTeamMemberRole, hasProjectAccount, groupTeamMembers, getUserAccountRole, resolveEffectiveTeamMembers } from '@/utils/teamMember';
+import { getProjectManagerUser, hasTeamMemberRole, groupTeamMembers, getUserAccountRole, resolveEffectiveTeamMembers } from '@/utils/teamMember';
 import { WorkloadBadge } from '@/components/common/WorkloadBadge';
 import { ProjectWorkingFilesSection } from '@/components/projects/ProjectWorkingFilesSection';
 import { DatePickerModal } from '@/components/common/DatePickerModal';
@@ -32,8 +32,6 @@ interface ProjectOverviewTabProps {
   onRemoveMember?: (memberId: string) => void;
   onEditMemberRole?: (member: any) => void;
   canManageTeam?: boolean;
-  onOpenCreateMonthlyWork?: () => void;
-  canCreateMonthlyWork?: boolean;
 }
 
 export default function ProjectOverviewTab({
@@ -50,8 +48,6 @@ export default function ProjectOverviewTab({
   onRemoveMember,
   onEditMemberRole,
   canManageTeam = false,
-  onOpenCreateMonthlyWork,
-  canCreateMonthlyWork = false,
 }: ProjectOverviewTabProps) {
   const router = useRouter();
   const effectiveMembers = resolveEffectiveTeamMembers(teamMembers, project.team?.members);
@@ -89,7 +85,7 @@ export default function ProjectOverviewTab({
   const isClosed = ['COMPLETED', 'CANCELLED'].includes(project.status);
   const isOnHold = project.status === 'ON_HOLD' || Boolean((project as any).isOnHold);
   const isAssignedPm = pmUser?.id === user?.id && getUserAccountRole(user) === 'PM';
-  const canEditTimeline = hasProjectAccount(project, effectiveMembers) && !isClosed && !isOnHold && (getUserAccountRole(user) === 'ADMIN' || isAssignedPm);
+  const canEditTimeline = !isClosed && !isOnHold && (getUserAccountRole(user) === 'ADMIN' || isAssignedPm);
 
   // Timeline edit state
   const [editingTimeline, setEditingTimeline] = useState(false);
@@ -185,12 +181,12 @@ export default function ProjectOverviewTab({
       )}
 
       {/* 2. Pending Confirmation Banner */}
-      {leadUser && project.status === 'PENDING_CONFIRMATION' && (
+      {project.status === 'PENDING_CONFIRMATION' && (
         <View className="bg-orange-50 border border-orange-200 rounded-2xl p-4 gap-3">
           <View className="flex-row items-start gap-2.5">
             <Feather name="clock" size={20} color="#C2410C" />
             <View className="flex-1">
-              <Text className="text-[15px] font-bold text-orange-800 mb-0.5">Dự án đang chờ Account xác nhận</Text>
+              <Text className="text-[15px] font-bold text-orange-800 mb-0.5">Dự án đang chờ xác nhận</Text>
             </View>
           </View>
 
@@ -214,7 +210,7 @@ export default function ProjectOverviewTab({
             <View className="flex-row items-center gap-1.5 bg-orange-100 px-3 py-2 rounded-lg">
               <Feather name="lock" size={13} color="#9A3412" />
               <Text className="text-xs text-orange-950 font-semibold flex-1">
-                Chỉ Account phụ trách mới có quyền chấp nhận dự án.
+                Chỉ Admin hoặc Account phụ trách mới có quyền chấp nhận dự án.
               </Text>
             </View>
           )}
@@ -467,16 +463,16 @@ export default function ProjectOverviewTab({
 
       {/* Project Manager Card */}
       <View className="bg-surface rounded-2xl p-4 border border-border gap-3">
-        <View className="flex-row justify-between items-center">
-          <View className="flex-row items-center gap-2">
-            <View className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 items-center justify-center mr-2.5">
+        <View className="flex-row justify-between items-center gap-2">
+          <View className="flex-row items-center gap-2 flex-1 shrink">
+            <View className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 items-center justify-center">
               <Feather name="user-check" size={16} color={BrandColors.primary} />
             </View>
-            <Text className="text-[15px] font-bold text-text-primary">Quản lý dự án (PM)</Text>
+            <Text className="text-[15px] font-bold text-text-primary" numberOfLines={1}>Quản lý dự án (PM)</Text>
           </View>
           {canAssignPm && (
-            <TouchableOpacity className="flex-row items-center gap-1 bg-teal-50 px-2.5 py-1 rounded-lg" onPress={onOpenAssignPm} activeOpacity={0.7}>
-              <Feather name="edit-2" size={12} color={BrandColors.primary} />
+            <TouchableOpacity className="flex-row items-center gap-1 bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-lg" onPress={onOpenAssignPm} activeOpacity={0.7}>
+              <Feather name={pm ? "edit-2" : "plus"} size={12} color={BrandColors.primary} />
               <Text className="text-xs font-bold text-primary">{pm ? 'Đổi PM' : 'Phân công'}</Text>
             </TouchableOpacity>
           )}
@@ -502,17 +498,22 @@ export default function ProjectOverviewTab({
 
       {/* Team Info Card */}
       <View className="bg-surface rounded-2xl p-4 border border-border gap-3">
-        <View className="flex-row justify-between items-center">
-          <View className="flex-row items-center gap-2">
-            <View className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 items-center justify-center mr-2.5">
+        <View className="flex-row justify-between items-center gap-2">
+          <View className="flex-row items-center gap-2 flex-1 shrink">
+            <View className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 items-center justify-center">
               <Feather name="users" size={16} color={BrandColors.primary} />
             </View>
-            <Text className="text-[15px] font-bold text-text-primary">Đội ngũ thực hiện</Text>
+            <Text className="text-[15px] font-bold text-text-primary" numberOfLines={1}>Đội ngũ thực hiện</Text>
           </View>
           {canManageTeam && pmUser && (
-            <TouchableOpacity className="flex-row items-center gap-1 bg-teal-50 px-2.5 py-1 rounded-lg" onPress={onOpenAddMember} activeOpacity={0.7}>
+            <TouchableOpacity
+              className="flex-row items-center gap-1 bg-orange-50 border border-orange-200 px-2.5 py-1.5 rounded-lg shrink-0"
+              style={{ flexShrink: 0 }}
+              onPress={onOpenAddMember}
+              activeOpacity={0.7}
+            >
               <Feather name="user-plus" size={12} color={BrandColors.primary} />
-              <Text className="text-xs font-bold text-primary">Thêm nhân sự</Text>
+              <Text className="text-xs font-bold text-primary" numberOfLines={1}>Thêm nhân sự</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -653,7 +654,7 @@ export default function ProjectOverviewTab({
               <Text className="text-[15px] font-bold text-text-primary">Hợp đồng liên quan</Text>
             </View>
             {contract.id && (
-              <TouchableOpacity className="flex-row items-center gap-1 bg-teal-50 px-2.5 py-1 rounded-lg" onPress={() => router.push(`/contracts/${contract.id}` as any)} activeOpacity={0.7}>
+              <TouchableOpacity className="flex-row items-center gap-1 bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-lg" onPress={() => router.push(`/contracts/${contract.id}` as any)} activeOpacity={0.7}>
                 <Text className="text-xs font-bold text-primary">Xem hợp đồng</Text>
                 <Feather name="chevron-right" size={14} color={BrandColors.primary} />
               </TouchableOpacity>

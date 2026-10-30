@@ -1,3 +1,5 @@
+import { useAuth } from '@/context/AuthContext';
+import { getTaskPolicy } from '@/utils/taskPolicy';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
@@ -13,7 +15,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { uploadToCloudinary } from '@/services/cloudinaryService';
-import { useRequestReworkMutation } from '@/hooks/queries/useTasks';
+import { useRequestReworkMutation, useTaskDetailQuery } from '@/hooks/queries/useTasks';
 import { isValidUrl, normalizeUrl } from '@/utils/validators';
 
 const ITEM_HEIGHT = 38;
@@ -428,6 +430,9 @@ export default function ReworkTaskModal({
   onSuccess,
 }: ReworkTaskModalProps) {
   const [reworkReason, setReworkReason] = useState('');
+  const { user } = useAuth();
+  const policy = getTaskPolicy(task, user);
+  const { data: fetchedParent, isLoading: isParentLoading } = useTaskDetailQuery((task as any)?.parentTaskId || '');
   const [deadlineAt, setDeadlineAt] = useState(() => getDefaultReworkDeadline(task));
   const [showDatePicker, setShowDatePicker] = useState(false);
   const requestReworkMutation = useRequestReworkMutation();
@@ -487,6 +492,7 @@ export default function ReworkTaskModal({
   };
 
   const handleSubmit = async () => {
+    if (!policy.rework.enabled || isParentLoading) return;
     if (!reworkReason.trim()) {
       Alert.alert('Cảnh báo', 'Vui lòng nhập lý do/yêu cầu sửa lại.');
       return;
@@ -497,6 +503,12 @@ export default function ReworkTaskModal({
       return;
     }
 
+    const parentDeadline = (task as any).parentTask?.plannedEndDate || fetchedParent?.plannedEndDate;
+    if (parentDeadline && new Date(deadlineAt) > new Date(parentDeadline)) {
+      Alert.alert('Cảnh báo', 'Hạn chót làm lại không được sau hạn chót công việc cha.');
+      return;
+    }
+    if (requestReworkMutation.isPending) return;
     try {
       await requestReworkMutation.mutateAsync({
         id: task.id,
@@ -656,19 +668,20 @@ export default function ReworkTaskModal({
                 <Text className="text-sm font-bold text-slate-500">Hủy</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                className={`flex-1 py-3.5 rounded-xl bg-primary items-center ${
-                  requestReworkMutation.isPending ? 'opacity-60' : ''
-                }`}
-                onPress={handleSubmit}
-                disabled={requestReworkMutation.isPending}
-              >
-                {requestReworkMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text className="text-sm font-bold text-white">Gửi yêu cầu</Text>
-                )}
-              </TouchableOpacity>
+              {policy.rework.enabled && (
+                <TouchableOpacity accessibilityLabel="Yêu cầu làm lại"
+                  className={`flex-1 py-3.5 rounded-xl bg-primary items-center ${requestReworkMutation.isPending ? 'opacity-60' : ''
+                    }`}
+                  onPress={handleSubmit}
+                  disabled={requestReworkMutation.isPending}
+                  style={[requestReworkMutation.isPending ? { opacity: 0.5 } : undefined]} accessibilityRole="button">
+                  {requestReworkMutation.isPending ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text className="text-sm font-bold text-white">Gửi yêu cầu</Text>
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
           </TouchableOpacity>
         </TouchableOpacity>

@@ -1,3 +1,6 @@
+import { useAuth } from '@/context/AuthContext';
+import { getTaskPolicy } from '@/utils/taskPolicy';
+import { BrandColors } from '@/constants/colors';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
@@ -35,8 +38,10 @@ export default function TaskReviewModal({
   task,
   onSuccess,
 }: TaskReviewModalProps) {
+  const { user } = useAuth();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const policy = getTaskPolicy(task, user);
   const [passedIds, setPassedIds] = useState<string[]>([]);
   const [note, setNote] = useState('');
   const [activeTab, setActiveTab] = useState<'TEAM_LEAD' | 'ASSIGNER'>('TEAM_LEAD');
@@ -69,7 +74,12 @@ export default function TaskReviewModal({
   const isAllPassed = isLeadPassed && isAssignerPassed;
   const isDualReview = leadReviews.length > 0 && assignerReviews.length > 0;
 
+  const canToggleReview = isDualReview
+    ? (activeTab === 'TEAM_LEAD' ? policy.reviewLead.enabled : policy.reviewAssigner.enabled)
+    : (policy.reviewLead.enabled || policy.reviewAssigner.enabled);
+
   const handleToggleReview = (reviewId: string) => {
+    if (!canToggleReview || isFinalizing || isRejecting) return;
     setPassedIds((prev) =>
       prev.includes(reviewId) ? prev.filter((id) => id !== reviewId) : [...prev, reviewId]
     );
@@ -92,6 +102,7 @@ export default function TaskReviewModal({
   const isRejecting = rejectTaskMutation.isPending;
 
   const handleFinalize = async () => {
+    if (!policy.review.enabled || isFinalizing || isRejecting) return;
     if (!task?.id) return;
     if (!isAllPassed && reviews.length > 0) {
       Alert.alert('Cảnh báo', 'Bạn cần tích chọn xác nhận tất cả các tiêu chí trước khi duyệt.');
@@ -119,6 +130,7 @@ export default function TaskReviewModal({
   const handleApprove = handleFinalize;
 
   const handleReject = async () => {
+    if (!policy.review.enabled || isFinalizing || isRejecting) return;
     if (!task?.id) return;
     if (!note.trim()) {
       Alert.alert('Cảnh báo', 'Vui lòng nhập ghi chú lý do từ chối công việc.');
@@ -293,7 +305,8 @@ export default function TaskReviewModal({
                             className={`flex-row items-center gap-3 border rounded-xl p-3 ${
                               isChecked ? 'bg-emerald-50/60 border-emerald-200' : 'bg-background border-border'
                             }`}
-                            onPress={() => handleToggleReview(review.id)}
+                            disabled={!canToggleReview || isFinalizing || isRejecting}
+                          onPress={() => handleToggleReview(review.id)}
                             activeOpacity={0.7}
                           >
                             <View
@@ -335,8 +348,8 @@ export default function TaskReviewModal({
             {/* Note Input */}
             <View className="bg-surface border border-border rounded-2xl p-4 mb-4">
               <View className="flex-row items-center gap-2.5 mb-3">
-                <View className="w-8 h-8 rounded-lg bg-purple-50 items-center justify-center">
-                  <Feather name="message-square" size={18} color="#8B5CF6" />
+                <View className="w-8 h-8 rounded-lg bg-orange-50 items-center justify-center">
+                  <Feather name="message-square" size={18} color={BrandColors.primary} />
                 </View>
                 <Text className="text-sm font-bold text-text-primary">Ghi chú / Phản hồi</Text>
               </View>
@@ -364,39 +377,41 @@ export default function TaskReviewModal({
             className="flex-row gap-3 px-5 pt-3 border-t border-border bg-surface"
             style={{ paddingBottom: Math.max(insets.bottom, 12) }}
           >
-            <TouchableOpacity
-              className={`flex-1 flex-row items-center justify-center gap-1.5 py-3.5 rounded-xl border border-red-200 bg-red-50 ${
-                !note.trim() || isRejecting || isFinalizing ? 'opacity-50' : ''
-              }`}
-              onPress={handleReject}
-              disabled={!note.trim() || isRejecting || isFinalizing}
-            >
-              {isRejecting ? (
-                <ActivityIndicator size="small" color="#EF4444" />
-              ) : (
-                <>
-                  <Feather name="x-circle" size={16} color="#EF4444" />
-                  <Text className="text-sm font-bold text-danger">Từ chối</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {policy.review.enabled && (
+              <TouchableOpacity accessibilityLabel="Từ chối"
+                className={`flex-1 flex-row items-center justify-center gap-1.5 py-3.5 rounded-xl border border-red-200 bg-red-50 ${!note.trim() || isRejecting || isFinalizing ? 'opacity-50' : ''
+                  }`}
+                onPress={handleReject}
+                disabled={!note.trim() || isRejecting || isFinalizing}
+                style={[(!note.trim() || isRejecting || isFinalizing) ? { opacity: 0.5 } : undefined]} accessibilityRole="button">
+                {isRejecting ? (
+                  <ActivityIndicator size="small" color="#EF4444" />
+                ) : (
+                  <>
+                    <Feather name="x-circle" size={16} color="#EF4444" />
+                    <Text className="text-sm font-bold text-danger">Từ chối</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
 
-            <TouchableOpacity
-              className={`flex-[2] flex-row items-center justify-center gap-1.5 py-3.5 rounded-xl bg-success ${
-                !isAllPassed || isFinalizing || isRejecting ? 'opacity-50' : ''
-              }`}
-              onPress={handleApprove}
-              disabled={!isAllPassed || isFinalizing || isRejecting}
-            >
-              {isFinalizing ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <Feather name="check-circle" size={16} color="#FFFFFF" />
-                  <Text className="text-sm font-bold text-white">Duyệt hoàn thành</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {policy.review.enabled && (
+              <TouchableOpacity accessibilityLabel="Duyệt hoàn thành"
+                className={`flex-[2] flex-row items-center justify-center gap-1.5 py-3.5 rounded-xl bg-success ${!isAllPassed || isFinalizing || isRejecting ? 'opacity-50' : ''
+                  }`}
+                onPress={handleApprove}
+                disabled={!isAllPassed || isFinalizing || isRejecting}
+                style={[(!isAllPassed || isFinalizing || isRejecting) ? { opacity: 0.5 } : undefined]} accessibilityRole="button">
+                {isFinalizing ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Feather name="check-circle" size={16} color="#FFFFFF" />
+                    <Text className="text-sm font-bold text-white">Duyệt hoàn thành</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         </TouchableOpacity>
       </TouchableOpacity>

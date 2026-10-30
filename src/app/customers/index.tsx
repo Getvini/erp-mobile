@@ -8,6 +8,7 @@ import {
   RefreshControl,
   Linking,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
@@ -210,20 +211,20 @@ export default function CustomersScreen() {
       {/* Header */}
       <View className="flex-row items-center justify-between px-4 py-3 bg-white border-b border-slate-200">
         <TouchableOpacity
-          className="w-12 h-12 rounded-xl bg-slate-100 items-center justify-center"
+          className="w-10 h-10 rounded-xl bg-slate-100 items-center justify-center"
           onPress={() => safeGoBack(router, '/')}
           activeOpacity={0.7}
         >
           <Feather name="arrow-left" size={20} color="#0F172A" />
         </TouchableOpacity>
 
-        <Text className="text-[17px] font-bold text-slate-900">Hồ sơ Khách hàng & CRM</Text>
-        <View className="w-12" />
+        <Text className="text-base font-bold text-slate-900">Hồ sơ Khách hàng & CRM</Text>
+        <View className="w-10" />
       </View>
 
       {/* Search Input */}
-      <View className="px-4 py-3 bg-white border-b border-slate-200">
-        <View className="flex-row items-center bg-slate-100 rounded-xl px-3 h-[48px]">
+      <View className="px-4 pt-3 pb-2 bg-white border-b border-slate-200 gap-2.5">
+        <View className="flex-row items-center bg-slate-100 rounded-xl px-3 h-10.5">
           <Feather name="search" size={18} color="#94A3B8" />
           <TextInput
             testID="customerSearchInput"
@@ -241,13 +242,17 @@ export default function CustomersScreen() {
         </View>
 
         {/* Source Filter Tabs */}
-        <View className="flex-row gap-2 mt-2.5">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+        >
           {SOURCE_TABS.map((tab) => {
             const isActive = activeSourceTab === tab.key;
             return (
               <TouchableOpacity
                 key={tab.key}
-                className={`px-3 min-h-[44px] justify-center rounded-full border ${
+                className={`px-3 py-1.5 rounded-full border ${
                   isActive ? 'bg-primary border-primary' : 'bg-slate-100 border-slate-200'
                 }`}
                 onPress={() => setActiveSourceTab(tab.key)}
@@ -255,7 +260,7 @@ export default function CustomersScreen() {
               >
                 <Text
                   className={`text-xs ${
-                    isActive ? 'font-bold text-white' : 'font-semibold text-slate-600'
+                    isActive ? 'font-bold text-white' : 'font-semibold text-slate-500'
                   }`}
                 >
                   {tab.label}
@@ -263,7 +268,7 @@ export default function CustomersScreen() {
               </TouchableOpacity>
             );
           })}
-        </View>
+        </ScrollView>
       </View>
 
       {/* Content List */}

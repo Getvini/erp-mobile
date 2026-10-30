@@ -281,11 +281,11 @@ export default function LoginScreen() {
                   accessibilityState={{ checked: rememberMe }}
                 >
                   <View
-                    className={`h-[18px] w-[18px] items-center justify-center rounded-[5px] border bg-white ${
-                      rememberMe ? 'border-primary' : 'border-slate-300'
+                    className={`h-[18px] w-[18px] items-center justify-center rounded-[5px] border ${
+                      rememberMe ? 'border-[#F38820] bg-[#F38820]' : 'border-slate-300 bg-white'
                     }`}
                   >
-                    {rememberMe && <Feather name="check" size={12} color="#0F172A" />}
+                    {rememberMe && <Feather name="check" size={12} color="#FFFFFF" />}
                   </View>
                   <Text className="text-sm text-slate-700">Ghi nhớ đăng nhập</Text>
                 </TouchableOpacity>

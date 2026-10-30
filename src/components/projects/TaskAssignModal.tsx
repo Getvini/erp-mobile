@@ -43,6 +43,8 @@ import * as Haptics from 'expo-haptics';
 import AssigneeSelectorModal from './AssigneeSelectorModal';
 import VendorSelectorModal from './VendorSelectorModal';
 import { VendorType, VENDOR_TYPE_LABELS } from '@/services/vendorService';
+import { useAuth } from '@/context/AuthContext';
+import { getTaskActionState } from '@/utils/taskPolicy';
 import { validateTaskAssignment } from '@/utils/taskAssignValidation';
 
 const ITEM_HEIGHT = 38;
@@ -432,6 +434,7 @@ interface TaskAssignModalProps {
   visible: boolean;
   onClose: () => void;
   task: TaskDetail | TaskDetail[] | null;
+  assignmentContext?: 'detail' | 'batch';
   project?: any;
   teamMembers?: {
     id: string;
@@ -455,6 +458,7 @@ export default function TaskAssignModal({
   visible,
   onClose,
   task,
+  assignmentContext,
   project,
   teamMembers,
   onSuccess,
@@ -462,6 +466,11 @@ export default function TaskAssignModal({
   const isBulk = Array.isArray(task);
   const tasks = useMemo(() => (Array.isArray(task) ? task : task ? [task] : []), [task]);
   const representativeTask = tasks[0] || null;
+  const { user } = useAuth();
+  const assignmentStates = tasks.map(item => getTaskActionState(item, user,
+    assignmentContext === 'batch' ? 'assign' : item.assigneeId || item.assignee?.id || (item as any).vendorId || (item as any).vendor ? 'reassign' : 'assign',
+    { project: project || item.project, members: teamMembers?.length ? teamMembers : (project || item.project)?.team?.members, assignmentContext }));
+  const assignmentPolicy = assignmentStates.find(state => !state.enabled) || assignmentStates[0] || { visible: false, enabled: false, reason: null, reasonCode: 'NO_TASK' };
 
   const [performerType, setPerformerType] = useState<'INTERNAL' | 'VENDOR'>('INTERNAL');
   const [isTeamAssignment, setIsTeamAssignment] = useState(false);
@@ -835,6 +844,7 @@ export default function TaskAssignModal({
   };
 
   const handleSubmit = async () => {
+    if (!assignmentPolicy.enabled) return;
     if (isTeamAssignment) {
       if (!selectedTeamId) {
         Alert.alert('Cảnh báo', 'Vui lòng chọn Team hỗ trợ.');
@@ -1468,31 +1478,32 @@ export default function TaskAssignModal({
                 <Text className="text-sm font-semibold text-slate-600">Hủy bỏ</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                className={`flex-[2] flex-row items-center justify-center gap-1.5 bg-primary py-3 rounded-xl ${
-                  isPending ? 'opacity-60' : ''
-                }`}
-                onPress={handleSubmit}
-                disabled={isPending}
-              >
-                {isPending ? (
-                  <>
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                    <Text className="text-sm font-bold text-white">Đang xử lý...</Text>
-                  </>
-                ) : (
-                  <>
-                    <Feather name="user-check" size={16} color="#FFFFFF" />
-                    <Text className="text-sm font-bold text-white">
-                      {isBulk
-                        ? `Phân công (${tasks.length}) việc`
-                        : representativeTask?.assigneeId
-                        ? 'Lưu đổi người'
-                        : 'Xác nhận phân công'}
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              {assignmentPolicy.enabled && (
+                <TouchableOpacity accessibilityLabel="Xác nhận phân công"
+                  className={`flex-[2] flex-row items-center justify-center gap-1.5 bg-primary py-3 rounded-xl ${isPending ? 'opacity-60' : ''
+                    }`}
+                  onPress={handleSubmit}
+                  disabled={isPending}
+                  style={[isPending ? { opacity: 0.5 } : undefined]} accessibilityRole="button">
+                  {isPending ? (
+                    <>
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                      <Text className="text-sm font-bold text-white">Đang xử lý...</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Feather name="user-check" size={16} color="#FFFFFF" />
+                      <Text className="text-sm font-bold text-white">
+                        {isBulk
+                          ? `Phân công (${tasks.length}) việc`
+                          : representativeTask?.assigneeId
+                            ? 'Lưu đổi người'
+                            : 'Xác nhận phân công'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </View>
