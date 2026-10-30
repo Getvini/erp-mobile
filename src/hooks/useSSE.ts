@@ -25,7 +25,6 @@ export const useSSE = () => {
   useEffect(() => {
     if (!user) {
       if (eventSourceRef.current) {
-        console.log('🔌 [SSE Mobile] User logged out, closing connection.');
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
@@ -43,7 +42,6 @@ export const useSSE = () => {
       const baseApi = DEFAULT_API_URL.replace(/\/$/, '');
       const sseUrl = `${baseApi}/notifications/stream`;
 
-      console.log('📡 [SSE Mobile] Connecting to:', sseUrl);
 
       try {
         const es = new EventSource(sseUrl, {
@@ -54,7 +52,7 @@ export const useSSE = () => {
         eventSourceRef.current = es;
 
         es.addEventListener('open', () => {
-          console.log('✅ [SSE Mobile] Connection established');
+          console.log('[SSE Mobile] Connection established');
         });
 
         es.addEventListener('message', (event: any) => {
@@ -65,7 +63,6 @@ export const useSSE = () => {
 
             // 1. Handle Module Events (Data Refresh Signals)
             if (payload.__isModuleEvent) {
-              console.log(`⚡ [SSE Mobile] Module Event received: ${payload.event}`, payload.data);
 
               const tags = EVENT_TO_TAGS_MAP[payload.event] || [];
 
@@ -99,20 +96,19 @@ export const useSSE = () => {
             }
 
             // 2. Handle Standard Notifications
-            console.log('🔔 [SSE Mobile] Notification received:', payload);
             sseEventBus.emit('notification', payload);
           } catch (err) {
-            console.log('❌ [SSE Mobile] Error parsing message payload:', err);
+            return;
           }
         });
 
         es.addEventListener('error', (event: any) => {
           if (event.type === 'error') {
-            console.log('⚠️ [SSE Mobile] Connection error/disconnected. EventSource will retry...');
+            console.log(' [SSE Mobile] Connection error/disconnected. EventSource will retry...');
           }
         });
       } catch (error) {
-        console.log('💥 [SSE Mobile] Failed to initialize EventSource:', error);
+        console.log(' [SSE Mobile] Failed to initialize EventSource');
       }
     };
 
@@ -127,10 +123,9 @@ export const useSSE = () => {
         appStateRef.current.match(/inactive|background/) &&
         nextAppState === 'active'
       ) {
-        console.log('📱 [SSE Mobile] App foregrounded -> Reconnecting SSE');
+        console.log(' [SSE Mobile] Reconnecting SSE');
         connectSSE();
       } else if (nextAppState.match(/inactive|background/)) {
-        console.log('📱 [SSE Mobile] App backgrounded -> Closing SSE connection to save battery');
         if (eventSourceRef.current) {
           eventSourceRef.current.close();
           eventSourceRef.current = null;
@@ -142,7 +137,6 @@ export const useSSE = () => {
     return () => {
       subscription.remove();
       if (eventSourceRef.current) {
-        console.log('🔌 [SSE Mobile] Cleaning up EventSource connection');
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
