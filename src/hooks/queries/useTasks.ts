@@ -1,9 +1,21 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { taskService, TaskDetail, SubmitTaskResultFileParams } from '@/services/taskService';
+import { taskService, TaskDetail, SubmitTaskResultFileParams, CreateTaskPayload } from '@/services/taskService';
 import type { ScanRegion } from '@/utils/sheetScope';
 import { teamService } from '@/services/teamService';
 import { TaskItem } from '@/services/dashboardService';
 import { queryKeys } from '@/services/queryKeys';
+import { projectService } from '@/services/projectService';
+import { useAuthStore } from '@/stores/useAuthStore';
+import { canCreateProjectTask, reconcileTaskReviewIds } from '@/utils/taskOutcomeAuthorization';
+
+async function validateTaskReview(taskId: string, selected: string[]) {
+  const [task, reviews] = await Promise.all([taskService.getTaskById(taskId), taskService.getTaskReviews(taskId)]);
+  if (task.error || !task.data?.id) throw new Error(task.error || 'Không tải được công việc.');
+  if (reviews.error || !reviews.data) throw new Error(reviews.error || 'Không tải được tiêu chí đánh giá.');
+  const user = useAuthStore.getState().user;
+  const passedCriteriaIds = reconcileTaskReviewIds(task.data, reviews.data, selected, { id: user?.id, role: user?.role });
+  return { passedCriteriaIds, reviews: reviews.data, projectId: task.data.project?.id || task.data.projectId };
+}
 
 export interface TaskListFilters {
   search?: string;
@@ -120,23 +132,24 @@ export function useCreateTaskMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (payload: {
-      projectId: string;
-      name: string;
-      description?: string;
-      assigneeId?: string;
-      dueDate?: string;
-      isExtraTask?: boolean;
-    }) => {
+    mutationFn: async (payload: CreateTaskPayload) => {
+      if (!payload.jobId || !payload.name.trim() || !payload.isExtra) throw new Error('Vui lòng chọn hạng mục phát sinh.');
+      const project = await projectService.getProjectById(payload.projectId);
+      if (project.error || !project.data?.id) throw new Error(project.error || 'Không tải được dự án.');
+      const user = useAuthStore.getState().user;
+      if (!canCreateProjectTask(project.data, { id: user?.id, role: user?.role })) {
+        throw new Error('Bạn không có quyền tạo công việc hoặc dự án chưa được chấp nhận, tạm dừng, đã đóng.');
+      }
       const res = await taskService.createTask(payload);
-      if (res.error) {
-        throw new Error(res.error);
+      if (res.error || !res.data?.id) {
+        throw new Error(res.error || 'Máy chủ chưa xác nhận tạo công việc. Hãy đối chiếu danh sách trước khi thử lại.');
       }
       return res.data;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(variables.projectId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.lists() });
     },
   });
 }
@@ -284,10 +297,15 @@ export function useFinalizeTaskMutation() {
       taskId: string;
       payload: { passedCriteriaIds: string[]; reviewNote?: string; projectId?: string };
     }) => {
-      const res = await taskService.finalizeTask(taskId, payload);
+      const current = await validateTaskReview(taskId, payload.passedCriteriaIds);
+      if (current.passedCriteriaIds.length !== current.reviews.length) {
+        throw new Error('Cần xác nhận đủ tiêu chí ở các nhóm được phép trước khi duyệt.');
+      }
+      const res = await taskService.finalizeTask(taskId, { ...payload, passedCriteriaIds: current.passedCriteriaIds, projectId: current.projectId });
       if (res.error) {
         throw new Error(res.error);
       }
+      if (typeof res.data?.finalized !== 'boolean') throw new Error('Máy chủ chưa xác nhận kết quả duyệt. Vui lòng tải lại.');
       return res.data;
     },
     onSuccess: (_, variables) => {
@@ -312,7 +330,9 @@ export function useRejectTaskMutation() {
       taskId: string;
       payload: { passedCriteriaIds?: string[]; reviewNote: string; projectId?: string };
     }) => {
-      const res = await taskService.rejectTask(taskId, payload);
+      if (!payload.reviewNote.trim()) throw new Error('Vui lòng nhập lý do từ chối.');
+      const current = await validateTaskReview(taskId, payload.passedCriteriaIds || []);
+      const res = await taskService.rejectTask(taskId, { ...payload, reviewNote: payload.reviewNote.trim(), passedCriteriaIds: current.passedCriteriaIds, projectId: current.projectId });
       if (res.error) {
         throw new Error(res.error);
       }

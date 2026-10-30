@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   RefreshControl,
   ScrollView,
   Text,
@@ -14,7 +15,7 @@ import { Feather } from '@expo/vector-icons';
 import JobFormModal from '@/components/jobs/JobFormModal';
 import EditJobCriteriaModal from '@/components/jobs/EditJobCriteriaModal';
 import { BrandColors } from '@/constants/colors';
-import { usePermission } from '@/hooks/usePermission';
+import { JOB_RESPONSIBLE_ROLE_LABELS, validateJobMetadata } from '@/utils/jobMetadata';
 import {
   useDeleteJobMutation,
   useJobCriteriasQuery,
@@ -41,7 +42,7 @@ export default function JobDetailScreen() {
 
   const user = useAuthStore((state) => state.user);
   const isAuthLoading = useAuthStore((state) => state.isLoading);
-  const { canConfigureQc } = usePermission();
+
 
   const [isEditVisible, setIsEditVisible] = useState(false);
   const [isEditCriteriaVisible, setIsEditCriteriaVisible] = useState(false);
@@ -83,7 +84,7 @@ export default function JobDetailScreen() {
   };
 
   const handleDelete = () => {
-    if (!job?.id) return;
+    if (!canWrite || !job?.id) return;
     Alert.alert(
       'Xóa hạng mục công việc',
       `Bạn có chắc chắn muốn xóa hạng mục "${job.name}"? Hành động này không thể hoàn tác.`,
@@ -94,6 +95,7 @@ export default function JobDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              if (!isManagementRole(useAuthStore.getState().user?.role)) return;
               await deleteMutation.mutateAsync({ id: job.id });
               Alert.alert('Thành công', 'Đã xóa hạng mục công việc.');
               router.back();
@@ -218,7 +220,7 @@ export default function JobDetailScreen() {
                 );
               })
             ) : (
-              <Text className="text-[11px] italic text-[#94A3B8]">Chưa xác định category</Text>
+              <Text className="text-[11px] italic text-[#94A3B8]">Chưa chọn nhóm</Text>
             )}
           </View>
 
@@ -226,7 +228,7 @@ export default function JobDetailScreen() {
             <View className="flex-1 rounded-xl bg-[#FFF4EA] border border-[#FDCB9E] p-3">
               <Text className="text-[10px] font-bold text-[#C2410C] uppercase mb-1">Giá vốn</Text>
               <Text className="text-sm font-extrabold text-primary">
-                {formatVND(toJobNumber(job.costPrice))}
+                {job.costPrice == null ? 'Chưa có dữ liệu' : formatVND(toJobNumber(job.costPrice))}
               </Text>
             </View>
             <View className="flex-1 rounded-xl bg-[#FFFBEB] border border-[#FDE68A] p-3">
@@ -280,6 +282,19 @@ export default function JobDetailScreen() {
           </View>
         </View>
 
+        <View className="rounded-2xl border border-slate-200 bg-white p-4 gap-2">
+          <Text className="text-sm font-bold text-slate-900">Thông tin công việc</Text>
+          <Text className="text-sm text-slate-700">Cấp độ: {job.level || 'A'}</Text>
+          <Text className="text-sm text-slate-700">Phụ trách: {job.responsibleRole ? JOB_RESPONSIBLE_ROLE_LABELS[job.responsibleRole] || job.responsibleRole : 'Chưa chọn'}</Text>
+          <Text className="text-xs font-bold text-slate-500">Mô tả công việc</Text>
+          <Text className="text-sm text-slate-700">{job.description || 'Chưa cập nhật'}</Text>
+          <Text className="text-xs font-bold text-slate-500">Tài liệu mẫu</Text>
+          {job.sampleDocumentUrl ? <TouchableOpacity className="min-h-[48px] justify-center" accessibilityRole="link" onPress={async () => {
+            if (validateJobMetadata({ sampleDocumentUrl: job.sampleDocumentUrl })) { Alert.alert('Không thể mở tài liệu', 'Link tài liệu không hợp lệ.'); return; }
+            try { await Linking.openURL(job.sampleDocumentUrl!); } catch { Alert.alert('Không thể mở tài liệu', 'Vui lòng kiểm tra liên kết và thử lại.'); }
+          }}><Text className="text-sm text-blue-600">{job.sampleDocumentUrl}</Text></TouchableOpacity> : <Text className="text-sm text-slate-500">Chưa cập nhật</Text>}
+        </View>
+
         {/* Tiêu chí đánh giá (tick chọn cho nghiệm thu QC) */}
         <View className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden">
           <View className="flex-row items-center justify-between px-4 py-3 border-b border-[#F1F5F9]">
@@ -291,7 +306,7 @@ export default function JobDetailScreen() {
               <Text className="text-[11px] font-semibold text-[#64748B]">
                 {passedCriteriaIds.length}/{criteriaList.length}
               </Text>
-              {canConfigureQc ? (
+              {canWrite ? (
                 <TouchableOpacity
                   className="flex-row items-center gap-1 bg-[#FFF4EA] border border-[#FDCB9E] px-2.5 py-1 rounded-lg"
                   onPress={() => setIsEditCriteriaVisible(true)}

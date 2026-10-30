@@ -34,7 +34,9 @@ import { ProductDescriptionSection } from '@/components/projects/ProductDescript
 
 import AssignPmModal from '@/components/projects/AssignPmModal';
 import TaskUpdateModal from '@/components/projects/TaskUpdateModal';
-import AddExtraTaskModal from '@/components/projects/AddExtraTaskModal';
+import AddProjectServiceModal from '@/components/projects/AddProjectServiceModal';
+import { canAddProjectServices } from '@/utils/projectServiceAddendum';
+import { mergeProjectTaskDetails } from '@/utils/projectTasks';
 import CreateAcceptanceModal from '@/components/projects/CreateAcceptanceModal';
 import AcceptanceReviewModal from '@/components/projects/AcceptanceReviewModal';
 import AddTeamMemberModal from '@/components/projects/AddTeamMemberModal';
@@ -108,19 +110,13 @@ export default function ProjectDetailScreen() {
   const removeTeamMemberMutation = useRemoveTeamMemberMutation();
   const resumeProjectMutation = useResumeProjectMutation();
 
-  const { data: tasksData, isLoading: isLoadingTasks, isFetching: isTasksFetching, refetch: refetchTasks } = useTasksByProjectQuery(String(id || ''));
+  const { data: tasksData, isLoading: isLoadingTasks, isFetching: isTasksFetching, isError: isTasksError, error: tasksError, refetch: refetchTasks } = useTasksByProjectQuery(String(id || ''));
   const projectTasks = project?.tasks;
   const tasks: TaskDetail[] = useMemo(() => {
-    if (Array.isArray(projectTasks) && projectTasks.length > 0) {
-      if (Array.isArray(tasksData) && tasksData.length > 0) {
-        const tasksDataMap = new Map(tasksData.map((t) => [t.id, t]));
-        return projectTasks.map((pt: any) => tasksDataMap.get(pt.id) || pt);
-      }
-      return projectTasks as TaskDetail[];
-    }
-    return tasksData || [];
-  }, [projectTasks, tasksData]);
-  const isTasksLoadingEffective = isLoadingTasks && (!project?.tasks || project.tasks.length === 0);
+    if (isTasksError) return [];
+    return mergeProjectTaskDetails(tasksData || [], projectTasks || []);
+  }, [projectTasks, tasksData, isTasksError]);
+  const isTasksLoadingEffective = isLoadingTasks;
 
   const { data: acceptancesData, isLoading: isLoadingAcceptances, refetch: refetchAcceptances } = useAcceptancesQuery({ projectId: String(id || '') });
   const acceptances: AcceptanceItem[] = useMemo(() => acceptancesData || [], [acceptancesData]);
@@ -134,7 +130,7 @@ export default function ProjectDetailScreen() {
   const [selectedTask, setSelectedTask] = useState<TaskDetail | null>(null);
   const [assigningTask, setAssigningTask] = useState<TaskDetail | TaskDetail[] | null>(null);
   const [showAssignTask, setShowAssignTask] = useState(false);
-  const [showAddExtraTask, setShowAddExtraTask] = useState(false);
+  const [showAddServices, setShowAddServices] = useState(false);
   const [showCreateAcceptance, setShowCreateAcceptance] = useState(false);
   const [showReviewAcceptance, setShowReviewAcceptance] = useState(false);
   const [reviewingAcceptance, setReviewingAcceptance] = useState<AcceptanceItem | null>(null);
@@ -184,7 +180,6 @@ export default function ProjectDetailScreen() {
   const canAssignPm = isAdminOrBod;
   const canConfirmProject =
     projectHasAccount && (isAdmin || isCurrentProjectAccount) && project?.status === 'PENDING_CONFIRMATION';
-  const isPmOrAdmin = isAdminOrBod || isAssignedPm;
   const canAssignTasks = projectHasAccount && (isAdmin || isCurrentProjectAccount);
   const canManageTaskAssignment = useCallback(
     (task: TaskDetail): boolean => {
@@ -397,9 +392,13 @@ export default function ProjectDetailScreen() {
     setShowAssignTask(true);
   }, []);
 
-  const handleOpenAddExtraTaskAction = useCallback(() => {
-    setShowAddExtraTask(true);
-  }, []);
+  const canAddServices = canAddProjectServices(user?.role, {
+    status: project?.status, isOnHold: Boolean((project as { isOnHold?: boolean } | undefined)?.isOnHold),
+    hasAccount: projectHasAccount,
+  });
+  const handleOpenAddServices = useCallback(() => {
+    if (canAddServices) setShowAddServices(true);
+  }, [canAddServices]);
 
   const queryClient = useQueryClient();
 
@@ -727,7 +726,13 @@ export default function ProjectDetailScreen() {
       </View>
 
       {/* Main Content Area — tab PAUSE dùng FlatList riêng (không lồng trong ScrollView) */}
-      {activeTab === 'PAUSE' ? (
+      {isTasksError && ['TASKS', 'MY_TASKS', 'EXTRA', 'SERVICES'].includes(activeTab) ? (
+        <View className="flex-1 items-center justify-center gap-3 px-5">
+          <Text className="font-bold text-red-600">Không tải được đầy đủ công việc dự án</Text>
+          <Text className="text-sm text-slate-600">{tasksError instanceof Error ? tasksError.message : 'Vui lòng thử lại.'}</Text>
+          <TouchableOpacity className="min-h-[48px] justify-center rounded-xl bg-primary px-4" onPress={() => refetchTasks()}><Text className="font-bold text-white">Thử lại</Text></TouchableOpacity>
+        </View>
+      ) : activeTab === 'PAUSE' ? (
         <PauseHistoryTab
           projectId={String(id || '')}
           projectName={project?.name}
@@ -741,13 +746,13 @@ export default function ProjectDetailScreen() {
           onRefresh={handleRefresh}
           projectStatus={project?.status}
           canAssignTasks={canAssignTasks}
-          canCreateProjectWork={projectHasAccount && isPmOrAdmin}
+          canCreateProjectWork={canAddServices}
           canManageTaskAssignment={canManageTaskAssignment}
           selectedTaskIds={validSelectedTaskIds}
           onToggleSelectTask={handleToggleSelectTask}
           onToggleSelectGroup={handleToggleSelectGroup}
           onAssignTask={handleAssignTaskAction}
-          onOpenAddExtraTask={handleOpenAddExtraTaskAction}
+          onOpenAddServices={handleOpenAddServices}
         />
       ) : (
         <ScrollView
@@ -980,13 +985,11 @@ export default function ProjectDetailScreen() {
             />
           )}
 
-          {showAddExtraTask && projectHasAccount && (
-            <AddExtraTaskModal
-              visible={showAddExtraTask}
-              onClose={() => setShowAddExtraTask(false)}
-              projectId={id}
+          {showAddServices && project && (
+            <AddProjectServiceModal
+              project={project}
+              onClose={() => setShowAddServices(false)}
               onSuccess={() => {
-                loadTasks();
                 loadProjectDetail();
               }}
             />

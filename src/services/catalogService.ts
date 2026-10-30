@@ -1,4 +1,5 @@
 import { apiService } from './api';
+import { ServiceCreationOperation } from '@/utils/serviceCreation';
 
 /**
  * Dịch vụ niêm yết (catalog service).
@@ -161,6 +162,8 @@ export function unwrapServiceEntity(response: unknown): ServiceItem | undefined 
 }
 
 class CatalogService {
+  private duplicateRunning = new Set<string>();
+  private duplicateOperations = new Map<string, { operation: ServiceCreationOperation; payload: ServiceCreatePayload; configs: ServiceJobConfig[] }>();
   async getServices(
     filters: ServiceListFilters = {},
   ): Promise<{ data: ServiceItem[]; meta: PaginationMeta; error?: string }> {
@@ -178,6 +181,9 @@ class CatalogService {
       return { data: [], meta: buildPaginationMeta(undefined, 0, filters), error: res.error };
     }
 
+    if (!Array.isArray(res.data) && !(res.data && typeof res.data === 'object' && Array.isArray((res.data as { data?: unknown }).data))) {
+      return { data: [], meta: buildPaginationMeta(undefined, 0, filters), error: 'Phản hồi danh sách dịch vụ không hợp lệ.' };
+    }
     return normalizeServiceListResponse(res.data, filters);
   }
 
@@ -253,64 +259,61 @@ class CatalogService {
     return { data: unwrapServiceEntity(res.data) };
   }
 
-  /**
-   * Nhân bản dịch vụ: POST `/services` với toàn bộ field + jobIds + outputJobIds.
-   *
-   * ⚠️ Backend chặn trùng `code` (không phân biệt hoa/thường). Web giữ nguyên `code` gốc nên
-   * luôn nhận lỗi "Mã dịch vụ đã tồn tại" — Mobile sinh mã duy nhất (`-COPY`, `-COPY2`, ...)
-   * để nút Nhân bản dùng được ngay, đồng thời không ghi đè dịch vụ đang có.
-   *
-   * @param existingCodes danh sách `code` hiện có (thường lấy từ `useServicesQuery().data`)
-   *   để tránh trùng khi đã có bản sao trước đó.
-   */
-  async duplicateService(
-    service: ServiceItem,
-    existingCodes: Array<string | null | undefined> = [],
-  ): Promise<{ data?: ServiceItem; error?: string }> {
-    const serviceJobs = Array.isArray(service.serviceJobs) ? service.serviceJobs : [];
-    const jobIds = serviceJobs.map((serviceJob) => serviceJob.jobId).filter(Boolean);
-    const outputJobIds = serviceJobs
-      .filter((serviceJob) => serviceJob.isOutput)
-      .map((serviceJob) => serviceJob.jobId)
-      .filter(Boolean);
-
-    return this.createService({
-      name: `${service.name} (Copy)`,
-      code: buildUniqueServiceCode(service.code, existingCodes),
-      description: service.description ?? undefined,
-      unit: service.unit ?? undefined,
-      isAI: Boolean(service.isAI),
-      jobIds,
-      outputJobIds,
-    });
+  /** Server generates the code. Retain a successful POST across configuration retries. */
+  async duplicateService(service: ServiceItem): Promise<{ data?: ServiceItem; error?: string }> {
+    if (this.duplicateRunning.has(service.id)) {
+      return { error: 'Đang nhân bản dịch vụ, vui lòng chờ.' };
+    }
+    this.duplicateRunning.add(service.id);
+    try {
+      let pending = this.duplicateOperations.get(service.id);
+      if (!pending) {
+        const detail = await this.getService(service.id);
+        if (detail.error || !detail.data || !Array.isArray(detail.data.serviceJobs)) {
+          return { error: detail.error || 'Không tải được đầy đủ dịch vụ gốc.' };
+        }
+        const source = detail.data;
+        const configs = (source.serviceJobs || []).map((item) => ({
+          jobId: item.jobId,
+          quantity: Number(item.quantity ?? 1),
+          isOutput: Boolean(item.isOutput),
+        }));
+        pending = {
+          operation: new ServiceCreationOperation(),
+          configs,
+          payload: {
+            name: source.name + ' (Copy)',
+            description: source.description ?? '',
+            unit: source.unit ?? '',
+            isAI: Boolean(source.isAI),
+            isBudget: Boolean(source.isBudget),
+            jobIds: configs.map((item) => item.jobId),
+            outputJobIds: configs.filter((item) => item.isOutput).map((item) => item.jobId),
+          },
+        };
+        this.duplicateOperations.set(service.id, pending);
+      }
+      const data = await pending.operation.save({
+        create: async (payload) => {
+          const result = await this.createService(payload);
+          if (result.error) throw new Error(result.error);
+          return result.data;
+        },
+        update: async (payload) => {
+          const result = await this.updateService(payload);
+          if (result.error) throw new Error(result.error);
+          return result.data;
+        },
+      }, pending.payload, pending.configs);
+      this.duplicateOperations.delete(service.id);
+      return { data };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Không thể nhân bản dịch vụ.' };
+    } finally {
+      this.duplicateRunning.delete(service.id);
+    }
   }
-}
 
-/**
- * Sinh `code` duy nhất cho bản sao dịch vụ: `<code>-COPY`, `<code>-COPY2`, `<code>-COPY3`, ...
- * So khớp KHÔNG phân biệt hoa/thường và đã trim (đúng như backend `LOWER(TRIM(code))`).
- * Trả `undefined` khi dịch vụ gốc không có `code` (để backend tự xử lý).
- */
-export function buildUniqueServiceCode(
-  baseCode: string | null | undefined,
-  existingCodes: Array<string | null | undefined> = [],
-): string | undefined {
-  const base = (baseCode ?? '').trim();
-  if (!base) return undefined;
-
-  const taken = new Set(
-    (existingCodes ?? [])
-      .map((code) => (code ?? '').trim().toLowerCase())
-      .filter(Boolean),
-  );
-
-  let candidate = `${base}-COPY`;
-  let suffix = 2;
-  while (taken.has(candidate.toLowerCase())) {
-    candidate = `${base}-COPY${suffix}`;
-    suffix += 1;
-  }
-  return candidate;
 }
 
 export const catalogService = new CatalogService();

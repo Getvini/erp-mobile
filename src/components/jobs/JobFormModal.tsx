@@ -32,6 +32,10 @@ import {
 import { BrandColors } from '@/constants/colors';
 import { formatNumberInput, parseNumberInput } from '@/utils/formatters';
 import JobCriteriaEditor from './JobCriteriaEditor';
+import JobMetadataFields from './JobMetadataFields';
+import { JobLevel, JobResponsibleRole, validateJobMetadata } from '@/utils/jobMetadata';
+import { useAuthStore } from '@/stores/useAuthStore';
+import { isManagementRole } from '@/utils/rbac';
 
 interface JobFormModalProps {
   visible: boolean;
@@ -117,12 +121,12 @@ function CheckboxRow({
 export default function JobFormModal({ visible, job, onClose, onSuccess }: JobFormModalProps) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <JobFormSheet
+      {visible ? <JobFormSheet
         key={job?.id || 'create-job'}
         job={job || null}
         onClose={onClose}
         onSuccess={onSuccess}
-      />
+      /> : null}
     </Modal>
   );
 }
@@ -137,6 +141,11 @@ function JobFormSheet({
   onSuccess?: (job: Job | null) => void;
 }) {
   const isEditing = Boolean(job?.id);
+  const canWrite = isManagementRole(useAuthStore((state) => state.user?.role));
+  const [level, setLevel] = useState<JobLevel>(job?.level ?? 'A');
+  const [responsibleRole, setResponsibleRole] = useState<JobResponsibleRole | null>(job?.responsibleRole ?? null);
+  const [description, setDescription] = useState(job?.description ?? '');
+  const [sampleDocumentUrl, setSampleDocumentUrl] = useState(job?.sampleDocumentUrl ?? '');
 
   const createMutation = useCreateJobMutation();
   const updateMutation = useUpdateJobMutation();
@@ -182,6 +191,7 @@ function JobFormSheet({
 
   const handleToggleBriefVideo = (next: boolean) => {
     setIsBriefVideo(next);
+    if (next) setIsQuotationItem(false);
   };
 
   const handleAiRelatedChange = (next: boolean) => {
@@ -211,12 +221,15 @@ function JobFormSheet({
       Alert.alert('Lỗi nhập liệu', 'Tên tiêu chí đánh giá không được để trống.');
       return false;
     }
+    const metadataError = validateJobMetadata({ level, responsibleRole, description, sampleDocumentUrl });
+    if (metadataError) { Alert.alert('Lỗi nhập liệu', metadataError); return false; }
     return true;
   };
 
   const buildPayload = (): CreateJobPayload => {
     const parsedHours = Number(hours);
     return {
+      level, responsibleRole, description: description.trim() || null, sampleDocumentUrl: sampleDocumentUrl.trim() || null,
       name: name.trim(),
       code: code.trim(),
       nickname: nickname.trim() || null,
@@ -226,12 +239,13 @@ function JobFormSheet({
       unit: unit.trim() || null,
       categories,
       isBriefVideo: isAiRelated ? isBriefVideo : false,
-      isQuotationItem: isAiRelated ? isQuotationItem : true,
+      isQuotationItem: isAiRelated ? (!isBriefVideo && isQuotationItem) : true,
       defaultPerformerType: performerType,
     };
   };
 
   const submitCreate = async (idsBeforeSubmit: Set<string>) => {
+    if (!isManagementRole(useAuthStore.getState().user?.role)) return;
     const payload: CreateJobPayload = { ...buildPayload(), criteria };
     try {
       const created = await createMutation.mutateAsync(payload);
@@ -275,7 +289,7 @@ function JobFormSheet({
   };
 
   const submitUpdate = async () => {
-    if (!job?.id) return;
+    if (!canWrite || !job?.id) return;
     const jobId = job.id;
 
     try {
@@ -294,7 +308,7 @@ function JobFormSheet({
   };
 
   const handleSubmit = () => {
-    if (!validate()) return;
+    if (!canWrite || isSubmitting || !validate()) return;
     if (isEditing) {
       void submitUpdate();
     } else {
@@ -304,7 +318,7 @@ function JobFormSheet({
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       className="flex-1 bg-slate-900/50 justify-end"
     >
       <View className="bg-white rounded-t-[24px] max-h-[90%] w-full">
@@ -353,6 +367,19 @@ function JobFormSheet({
             />
           </View>
 
+          {/* Biệt danh */}
+          <View>
+            <Text className="text-xs font-bold text-[#334155] mb-1.5">Nickname mặc định</Text>
+            <TextInput
+              className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3.5 text-sm text-[#0F172A] min-h-[48px]"
+              placeholder="Ví dụ: video"
+              placeholderTextColor="#94A3B8"
+              maxLength={NICKNAME_MAX_LENGTH}
+              value={nickname}
+              onChangeText={setNickname}
+            />
+          </View>
+
           {/* Mã hạng mục */}
           <View>
             <Text className="text-xs font-bold text-[#334155] mb-1.5">
@@ -369,19 +396,6 @@ function JobFormSheet({
             <Text className="text-[11px] text-[#94A3B8] mt-1">
               Mã dùng để nhận diện hạng mục. Nếu mã đã tồn tại, hệ thống dùng hạng mục có sẵn.
             </Text>
-          </View>
-
-          {/* Biệt danh */}
-          <View>
-            <Text className="text-xs font-bold text-[#334155] mb-1.5">Biệt danh</Text>
-            <TextInput
-              className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3.5 text-sm text-[#0F172A] min-h-[48px]"
-              placeholder="Ví dụ: video"
-              placeholderTextColor="#94A3B8"
-              maxLength={NICKNAME_MAX_LENGTH}
-              value={nickname}
-              onChangeText={setNickname}
-            />
           </View>
 
           {/* Giá vốn */}
@@ -470,9 +484,40 @@ function JobFormSheet({
             </View>
           </View>
 
+          <JobMetadataFields
+            level={level} responsibleRole={responsibleRole}
+            description={description} sampleDocumentUrl={sampleDocumentUrl}
+            onLevelChange={setLevel} onRoleChange={setResponsibleRole}
+            onDescriptionChange={setDescription} onUrlChange={setSampleDocumentUrl}
+          />
+          {/* Cờ AI / báo giá */}
+          <View className="gap-2">
+            {/* Checkbox cha: giống Web - tick cha mới hiện 2 checkbox con */}
+            <CheckboxRow
+              label="Công việc liên quan tới AI"
+              value={isAiRelated}
+              onToggle={handleAiRelatedChange}
+            />
+            {isAiRelated ? (
+              <View className="gap-2 pl-4">
+                <CheckboxRow
+                  label="Yêu cầu nhập brief video"
+                  value={isBriefVideo}
+                  onToggle={handleToggleBriefVideo}
+                />
+                <CheckboxRow
+                  label="Được tính vào giá vốn dịch vụ"
+                  value={!isBriefVideo && isQuotationItem}
+                  disabled={isBriefVideo}
+                  onToggle={setIsQuotationItem}
+                />
+              </View>
+            ) : null}
+          </View>
+
           {/* Category multi-select */}
           <View>
-            <Text className="text-xs font-bold text-[#334155] mb-2 uppercase">Category</Text>
+            <Text className="text-xs font-bold text-[#334155] mb-2 uppercase">Nhóm hạng mục</Text>
             <View className="flex-row flex-wrap gap-2">
               {JOB_CATEGORY_OPTIONS.map((option) => {
                 const isChecked = categories.includes(option.value);
@@ -506,31 +551,7 @@ function JobFormSheet({
               })}
             </View>
             {categories.length === 0 ? (
-              <Text className="text-[11px] italic text-[#94A3B8] mt-1.5">Chưa xác định category</Text>
-            ) : null}
-          </View>
-
-          {/* Cờ AI / báo giá */}
-          <View className="gap-2">
-            {/* Checkbox cha: giống Web - tick cha mới hiện 2 checkbox con */}
-            <CheckboxRow
-              label="Công việc liên quan tới AI"
-              value={isAiRelated}
-              onToggle={handleAiRelatedChange}
-            />
-            {isAiRelated ? (
-              <View className="gap-2 pl-4">
-                <CheckboxRow
-                  label="Yêu cầu nhập brief video"
-                  value={isBriefVideo}
-                  onToggle={handleToggleBriefVideo}
-                />
-                <CheckboxRow
-                  label="Được tính vào giá vốn dịch vụ"
-                  value={isQuotationItem}
-                  onToggle={setIsQuotationItem}
-                />
-              </View>
+              <Text className="text-[11px] italic text-[#94A3B8] mt-1.5">Chưa chọn nhóm</Text>
             ) : null}
           </View>
 
@@ -555,7 +576,7 @@ function JobFormSheet({
           <TouchableOpacity
             className="flex-1 items-center justify-center rounded-xl bg-primary min-h-[48px]"
             onPress={handleSubmit}
-            disabled={isSubmitting}
+            disabled={isSubmitting || !canWrite}
             activeOpacity={0.85}
           >
             {isSubmitting ? (

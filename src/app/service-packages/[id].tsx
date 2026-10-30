@@ -20,17 +20,18 @@ import {
 import type { ServicePackageItem } from '@/services/servicePackageService';
 import { BrandColors } from '@/constants/colors';
 import { useAuthStore } from '@/stores/useAuthStore';
-import { canAccessServiceCatalog } from '@/utils/rbac';
+import { canAccessServiceCatalog, isManagementRole } from '@/utils/rbac';
 import { formatVND } from '@/utils/formatters';
 import { computePackagePrice } from '@/utils/catalogPricing';
 import { safeGoBack } from '@/utils/navigation';
-import { ServiceJobAccordion } from '@/components/opportunities/ServiceJobAccordion';
+import CatalogServiceJobs from '@/components/catalog/CatalogServiceJobs';
 
 export default function ServicePackageDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const role = useAuthStore((state) => state.user?.role);
   const canAccess = canAccessServiceCatalog(role);
+  const canManage = isManagementRole(role);
 
   const servicePackageId = typeof id === 'string' ? id : '';
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -53,10 +54,11 @@ export default function ServicePackageDetailScreen() {
   );
 
   // Tổng giá vốn gói = Σ (service.costPrice × defaultQuantity) — KHÔNG làm tròn.
+  const hasUnknownCost = items.some((item) => item.service?.costPrice == null);
   const totalCost = useMemo(() => computePackagePrice(items), [items]);
 
   const handleDelete = useCallback(() => {
-    if (!servicePackage || deleteMutation.isPending) return;
+    if (!canManage || !servicePackage || deleteMutation.isPending) return;
 
     Alert.alert(
       'Xóa gói dịch vụ',
@@ -84,7 +86,7 @@ export default function ServicePackageDetailScreen() {
         },
       ],
     );
-  }, [deleteMutation, router, servicePackage]);
+  }, [canManage, deleteMutation, router, servicePackage]);
 
   if (!canAccess) {
     return (
@@ -164,11 +166,12 @@ export default function ServicePackageDetailScreen() {
           Chi tiết gói dịch vụ
         </Text>
 
-        <View className="flex-row gap-2">
+        {canManage ? <View className="flex-row gap-2">
           <TouchableOpacity
             testID="editServicePackageButton"
             className="h-12 w-12 items-center justify-center rounded-xl bg-slate-100"
             onPress={() => {
+              if (!canManage) return;
               setEditFormKey((key) => key + 1);
               setIsEditOpen(true);
             }}
@@ -193,7 +196,7 @@ export default function ServicePackageDetailScreen() {
               <Feather name="trash-2" size={18} color="#EF4444" />
             )}
           </TouchableOpacity>
-        </View>
+        </View> : null}
       </View>
 
       <ScrollView
@@ -238,7 +241,7 @@ export default function ServicePackageDetailScreen() {
                 Giá gói (hệ thống)
               </Text>
               <Text className="text-sm font-extrabold text-orange-600">
-                {formatVND(servicePackage.price ?? totalCost)}
+                {servicePackage.price == null ? 'Chưa có dữ liệu' : formatVND(servicePackage.price)}
               </Text>
             </View>
             <View className="flex-1">
@@ -283,18 +286,15 @@ export default function ServicePackageDetailScreen() {
                           ? `#${item.service.code}`
                           : `#${(item.serviceId || '').slice(0, 8)}`}
                         {` • SL mặc định: ${Number(item.defaultQuantity || 0)}`}
-                        {` • Đơn giá: ${formatVND(item.service?.costPrice ?? 0)}`}
+                        {` • Đơn giá: ${(item.service?.costPrice == null ? 'Chưa có dữ liệu' : formatVND(item.service.costPrice))}`}
                       </Text>
                       <Text className="mt-1 text-sm font-bold text-orange-600">
-                        {formatVND(lineTotal)}
+                        {item.service?.costPrice == null ? 'Chưa có dữ liệu' : formatVND(lineTotal)}
                       </Text>
                     </View>
                   </View>
 
-                  <ServiceJobAccordion
-                    jobs={item.service?.serviceJobs}
-                    mode="catalog_view"
-                  />
+                  <CatalogServiceJobs serviceId={item.serviceId} scope={'package-' + servicePackageId} service={item.service} />
                 </View>
               );
             })
@@ -303,7 +303,7 @@ export default function ServicePackageDetailScreen() {
           {items.length > 0 ? (
             <View className="mt-3 flex-row items-center justify-between border-t border-slate-200 pt-3">
               <Text className="text-xs font-bold text-slate-600">Tổng giá vốn gói</Text>
-              <Text className="text-sm font-extrabold text-orange-600">{formatVND(totalCost)}</Text>
+              <Text className="text-sm font-extrabold text-orange-600">{hasUnknownCost ? 'Chưa đủ dữ liệu giá vốn' : formatVND(totalCost)}</Text>
             </View>
           ) : null}
         </View>

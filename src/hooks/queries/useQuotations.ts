@@ -1,7 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiService } from '@/services/api';
-import { quotationService } from '@/services/quotationService';
+import { quotationService, CreateAddendumQuotationPayload } from '@/services/quotationService';
 import { queryKeys } from '@/services/queryKeys';
+import { useAssessExtraTaskMutation } from '@/hooks/queries/useTasks';
+import { taskService } from '@/services/taskService';
+import { contractService } from '@/services/contractService';
+import { useAuthStore } from '@/stores/useAuthStore';
+import { ExtraTaskQuotationOperation } from '@/utils/extraTaskQuotation';
+
+const extraTaskOperations = new Map<string, ExtraTaskQuotationOperation>();
 
 export interface QuotationFilters {
   search?: string;
@@ -192,14 +199,58 @@ export function useCreateAddendumQuotationMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (payload: any) => {
+    mutationFn: async (payload: CreateAddendumQuotationPayload) => {
       const res = await quotationService.createAddendumQuotation(payload);
+      if (res.error || !res.data?.id) throw new Error(res.error || 'Máy chủ chưa xác nhận tạo báo giá phụ lục.');
       return res.data;
     },
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.quotations.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
+    },
+  });
+}
+
+export function useExtraTaskQuotationMutation() {
+  const queryClient = useQueryClient();
+  const assess = useAssessExtraTaskMutation();
+  const create = useCreateAddendumQuotationMutation();
+  return useMutation({
+    mutationFn: async (payload: {
+      taskId: string; contractId: string; projectId: string; opportunityId: string;
+      sellingPrice: number; note: string;
+    }) => {
+      const contract = await contractService.getContract(payload.contractId);
+      if (contract.error || !contract.data?.opportunity?.id ||
+        contract.data.opportunity.id !== payload.opportunityId) {
+        throw new Error(contract.error || 'Không xác định được cơ hội của hợp đồng. Chưa định giá công việc.');
+      }
+      const key = [useAuthStore.getState().user?.id, payload.contractId, payload.taskId].join(':');
+      const operation = extraTaskOperations.get(key) || new ExtraTaskQuotationOperation();
+      extraTaskOperations.set(key, operation);
+      const result = await operation.save({
+        getTask: async (id) => {
+          const response = await taskService.getTaskById(id);
+          if (response.error || !response.data?.id) throw new Error(response.error || 'Không tải được công việc.');
+          if ((response.data.project?.id || response.data.projectId) !== payload.projectId) {
+            throw new Error('Công việc không thuộc dự án đang chọn.');
+          }
+          return response.data;
+        },
+        assess: (id, sellingPrice) => assess.mutateAsync({ id, sellingPrice, isBillable: true, isRejected: false, projectId: payload.projectId }),
+        create: (body) => create.mutateAsync(body),
+      }, payload.taskId, payload.opportunityId, payload.sellingPrice, payload.note);
+      extraTaskOperations.delete(key);
+      return result;
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.quotations.all });
     },
   });
 }

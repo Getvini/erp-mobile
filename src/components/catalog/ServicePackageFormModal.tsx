@@ -1,3 +1,5 @@
+import { useAuthStore } from '@/stores/useAuthStore';
+import { isManagementRole } from '@/utils/rbac';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -64,6 +66,7 @@ export default function ServicePackageFormModal({
   onSuccess,
   servicePackage,
 }: ServicePackageFormModalProps) {
+  const canWrite = isManagementRole(useAuthStore((state) => state.user?.role));
   const isEditMode = Boolean(servicePackage?.id);
   const createMutation = useCreateServicePackageMutation();
   const updateMutation = useUpdateServicePackageMutation();
@@ -72,7 +75,7 @@ export default function ServicePackageFormModal({
   // Màn hình cha truyền `key` mới mỗi lần mở sheet ⇒ state khởi tạo trực tiếp từ prop.
   const [name, setName] = useState(servicePackage?.name ?? '');
   const [description, setDescription] = useState(servicePackage?.description ?? '');
-  const [isActive, setIsActive] = useState(servicePackage?.isActive !== false);
+  const [isActive] = useState(servicePackage?.isActive !== false);
   const [rows, setRows] = useState<PackageItemRow[]>(() => {
     const items = Array.isArray(servicePackage?.items) ? servicePackage.items : [];
     return items.length > 0
@@ -87,14 +90,14 @@ export default function ServicePackageFormModal({
   const [serviceSearch, setServiceSearch] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { data: services = [], isLoading: isLoadingServices } = useServicesQuery();
+  const { data: services = [], isLoading: isLoadingServices, isError: servicesError, refetch: refetchServices } = useServicesQuery({}, { enabled: visible });
 
   const serviceById = useMemo(() => {
     const map = new Map<string, ServiceItem>();
-    services.forEach((service) => map.set(service.id, service));
     (servicePackage?.items ?? []).forEach((item) => {
       if (item.service) map.set(item.serviceId, item.service);
     });
+    services.forEach((service) => map.set(service.id, service));
     return map;
   }, [services, servicePackage]);
 
@@ -139,6 +142,7 @@ export default function ServicePackageFormModal({
     });
   }, []);
 
+  const hasUnknownCost = rows.some((row) => row.serviceId && serviceById.get(row.serviceId)?.costPrice == null);
   const packagePreviewPrice = useMemo(
     () =>
       rows.reduce((sum, row) => {
@@ -149,6 +153,7 @@ export default function ServicePackageFormModal({
   );
 
   const submit = useCallback(async () => {
+    if (!canWrite || isSubmitting) return;
     const trimmedName = name.trim();
     if (!trimmedName) {
       Alert.alert('Lỗi nhập liệu', 'Vui lòng nhập tên gói dịch vụ.');
@@ -161,6 +166,7 @@ export default function ServicePackageFormModal({
       return;
     }
 
+    if (validRows.some((row) => !serviceById.has(row.serviceId))) { Alert.alert('Chưa đủ dữ liệu', 'Hãy tải lại danh sách dịch vụ trước khi lưu.'); return; }
     const duplicated = validRows
       .map((row) => row.serviceId)
       .filter((serviceId, index, list) => list.indexOf(serviceId) !== index);
@@ -169,6 +175,9 @@ export default function ServicePackageFormModal({
       return;
     }
 
+    if (validRows.some((row) => !Number.isInteger(parseNumberInput(row.quantityText)) || parseNumberInput(row.quantityText) < 1)) {
+      Alert.alert('Lỗi nhập liệu', 'Số lượng dịch vụ phải là số nguyên từ 1 trở lên.'); return;
+    }
     const items: ServicePackageItemPayload[] = validRows.map((row) => ({
       serviceId: row.serviceId,
       defaultQuantity: Number(toNumberOrOne(row.quantityText)),
@@ -205,6 +214,9 @@ export default function ServicePackageFormModal({
       setIsSubmitting(false);
     }
   }, [
+    canWrite,
+    isSubmitting,
+    serviceById,
     createMutation,
     description,
     isActive,
@@ -284,7 +296,7 @@ export default function ServicePackageFormModal({
               <View className="mb-2.5 flex-row items-center justify-between">
                 <Text className="text-xs font-bold text-slate-700">Dịch vụ trong gói</Text>
                 <Text className="text-xs font-bold text-orange-600">
-                  {formatVND(packagePreviewPrice)}
+                  {hasUnknownCost ? 'Chưa đủ dữ liệu giá vốn' : formatVND(packagePreviewPrice)}
                 </Text>
               </View>
 
@@ -331,7 +343,7 @@ export default function ServicePackageFormModal({
                         {selectedService ? (
                           <Text className="text-[11px] text-slate-400">
                             {selectedService.code ? `#${selectedService.code} • ` : ''}
-                            {formatVND(selectedService.costPrice ?? 0)}
+                            {selectedService.costPrice == null ? 'Chưa có dữ liệu' : formatVND(selectedService.costPrice)}
                           </Text>
                         ) : null}
                       </View>
@@ -355,7 +367,7 @@ export default function ServicePackageFormModal({
                           />
                         </View>
 
-                        {isLoadingServices ? (
+                        {servicesError ? (<TouchableOpacity className="min-h-[48px] justify-center" onPress={() => refetchServices()}><Text className="text-red-600">Không tải được dịch vụ. Bấm thử lại.</Text></TouchableOpacity>) : isLoadingServices ? (
                           <View className="items-center py-4">
                             <ActivityIndicator size="small" color={BrandColors.primary} />
                           </View>
@@ -388,7 +400,7 @@ export default function ServicePackageFormModal({
                                     </Text>
                                     <Text className="text-[11px] text-slate-400">
                                       {service.code ? `#${service.code} • ` : ''}
-                                      {formatVND(service.costPrice ?? 0)}
+                                      {service.costPrice == null ? 'Chưa có dữ liệu' : formatVND(service.costPrice)}
                                     </Text>
                                   </View>
                                   <Feather name="check-circle" size={17} color="#F38820" />
@@ -416,10 +428,7 @@ export default function ServicePackageFormModal({
                           Thành tiền
                         </Text>
                         <Text className="text-sm font-bold text-slate-700">
-                          {formatVND(
-                            Number(selectedService?.costPrice || 0) *
-                              toNumberOrOne(row.quantityText),
-                          )}
+                          {!row.serviceId ? 'Chưa chọn dịch vụ' : selectedService?.costPrice == null ? 'Chưa có dữ liệu' : formatVND(Number(selectedService.costPrice) * toNumberOrOne(row.quantityText))}
                         </Text>
                       </View>
                     </View>
@@ -427,6 +436,10 @@ export default function ServicePackageFormModal({
                 );
               })}
 
+              <View className="flex-row justify-between gap-2 border-t border-slate-200 py-3">
+                <Text className="text-xs font-bold text-slate-600">Tổng giá vốn gói</Text>
+                <Text className="text-sm font-bold text-primary">{hasUnknownCost ? 'Chưa đủ dữ liệu' : formatVND(packagePreviewPrice)}</Text>
+              </View>
               <TouchableOpacity
                 className="min-h-[48px] flex-row items-center justify-center gap-2 rounded-xl border border-dashed border-primary bg-white"
                 onPress={handleAddRow}
@@ -451,7 +464,7 @@ export default function ServicePackageFormModal({
               testID="submitServicePackageButton"
               className="min-h-[48px] flex-1 items-center justify-center rounded-xl bg-primary py-3.5"
               onPress={submit}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !canWrite || hasUnknownCost}
               activeOpacity={0.8}
             >
               {isSubmitting ? (

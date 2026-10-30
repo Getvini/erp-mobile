@@ -730,6 +730,7 @@ export default function ContractDetailScreen() {
             tasks={extraTasks}
             projectId={project?.id}
             contractId={contractId}
+            opportunityId={contract.opportunity?.id}
             onRefresh={handleRefresh}
           />
         </ScrollView>

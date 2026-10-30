@@ -1,4 +1,5 @@
 import { apiService } from './api';
+import type { CreateProjectServiceAddendumPayload } from '@/utils/projectServiceAddendum';
 
 export const PROJECT_STATUS_LABELS: Record<string, string> = {
   PENDING_CONFIRMATION: 'Chờ xác nhận',
@@ -395,21 +396,7 @@ class ProjectService {
   /** POST /projects/:projectId/service-addendums — phụ lục dịch vụ dự án. */
   async createProjectServiceAddendum(
     projectId: string,
-    payload: {
-      name?: string;
-      description?: string;
-      items: {
-        serviceId: string;
-        serviceName?: string;
-        quantity: number;
-        packageKey?: string;
-        packageName?: string;
-        packageQuantity?: number;
-        isPackageService?: boolean;
-        sellingPrice: number;
-        cost: number;
-      }[];
-    },
+    payload: CreateProjectServiceAddendumPayload,
   ): Promise<{ data?: any; error?: string }> {
     const res = await apiService.post(`/projects/${projectId}/service-addendums`, payload);
     return { data: res.data, error: res.error };

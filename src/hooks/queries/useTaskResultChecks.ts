@@ -2,17 +2,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   taskResultChecksService,
   ResultCheckKind,
-  RerunKind,
-  RerunScope,
+  RerunResultCheckPayload,
   TaskResultCheckRecord,
 } from '@/services/taskResultChecksService';
 import { queryKeys } from '@/services/queryKeys';
 
 const isActiveStatus = (status?: string) => status === 'PENDING' || status === 'RUNNING';
+const rerunningTasks = new Set<string>();
 
 export function isCheckRunning(record?: TaskResultCheckRecord | null): boolean {
   if (!record) return false;
-  return isActiveStatus(record.spellStatus) || isActiveStatus(record.qcStatus);
+  return isActiveStatus(record.spellStatus || record.status) || isActiveStatus(record.qcStatus || record.status);
 }
 
 export function useTaskResultCheckQuery(taskId: string, enabled = true) {
@@ -109,22 +109,20 @@ export function useRerunResultCheckMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({
-      taskId,
-      kind,
-      whitelist,
-      scope,
-    }: {
-      taskId: string;
-      kind: RerunKind;
-      whitelist: string[];
-      scope?: RerunScope;
-    }) => {
-      const res = await taskResultChecksService.rerun(taskId, kind, whitelist, scope);
-      if (res.error) {
-        throw new Error(res.error);
-      }
-      return res.data;
+    mutationFn: async ({ taskId, kind, whitelist, scope, reviewerNote, refresh }: RerunResultCheckPayload) => {
+      if (rerunningTasks.has(taskId)) throw new Error('Đang gửi yêu cầu kiểm tra lại.');
+      if (kind !== 'SPELL' && (reviewerNote?.length || 0) > 1000) throw new Error('Ghi chú cho AI tối đa 1.000 ký tự.');
+      rerunningTasks.add(taskId);
+      try {
+        const current = await taskResultChecksService.getByTask(taskId);
+        if (current.error) throw new Error(current.error);
+        if (!current.data?.canReview || current.data.finalizedAt || isCheckRunning(current.data)) {
+          throw new Error('Bạn không có quyền, kết quả đã chốt hoặc đang kiểm tra. Vui lòng tải lại.');
+        }
+        const res = await taskResultChecksService.rerun(taskId, kind, whitelist, scope, { reviewerNote, refresh });
+        if (res.error || !res.data) throw new Error(res.error || 'Máy chủ chưa xác nhận yêu cầu kiểm tra lại.');
+        return res.data;
+      } finally { rerunningTasks.delete(taskId); }
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.taskResultChecks.detail(variables.taskId) });

@@ -99,7 +99,7 @@ export default function CreatePaymentRequestScreen() {
   };
 
   const { data: rawProjects = [], isLoading: loadingProjects } = useProjectsQuery();
-  const { data: projectTasks = [], isLoading: loadingTasks } = useTasksByProjectQuery(projectId);
+  const { data: projectTasks = [], isLoading: loadingTasks, isError: projectTasksError, refetch: refetchProjectTasks } = useTasksByProjectQuery(projectId);
   const { data: userTasksData, isLoading: loadingOtherTasks } = useTasksQuery({
     assigneeId: currentUserId,
     limit: 500,
@@ -145,6 +145,10 @@ export default function CreatePaymentRequestScreen() {
   };
 
   const handleSubmit = async () => {
+    if (projectId && (loadingTasks || projectTasksError)) {
+      Alert.alert('Chưa tải đủ công việc', 'Vui lòng tải lại danh sách công việc dự án trước khi gửi đề xuất.');
+      return;
+    }
     const parsedAmount = parseNumberInput(amountRaw) || 0;
 
     // Kiểm tra vượt ngân sách cấp dịch vụ
@@ -440,7 +444,9 @@ export default function CreatePaymentRequestScreen() {
                 <Text style={{ fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 6 }}>
                   Công Việc Của Bạn <Text style={{ color: '#EF4444' }}>*</Text>
                 </Text>
-                {loadingTasks ? (
+                {projectTasksError ? (
+                  <TouchableOpacity className="min-h-[48px] justify-center" onPress={() => refetchProjectTasks()}><Text className="text-red-600">Không tải được đầy đủ công việc. Bấm thử lại.</Text></TouchableOpacity>
+                ) : loadingTasks ? (
                   <ActivityIndicator size="small" color="#F38820" />
                 ) : myProjectTasks.length === 0 ? (
                   <Text style={{ fontSize: 12, color: '#EA580C', fontStyle: 'italic' }}>

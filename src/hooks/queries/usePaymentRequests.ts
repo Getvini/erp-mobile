@@ -15,6 +15,36 @@ import {
   ServiceBudgetInfo,
 } from '@/services/paymentRequestService';
 import { queryKeys } from '@/services/queryKeys';
+import { useAuthStore } from '@/stores/useAuthStore';
+import {
+  canDisbursePayment, canReviewPaymentSettlement, isPaymentAccountant,
+  isPaymentBod, remainingPaymentAmount,
+} from '@/utils/paymentRequestPermissions';
+
+async function assertPaymentWriteAction(id: string, action: 'disburse' | 'settlement' | 'bod', amount?: number) {
+  const user = useAuthStore.getState().user;
+  if (action === 'bod' ? !isPaymentBod(user?.role) : !isPaymentAccountant(user?.role)) {
+    throw new Error('Bạn không có quyền thực hiện thao tác thanh toán này.');
+  }
+  const response = await paymentRequestService.getPaymentRequest(id);
+  if (response.error || !response.data?.id) throw new Error(response.error || 'Không tải được phiếu thanh toán.');
+  const currentUser = useAuthStore.getState().user;
+  const currentActor = { id: currentUser?.id, role: currentUser?.role };
+  const request = response.data;
+  if (action === 'bod' && (!isPaymentBod(currentActor.role) || request.approvalStatus !== 'PENDING_BOD')) {
+    throw new Error('Phiếu không ở trạng thái chờ BOD hoặc bạn không có quyền duyệt BOD.');
+  }
+  if (action === 'disburse' && !canDisbursePayment(request, currentActor)) {
+    throw new Error('Phiếu chưa được duyệt, đã chi đủ hoặc bạn không có quyền giải ngân.');
+  }
+  if (action === 'disburse' && amount !== undefined &&
+    (!Number.isFinite(amount) || amount <= 0 || amount > remainingPaymentAmount(request))) {
+    throw new Error('Số tiền phải lớn hơn 0 và không vượt số còn lại.');
+  }
+  if (action === 'settlement' && !canReviewPaymentSettlement(request, currentActor)) {
+    throw new Error('Không được tự duyệt quyết toán hoặc phiếu chưa đủ điều kiện duyệt.');
+  }
+}
 
 export interface PaymentRequestFilters {
   page?: number;
@@ -256,6 +286,7 @@ export function useBodDecidePaymentRequestMutation() {
 
   return useMutation({
     mutationFn: async (payload: BodDecidePaymentRequestPayload) => {
+      await assertPaymentWriteAction(payload.id, 'bod');
       const res = await paymentRequestService.bodDecidePaymentRequest(payload);
       if (res.error || !res.data) {
         throw new Error(res.error || 'Không thể xử lý quyết định BOD');
@@ -279,6 +310,7 @@ export function usePayPaymentRequestMutation() {
 
   return useMutation({
     mutationFn: async (payload: PayPaymentRequestPayload) => {
+      await assertPaymentWriteAction(payload.id, 'disburse', payload.paidAmount);
       const res = await paymentRequestService.payPaymentRequest(payload);
       if (res.error || !res.data) {
         throw new Error(res.error || 'Không thể thực hiện chi tiền');
@@ -366,6 +398,7 @@ export function useRecordPaymentRequestMutation() {
 
   return useMutation({
     mutationFn: async (payload: RecordPaymentPayload) => {
+      await assertPaymentWriteAction(payload.id, 'disburse', payload.amount);
       const res = await paymentRequestService.recordPayment(payload);
       if (res.error || !res.data) {
         throw new Error(res.error || 'Không thể ghi nhận đợt giải ngân');
@@ -413,6 +446,7 @@ export function useApproveSettlementPaymentRequestMutation() {
 
   return useMutation({
     mutationFn: async (payload: ApproveSettlementPayload) => {
+      await assertPaymentWriteAction(payload.id, 'settlement');
       const res = await paymentRequestService.approveSettlement(payload);
       if (res.error || !res.data) {
         throw new Error(res.error || 'Không thể phê duyệt quyết toán hoàn ứng');
@@ -437,6 +471,7 @@ export function useRejectSettlementPaymentRequestMutation() {
 
   return useMutation({
     mutationFn: async (payload: RejectSettlementPayload) => {
+      await assertPaymentWriteAction(payload.id, 'settlement');
       const res = await paymentRequestService.rejectSettlement(payload);
       if (res.error || !res.data) {
         throw new Error(res.error || 'Không thể từ chối quyết toán');

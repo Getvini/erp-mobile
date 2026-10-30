@@ -3,6 +3,7 @@ import { Text, TouchableOpacity, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { ServiceItem } from '@/services/catalogService';
 import { formatVND } from '@/utils/formatters';
+import CatalogServiceJobs from './CatalogServiceJobs';
 
 interface ServiceCardProps {
   service: ServiceItem;
@@ -77,9 +78,10 @@ function ServiceCard({
             {service.unit ? ` • Đơn vị: ${service.unit}` : ''}
           </Text>
 
+          {service.isBudget ? <Text className="mt-1 text-xs font-semibold text-emerald-700">Cho phép nhập ngân sách</Text> : null}
           <View className="mt-2.5 flex-row items-center justify-between">
             <Text className="text-sm font-extrabold text-orange-600">
-              {formatVND(service.costPrice ?? 0)}
+              Giá vốn: {service.costPrice == null ? 'Chưa có dữ liệu' : formatVND(service.costPrice)}
             </Text>
             <View className="flex-row items-center gap-1">
               <Feather name="layers" size={12} color="#64748B" />
@@ -92,6 +94,7 @@ function ServiceCard({
 
         {!selectable ? <Feather name="chevron-right" size={18} color="#94A3B8" /> : null}
       </View>
+      {!selectable ? <CatalogServiceJobs serviceId={service.id} scope="services-list" service={service} /> : null}
     </TouchableOpacity>
   );
 }

@@ -1,3 +1,4 @@
+import { assertCatalogWriteAccess } from '@/utils/catalogAccess';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   jobService,
@@ -22,9 +23,8 @@ export type {
 /**
  * Invalidate dùng chung cho module Hạng mục công việc.
  *
- * ⚠️ Đổi `costPrice` của job ⇒ backend `ServiceService.recalculateCost()` tính lại giá vốn
- * của mọi dịch vụ/gói dịch vụ đang dùng hạng mục đó (Job.Service.ts:96-124), và giá vendor
- * tham chiếu job ⇒ phải invalidate thêm services / servicePackages / vendors.
+ * Đổi giá hạng mục ảnh hưởng dịch vụ, gói và giá tham chiếu vendor.
+ * Invalidate các query phụ thuộc; cache/giá lưu phía server vẫn do backend quản lý.
  */
 const invalidateJobScope = (
   queryClient: ReturnType<typeof useQueryClient>,
@@ -66,6 +66,7 @@ export function useJobDetailQuery(id: string) {
     queryKey: queryKeys.jobs.detail(id),
     queryFn: async () => {
       const res = await jobService.getJob(id);
+      if (!res.error && !res.data?.id) throw new Error('Máy chủ chưa xác nhận dữ liệu hạng mục.');
       if (res.error) throw new Error(res.error);
       return res.data;
     },
@@ -95,7 +96,9 @@ export function useCreateJobMutation() {
 
   return useMutation({
     mutationFn: async (payload: CreateJobPayload) => {
+      assertCatalogWriteAccess();
       const res = await jobService.createJob(payload);
+      if (!res.error && !res.data?.id) throw new Error('Máy chủ chưa xác nhận dữ liệu hạng mục.');
       if (res.error) throw new Error(res.error);
       return res.data as Job | null;
     },
@@ -109,7 +112,9 @@ export function useUpdateJobMutation() {
 
   return useMutation({
     mutationFn: async ({ id, ...payload }: UpdateJobPayload) => {
+      assertCatalogWriteAccess();
       const res = await jobService.updateJob(id, payload);
+      if (!res.error && !res.data?.id) throw new Error('Máy chủ chưa xác nhận dữ liệu hạng mục.');
       if (res.error) throw new Error(res.error);
       return res.data as Job | null;
     },
@@ -123,6 +128,7 @@ export function useDeleteJobMutation() {
 
   return useMutation({
     mutationFn: async ({ id }: { id: string }) => {
+      assertCatalogWriteAccess();
       const res = await jobService.deleteJob(id);
       if (res.error) throw new Error(res.error);
       return res.data;
@@ -140,6 +146,7 @@ export function useSyncJobCriteriasMutation() {
 
   return useMutation({
     mutationFn: async (payload: { jobId: string; criteria: JobCriteriaInput[] }) => {
+      assertCatalogWriteAccess();
       const res = await jobService.syncJobCriterias(payload);
       if (res.error) throw new Error(res.error);
       return res.data;

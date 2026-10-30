@@ -1,3 +1,4 @@
+import { assertCatalogWriteAccess } from '@/utils/catalogAccess';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   catalogService,
@@ -7,6 +8,7 @@ import {
   ServiceUpdatePayload,
 } from '@/services/catalogService';
 import { queryKeys } from '@/services/queryKeys';
+import { serviceDetailQueryOptions } from '@/services/catalogQueries';
 
 /**
  * Hooks cho Dịch vụ niêm yết (Phase P2).
@@ -21,7 +23,7 @@ function invalidateServiceDependents(
 ) {
   queryClient.invalidateQueries({ queryKey: queryKeys.services.all });
   queryClient.invalidateQueries({ queryKey: queryKeys.servicePackages.all });
-  if (options.jobs) {
+  if (options.jobs !== false) {
     queryClient.invalidateQueries({ queryKey: queryKeys.jobs.all });
   }
 }
@@ -43,17 +45,10 @@ export function useServicesQuery(
   });
 }
 
-export function useServiceDetailQuery(id: string) {
+export function useServiceDetailQuery(id: string, options: { enabled?: boolean } = {}) {
   return useQuery({
-    queryKey: queryKeys.services.detail(id),
-    queryFn: async () => {
-      const res = await catalogService.getService(id);
-      if (res.error) {
-        throw new Error(res.error);
-      }
-      return res.data;
-    },
-    enabled: Boolean(id),
+    ...serviceDetailQueryOptions(id),
+    enabled: Boolean(id) && options.enabled !== false,
   });
 }
 
@@ -62,13 +57,15 @@ export function useCreateServiceMutation() {
 
   return useMutation({
     mutationFn: async (payload: ServiceCreatePayload) => {
+      assertCatalogWriteAccess();
       const res = await catalogService.createService(payload);
+      if (!res.error && !res.data?.id) throw new Error('Máy chủ chưa xác nhận dữ liệu đã lưu.');
       if (res.error) {
         throw new Error(res.error);
       }
       return res.data;
     },
-    onSuccess: () => {
+    onSettled: () => {
       invalidateServiceDependents(queryClient);
     },
   });
@@ -79,7 +76,9 @@ export function useUpdateServiceMutation() {
 
   return useMutation({
     mutationFn: async ({ id, ...payload }: { id: string } & ServiceUpdatePayload) => {
+      assertCatalogWriteAccess();
       const res = await catalogService.updateService({ id, ...payload });
+      if (!res.error && !res.data?.id) throw new Error('Máy chủ chưa xác nhận dữ liệu đã lưu.');
       if (res.error) {
         throw new Error(res.error);
       }
@@ -97,6 +96,7 @@ export function useDeleteServiceMutation() {
 
   return useMutation({
     mutationFn: async (id: string) => {
+      assertCatalogWriteAccess();
       const res = await catalogService.deleteService(id);
       if (res.error) {
         throw new Error(res.error);
@@ -115,6 +115,7 @@ export function useBulkDeleteServicesMutation() {
 
   return useMutation({
     mutationFn: async (ids: string[]) => {
+      assertCatalogWriteAccess();
       const res = await catalogService.bulkDeleteServices(ids);
       if (res.error) {
         throw new Error(res.error);
@@ -133,6 +134,7 @@ export function useAddServiceJobMutation() {
 
   return useMutation({
     mutationFn: async ({ id, jobId }: { id: string; jobId: string }) => {
+      assertCatalogWriteAccess();
       const res = await catalogService.addServiceJob({ id, jobId });
       if (res.error) {
         throw new Error(res.error);
@@ -151,6 +153,7 @@ export function useRemoveServiceJobMutation() {
 
   return useMutation({
     mutationFn: async ({ id, jobId }: { id: string; jobId: string }) => {
+      assertCatalogWriteAccess();
       const res = await catalogService.removeServiceJob({ id, jobId });
       if (res.error) {
         throw new Error(res.error);
@@ -168,24 +171,20 @@ export function useDuplicateServiceMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    /**
-     * `existingCodes` là danh sách `code` đang có (thường lấy từ cache `useServicesQuery`)
-     * để bản sao nhận mã duy nhất `-COPY`, `-COPY2`, ... thay vì bị backend chặn trùng mã.
-     */
+    /** Preserve source quantities; the server generates the new code. */
     mutationFn: async ({
       service,
-      existingCodes,
     }: {
       service: ServiceItem;
-      existingCodes?: Array<string | null | undefined>;
     }) => {
-      const res = await catalogService.duplicateService(service, existingCodes);
+      assertCatalogWriteAccess();
+      const res = await catalogService.duplicateService(service);
       if (res.error) {
         throw new Error(res.error);
       }
       return res.data;
     },
-    onSuccess: () => {
+    onSettled: () => {
       invalidateServiceDependents(queryClient);
     },
   });

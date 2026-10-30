@@ -3,6 +3,23 @@ import { TaskItem } from './dashboardService';
 import type { QcMismatchResultItem, SpellCheckResultItem } from './taskResultChecksService';
 import type { ScanRegion } from '@/utils/sheetScope';
 
+export interface CreateTaskPayload {
+  projectId: string;
+  jobId: string;
+  name: string;
+  description?: string;
+  plannedEndDate?: string;
+  isExtra: boolean;
+}
+
+export interface TaskReview {
+  id: string;
+  name?: string;
+  reviewerType: 'TEAM_LEAD' | 'ASSIGNER';
+  isPassed: boolean;
+  criteria?: { id: string; name?: string; description?: string };
+}
+
 export const TASK_STATUS_LABELS: Record<string, string> = {
 
   NOT_STARTED: 'Chưa thực hiện',
@@ -65,6 +82,7 @@ export interface SubmitTaskResultFileParams {
 }
 
 export interface TaskDetail extends TaskItem {
+  quotation?: import('./quotationService').QuotationItem | null;
   code?: string;
   nickname?: string;
   projectId?: string;
@@ -199,14 +217,34 @@ class TaskService {
   }
 
   async getTasksByProject(projectId: string): Promise<{ data?: TaskDetail[]; error?: string }> {
-    const res = await apiService.get<any>('/tasks', { projectId});
-    const raw = res.data;
-    const items = Array.isArray(raw)
-      ? raw
-      : raw?.data && Array.isArray(raw.data)
-      ? raw.data
-      : [];
-    return { data: items, error: res.error };
+    const tasks = new Map<string, TaskDetail>();
+    let page = 1;
+    let totalPages = 1;
+    let expectedTotal: number | undefined;
+    do {
+      const response = await apiService.get<{
+        data: TaskDetail[];
+        meta: { total: number; page: number; limit: number; totalPages: number };
+      }>('/tasks', { projectId, page, limit: 500, sortBy: 'id', sortDir: 'ASC' });
+      if (response.error) return { error: response.error };
+      const body = response.data;
+      if (!body || !Array.isArray(body.data) || !body.meta || body.meta.page !== page ||
+        !Number.isInteger(body.meta.totalPages) || body.meta.totalPages < 0 ||
+        !Number.isInteger(body.meta.total) || body.meta.total < 0 ||
+        body.data.some((task) => !task?.id)) {
+        return { error: 'Phản hồi danh sách công việc không đầy đủ. Vui lòng thử lại.' };
+      }
+      totalPages = body.meta.totalPages;
+      if (expectedTotal !== undefined && body.meta.total !== expectedTotal) {
+        return { error: 'Danh sách công việc đã thay đổi trong khi tải. Vui lòng tải lại.' };
+      }
+      expectedTotal = body.meta.total;
+      if (page < totalPages && body.data.length === 0) return { error: 'Thiếu một trang công việc. Vui lòng tải lại.' };
+      body.data.forEach((task) => tasks.set(task.id, task));
+      page += 1;
+    } while (page <= totalPages);
+    if (tasks.size !== expectedTotal) return { error: 'Danh sách công việc chưa đầy đủ. Vui lòng tải lại.' };
+    return { data: [...tasks.values()] };
   }
 
 
@@ -229,15 +267,9 @@ class TaskService {
     return { data: res.data, error: res.error };
   }
 
-  async createTask(payload: {
-    projectId: string;
-    name: string;
-    description?: string;
-    assigneeId?: string;
-    dueDate?: string;
-    isExtraTask?: boolean;
-  }): Promise<{ data?: TaskDetail; error?: string }> {
-    const res = await apiService.post<TaskDetail>('/tasks', payload);
+  async createTask(payload: CreateTaskPayload): Promise<{ data?: TaskDetail; error?: string }> {
+    const { projectId, jobId, name, description, plannedEndDate, isExtra } = payload;
+    const res = await apiService.post<TaskDetail>('/tasks', { projectId, jobId, name, description, plannedEndDate, isExtra });
     return { data: res.data, error: res.error };
   }
 
@@ -355,10 +387,16 @@ class TaskService {
     return { data: res.data, error: res.error };
   }
 
-  async getTaskReviews(taskId: string): Promise<{ data?: any[]; error?: string }> {
+  async getTaskReviews(taskId: string): Promise<{ data?: TaskReview[]; error?: string }> {
     const res = await apiService.get<any>(`/task-reviews/task/${taskId}`);
-    const data = res.data?.data || res.data || [];
-    return { data: Array.isArray(data) ? data : [], error: res.error };
+    if (res.error) return { error: res.error };
+    const data = Array.isArray(res.data) ? res.data : res.data?.data;
+    if (!Array.isArray(data) || data.some((review) => !review?.id ||
+      !['TEAM_LEAD', 'ASSIGNER'].includes(review.reviewerType) || typeof review.isPassed !== 'boolean') ||
+      new Set(data.map((review) => review.id)).size !== data.length) {
+      return { error: 'Không tải được đầy đủ tiêu chí đánh giá. Vui lòng thử lại.' };
+    }
+    return { data };
   }
 
   async finalizeTask(

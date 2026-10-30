@@ -3,6 +3,9 @@ import { projectService } from '@/services/projectService';
 import { productDescriptionService } from '@/services/productDescriptionService';
 import { teamService } from '@/services/teamService';
 import { queryKeys } from '@/services/queryKeys';
+import { useAuthStore } from '@/stores/useAuthStore';
+import { hasProjectAccount } from '@/utils/teamMember';
+import { canAddProjectServices, validateProjectServiceAddendum } from '@/utils/projectServiceAddendum';
 
 export interface ProjectListFilters {
   search?: string;
@@ -858,13 +861,29 @@ export function useCreateProjectServiceAddendumMutation() {
       projectId: string;
       payload: Parameters<typeof projectService.createProjectServiceAddendum>[1];
     }) => {
+      const role = useAuthStore.getState().user?.role;
+      if (!['PM', 'ADMIN'].includes(role || '')) throw new Error('Chỉ PM/ADMIN được bổ sung dịch vụ.');
+      const current = await projectService.getProjectById(projectId);
+      if (current.error || !current.data) throw new Error(current.error || 'Không tải được dự án.');
+      if (!canAddProjectServices(useAuthStore.getState().user?.role, {
+        status: current.data.status,
+        isOnHold: Boolean((current.data as { isOnHold?: boolean }).isOnHold),
+        hasAccount: hasProjectAccount(current.data),
+      })) throw new Error('Dự án chưa được chấp nhận, đang tạm dừng, đã đóng hoặc chưa có Account.');
+      const validationError = validateProjectServiceAddendum(payload);
+      if (validationError) throw new Error(validationError);
       const res = await projectService.createProjectServiceAddendum(projectId, payload);
       if (res.error) throw new Error(res.error);
+      if (!res.data?.id || res.data.status !== 'PENDING_SALE') {
+        throw new Error('Máy chủ chưa xác nhận yêu cầu chờ BD duyệt. Hãy kiểm tra danh sách phụ lục trước khi gửi lại.');
+      }
       return res.data;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(variables.projectId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.lists() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contractAddendums.all });
     },
   });
 }

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,15 @@ import {
   Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { BrandColors } from '@/constants/colors';
-import { useAssessExtraTaskMutation } from '@/hooks/queries/useTasks';
+import { useAssessExtraTaskMutation, useTaskDetailQuery } from '@/hooks/queries/useTasks';
+import type { QuotationItem } from '@/services/quotationService';
+import AddendumQuotationModal from './AddendumQuotationModal';
 import { formatNumberInput, parseNumberInput, formatVND } from '@/utils/formatters';
 
 export interface ExtraTaskItem {
+  quotation?: QuotationItem | null;
   id: string;
   name?: string;
   title?: string;
@@ -42,6 +45,7 @@ export interface ContractExtraTasksSectionProps {
   tasks: ExtraTaskItem[];
   projectId?: string;
   contractId?: string;
+  opportunityId?: string;
   onRefresh?: () => void;
 }
 
@@ -49,12 +53,15 @@ export const ContractExtraTasksSection: React.FC<ContractExtraTasksSectionProps>
   tasks,
   projectId,
   contractId,
+  opportunityId,
   onRefresh,
 }) => {
   const assessMutation = useAssessExtraTaskMutation();
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [billableModes, setBillableModes] = useState<Record<string, boolean>>({});
+  const [quotationTask, setQuotationTask] = useState<ExtraTaskItem | null>(null);
+  const [createdQuotes, setCreatedQuotes] = useState<Record<string, QuotationItem>>({});
 
   const handlePriceChange = (taskId: string, text: string) => {
     const rawNum = parseNumberInput(text);
@@ -85,35 +92,12 @@ export const ContractExtraTasksSection: React.FC<ContractExtraTasksSectionProps>
     }
   };
 
-  const handleConfirmBillable = async (task: ExtraTaskItem) => {
-    const priceNum = prices[task.id] !== undefined ? prices[task.id] : Number(task.sellingPrice || 0);
-
-    if (priceNum <= 0) {
-      Alert.alert('Thiếu thông tin', 'Vui lòng nhập đơn giá tính phí lớn hơn 0 VNĐ.');
+  const openQuotation = (task: ExtraTaskItem) => {
+    if (!opportunityId || !projectId || !contractId) {
+      Alert.alert('Thiếu liên kết', 'Hợp đồng cần liên kết cơ hội và dự án trước khi tạo báo giá phụ lục.');
       return;
     }
-
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      setActiveTaskId(task.id);
-      await assessMutation.mutateAsync({
-        id: task.id,
-        isBillable: true,
-        sellingPrice: priceNum,
-        isRejected: false,
-        projectId,
-      });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(
-        'Thành công',
-        `Đã xác nhận tính phí ${formatVND(priceNum)} cho công việc "${task.name || task.title || 'N/A'}". Vui lòng tạo Phụ lục hợp đồng để khách hàng ký duyệt.`
-      );
-      onRefresh?.();
-    } catch (err: any) {
-      Alert.alert('Lỗi đánh giá', err?.message || 'Không thể cập nhật giá tính phí.');
-    } finally {
-      setActiveTaskId(null);
-    }
+    setQuotationTask(task);
   };
 
   const handleRejectTask = (task: ExtraTaskItem) => {
@@ -296,14 +280,8 @@ export const ContractExtraTasksSection: React.FC<ContractExtraTasksSectionProps>
                 <ActivityIndicator size="small" color="#F38820" />
                 <Text className="text-xs font-semibold text-slate-600">Đang cập nhật...</Text>
               </View>
-            ) : isBillable ? (
-              <TouchableOpacity
-                onPress={() => handleConfirmBillable(task)}
-                className="bg-primary py-2.5 rounded-xl items-center justify-center active:opacity-80"
-                activeOpacity={0.8}
-              >
-                <Text className="text-xs font-extrabold text-white">Xác nhận tính phí</Text>
-              </TouchableOpacity>
+            ) : isBillable || task.quotation || createdQuotes[task.id] ? (
+              <ExtraTaskQuotationAction task={task} quotation={createdQuotes[task.id] || task.quotation} opportunityId={opportunityId} onCreate={() => openQuotation(task)} />
             ) : (
               <TouchableOpacity
                 onPress={() => handleConfirmFreeSupport(task)}
@@ -316,6 +294,35 @@ export const ContractExtraTasksSection: React.FC<ContractExtraTasksSectionProps>
           </View>
         );
       })}
+      {quotationTask && projectId && contractId && opportunityId ? (
+        <AddendumQuotationModal
+          key={quotationTask.id} task={quotationTask} projectId={projectId} contractId={contractId}
+          opportunityId={opportunityId} initialPrice={prices[quotationTask.id]}
+          onClose={() => setQuotationTask(null)}
+          onCreated={(quotation) => {
+            setCreatedQuotes((previous) => ({ ...previous, [quotationTask.id]: quotation }));
+            onRefresh?.();
+          }}
+        />
+      ) : null}
     </View>
   );
 };
+
+function ExtraTaskQuotationAction({ task, quotation, opportunityId, onCreate }: {
+  task: ExtraTaskItem; quotation?: QuotationItem | null; opportunityId?: string; onCreate: () => void;
+}) {
+  const router = useRouter();
+  const query = useTaskDetailQuery(task.pricingStatus === 'BILLABLE' && !quotation ? task.id : '');
+  const linked = quotation || query.data?.quotation;
+  if (query.isLoading && !quotation) return <ActivityIndicator />;
+  if (query.isError && !quotation) return <TouchableOpacity className="min-h-[48px] justify-center" onPress={() => query.refetch()}><Text className="text-red-600">Không kiểm tra được báo giá. Bấm thử lại.</Text></TouchableOpacity>;
+  return (
+    <TouchableOpacity className="min-h-[48px] bg-primary rounded-xl items-center justify-center" onPress={() => {
+      if (linked?.id) router.push({ pathname: '/opportunities/quotations/[quotId]', params: { quotId: linked.id, ...(opportunityId ? { opportunityId } : {}) } });
+      else onCreate();
+    }}>
+      <Text className="text-xs font-bold text-white">{linked?.id ? 'Xem báo giá' : 'Tạo báo giá phụ lục'}</Text>
+    </TouchableOpacity>
+  );
+}

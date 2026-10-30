@@ -70,7 +70,7 @@ export interface TaskResultCheckRecord {
   spellErrorMessage?: string | null;
   qcErrorMessage?: string | null;
   qcSkippedReason?: string | null;
-  qcModels?: { verify: string } | null;
+  qcModels?: { verify?: string; reviewerNote?: string | null } | null;
   canReview?: boolean;
   finalizedAt?: string | null;
   reviewerWhitelist?: string[] | null;
@@ -86,6 +86,15 @@ export interface TaskResultCheckRecord {
 export interface RerunScope {
   scenarioIds: string[];
   regions: ScanRegion[];
+}
+
+export interface RerunResultCheckPayload {
+  taskId: string;
+  kind: RerunKind;
+  whitelist: string[];
+  scope?: RerunScope;
+  reviewerNote?: string;
+  refresh?: boolean;
 }
 
 class TaskResultChecksService {
@@ -131,12 +140,14 @@ class TaskResultChecksService {
     taskId: string,
     kind: RerunKind,
     whitelist: string[],
-    scope?: RerunScope
+    scope?: RerunScope,
+    options?: Pick<RerunResultCheckPayload, 'reviewerNote' | 'refresh'>
   ): Promise<{ data?: any; error?: string }> {
     const res = await apiService.patch(`/task-result-checks/task/${taskId}/rerun`, {
       kind,
       whitelist,
       scope,
+      ...(kind !== 'SPELL' ? { reviewerNote: options?.reviewerNote?.trim() || undefined, refresh: options?.refresh === true } : {}),
     });
     return { data: res.data, error: res.error };
   }

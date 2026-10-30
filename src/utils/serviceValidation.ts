@@ -40,10 +40,10 @@ export function validateServiceForm(
 
   if (form.jobConfigs && form.jobConfigs.length > 0) {
     const hasInvalidQuantity = form.jobConfigs.some(
-      (cfg) => typeof cfg.quantity !== 'number' || cfg.quantity < 1 || Number.isNaN(cfg.quantity),
+      (cfg) => !Number.isFinite(cfg.quantity) || !Number.isInteger(cfg.quantity) || cfg.quantity < 1,
     );
     if (hasInvalidQuantity) {
-      return 'Số lượng của mỗi hạng mục công việc phải từ 1 trở lên.';
+      return 'Số lượng của mỗi hạng mục công việc phải là số nguyên từ 1 trở lên.';
     }
   }
 

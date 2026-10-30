@@ -66,6 +66,9 @@ class ServicePackageService {
   async getServicePackages(): Promise<{ data: ServicePackage[]; error?: string }> {
     const res = await apiService.get<unknown>('/service-packages');
     if (res.error) return { data: [], error: res.error };
+    if (!Array.isArray(res.data) && !(res.data && typeof res.data === 'object' && Array.isArray((res.data as { data?: unknown }).data))) {
+      return { data: [], error: 'Phản hồi danh sách gói dịch vụ không hợp lệ.' };
+    }
     return { data: normalizeServicePackageList(res.data) };
   }
 

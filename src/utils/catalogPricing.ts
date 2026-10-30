@@ -58,7 +58,7 @@ export function computeServiceCost(serviceJobs?: ServiceJobCostInput[] | null): 
   if (!Array.isArray(serviceJobs)) return 0;
   return serviceJobs.reduce((sum, serviceJob) => {
     const cost = Number(serviceJob?.job?.costPrice || 0);
-    const quantity = Number(serviceJob?.quantity || 0);
+    const quantity = Number(serviceJob?.quantity ?? 1);
     return sum + cost * quantity;
   }, 0);
 }
@@ -78,7 +78,7 @@ export function computePackagePrice(items?: PackageItemCostInput[] | null): numb
   if (!Array.isArray(items)) return 0;
   return items.reduce((sum, item) => {
     const cost = Number(item?.service?.costPrice || 0);
-    const quantity = Number(item?.defaultQuantity || 0);
+    const quantity = Number(item?.defaultQuantity ?? 1);
     return sum + cost * quantity;
   }, 0);
 }

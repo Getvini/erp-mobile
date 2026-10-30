@@ -1,8 +1,10 @@
-import React, { useCallback, useState } from 'react';
+import { useCatalogViewState } from '@/hooks/useCatalogViewState';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
   RefreshControl,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -16,20 +18,26 @@ import { useServicePackagesQuery } from '@/hooks/queries/useServicePackages';
 import type { ServicePackage } from '@/services/servicePackageService';
 import { BrandColors } from '@/constants/colors';
 import { useAuthStore } from '@/stores/useAuthStore';
-import { canAccessServiceCatalog } from '@/utils/rbac';
+import { canAccessServiceCatalog, isManagementRole } from '@/utils/rbac';
 import { safeGoBack } from '@/utils/navigation';
 
 export default function ServicePackagesScreen() {
   const router = useRouter();
   const role = useAuthStore((state) => state.user?.role);
   const canAccess = canAccessServiceCatalog(role);
+  const canManage = isManagementRole(role);
 
+  const [searchQuery, setSearchQuery] = useCatalogViewState('packages-search', '');
   const [isFormOpen, setIsFormOpen] = useState(false);
   // `key` mới mỗi lần mở ⇒ ServicePackageFormModal remount và khởi tạo lại form state.
   const [formKey, setFormKey] = useState(0);
   const { data: servicePackages = [], isLoading, isFetching, isError, error, refetch } =
     useServicePackagesQuery();
 
+  const filteredPackages = useMemo(() => {
+    const term = searchQuery.trim().toLowerCase();
+    return servicePackages.filter((item) => !term || item.name.toLowerCase().includes(term) || (item.description || '').toLowerCase().includes(term));
+  }, [servicePackages, searchQuery]);
   const renderPackageCard = useCallback(
     ({ item }: { item: ServicePackage }) => (
       <ServicePackageCard
@@ -107,6 +115,7 @@ export default function ServicePackagesScreen() {
         </TouchableOpacity>
       </View>
 
+      <View className="px-4 py-3 bg-white"><TextInput accessibilityLabel="Tìm gói dịch vụ" placeholder="Tìm tên gói hoặc mô tả..." className="min-h-[48px] border border-slate-200 rounded-xl px-3 text-slate-900" value={searchQuery} onChangeText={setSearchQuery} /></View>
       {/* 4 trạng thái */}
       {isLoading ? (
         <View className="flex-1 gap-3 px-4 pt-4">
@@ -133,7 +142,7 @@ export default function ServicePackagesScreen() {
       ) : (
         <FlatList
           testID="servicePackagesList"
-          data={servicePackages}
+          data={filteredPackages}
           keyExtractor={(item) => item.id}
           renderItem={renderPackageCard}
           contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 120 }}
@@ -149,7 +158,7 @@ export default function ServicePackagesScreen() {
           ListEmptyComponent={
             <View className="items-center justify-center gap-2.5 py-14">
               <Feather name="package" size={44} color="#CBD5E1" />
-              <Text className="text-base font-bold text-slate-600">Chưa có gói dịch vụ nào</Text>
+              <Text className="text-base font-bold text-slate-600">{searchQuery ? 'Không tìm thấy gói dịch vụ phù hợp' : 'Chưa có gói dịch vụ nào'}</Text>
               <Text className="max-w-[260px] text-center text-[13px] text-slate-400">
                 Tạo gói dịch vụ để bán kèm nhiều dịch vụ niêm yết trong cùng một báo giá.
               </Text>
@@ -158,10 +167,11 @@ export default function ServicePackagesScreen() {
         />
       )}
 
-      <TouchableOpacity
+      {canManage ? <TouchableOpacity
         testID="createServicePackageButton"
         className="absolute bottom-[84px] right-4 min-h-[56px] flex-row items-center justify-center gap-2 rounded-2xl bg-primary px-5 shadow-lg"
         onPress={() => {
+          if (!canManage) return;
           setFormKey((key) => key + 1);
           setIsFormOpen(true);
         }}
@@ -171,7 +181,7 @@ export default function ServicePackagesScreen() {
       >
         <Feather name="plus" size={20} color="#FFFFFF" />
         <Text className="text-sm font-extrabold text-white">Thêm gói dịch vụ</Text>
-      </TouchableOpacity>
+      </TouchableOpacity> : null}
 
       <ServicePackageFormModal
         key={`service-package-form-${formKey}`}

@@ -1,3 +1,4 @@
+import { assertCatalogWriteAccess } from '@/utils/catalogAccess';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   servicePackageService,
@@ -31,6 +32,7 @@ export function useServicePackageDetailQuery(id: string) {
     queryKey: queryKeys.servicePackages.detail(id),
     queryFn: async () => {
       const res = await servicePackageService.getServicePackage(id);
+      if (!res.error && !res.data?.id) throw new Error('Phản hồi gói dịch vụ không hợp lệ.');
       if (res.error) {
         throw new Error(res.error);
       }
@@ -45,7 +47,9 @@ export function useCreateServicePackageMutation() {
 
   return useMutation({
     mutationFn: async (payload: ServicePackageCreatePayload) => {
+      assertCatalogWriteAccess();
       const res = await servicePackageService.createServicePackage(payload);
+      if (!res.error && !res.data?.id) throw new Error('Máy chủ chưa xác nhận dữ liệu đã lưu.');
       if (res.error) {
         throw new Error(res.error);
       }
@@ -63,7 +67,9 @@ export function useUpdateServicePackageMutation() {
 
   return useMutation({
     mutationFn: async ({ id, ...payload }: { id: string } & ServicePackageUpdatePayload) => {
+      assertCatalogWriteAccess();
       const res = await servicePackageService.updateServicePackage({ id, ...payload });
+      if (!res.error && !res.data?.id) throw new Error('Máy chủ chưa xác nhận dữ liệu đã lưu.');
       if (res.error) {
         throw new Error(res.error);
       }
@@ -82,6 +88,7 @@ export function useDeleteServicePackageMutation() {
 
   return useMutation({
     mutationFn: async (id: string) => {
+      assertCatalogWriteAccess();
       const res = await servicePackageService.deleteServicePackage(id);
       if (res.error) {
         throw new Error(res.error);

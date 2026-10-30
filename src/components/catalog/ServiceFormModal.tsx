@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -24,6 +24,10 @@ import { BrandColors } from '@/constants/colors';
 import { SERVICE_UNIT_SUGGESTIONS } from '@/utils/catalogPricing';
 import { formatNumberInput, parseNumberInput, formatVND } from '@/utils/formatters';
 import { validateServiceForm } from '@/utils/serviceValidation';
+import { ServiceCreationOperation } from '@/utils/serviceCreation';
+import { useAuthStore } from '@/stores/useAuthStore';
+import { isManagementRole } from '@/utils/rbac';
+import JobFormModal from '@/components/jobs/JobFormModal';
 
 interface ServiceFormModalProps {
   visible: boolean;
@@ -52,6 +56,12 @@ export default function ServiceFormModal({
   service,
 }: ServiceFormModalProps) {
   const isEditMode = Boolean(service?.id);
+  const canWrite = isManagementRole(useAuthStore((state) => state.user?.role));
+  const creation = useRef(new ServiceCreationOperation());
+  const submitting = useRef(false);
+  const [hasPartialCreation, setHasPartialCreation] = useState(false);
+  const [addedJobs, setAddedJobs] = useState<JobReference[]>([]);
+  const [isCreateJobOpen, setIsCreateJobOpen] = useState(false);
   const createServiceMutation = useCreateServiceMutation();
   const updateServiceMutation = useUpdateServiceMutation();
 
@@ -73,8 +83,8 @@ export default function ServiceFormModal({
   const [pickerTab, setPickerTab] = useState<'JOB' | 'SERVICE'>('JOB');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { data: jobs = [], isLoading: isLoadingJobs } = useJobsQuery({}, { enabled: visible });
-  const { data: services = [], isLoading: isLoadingServices } = useServicesQuery(
+  const { data: jobs = [], isLoading: isLoadingJobs, isError: jobsError, refetch: refetchJobs } = useJobsQuery({}, { enabled: visible });
+  const { data: services = [], isLoading: isLoadingServices, isError: servicesError, refetch: refetchServices } = useServicesQuery(
     {},
     { enabled: visible && isJobPickerOpen && pickerTab === 'SERVICE' },
   );
@@ -96,8 +106,9 @@ export default function ServiceFormModal({
       if (serviceJob.job) map.set(serviceJob.jobId, serviceJob.job);
     });
     jobs.forEach((job) => map.set(job.id, job));
+    addedJobs.forEach((job) => map.set(job.id, job));
     return map;
-  }, [jobs, service]);
+  }, [addedJobs, jobs, service]);
 
   const availableJobs = useMemo(() => {
     const selectedIds = new Set(jobConfigs.map((config) => config.jobId));
@@ -130,7 +141,7 @@ export default function ServiceFormModal({
           (s.name || '').toLowerCase().includes(keyword) ||
           (s.code || '').toLowerCase().includes(keyword),
       );
-  }, [jobConfigs, jobSearch, service?.id, services]);
+  }, [jobConfigs, jobSearch, service, services]);
 
   const handleAddJob = useCallback((jobId: string) => {
     setJobConfigs((prev) =>
@@ -190,13 +201,22 @@ export default function ServiceFormModal({
     );
   }, []);
 
+  const requestClose = () => {
+    if (submitting.current) return;
+    if (!isEditMode && creation.current.createdId) {
+      Alert.alert('Dịch vụ đã được tạo', 'Cấu hình chưa hoàn tất. Bạn có thể tiếp tục lưu hoặc đóng và sửa dịch vụ đã có trong danh sách.', [
+        { text: 'Tiếp tục lưu', style: 'cancel' }, { text: 'Đóng', onPress: onClose },
+      ]);
+    } else onClose();
+  };
   const submit = useCallback(async () => {
+    if (!canWrite || submitting.current) return;
     const trimmedName = name.trim();
     const trimmedCode = code.trim();
 
     const normalizedConfigs: ServiceJobConfig[] = jobConfigs.map((config) => ({
       jobId: config.jobId,
-      quantity: toNumberOrOne(config.quantityText),
+      quantity: parseNumberInput(config.quantityText),
       isOutput: config.isOutput,
     }));
 
@@ -213,11 +233,13 @@ export default function ServiceFormModal({
       isEditMode,
     );
 
+    if (jobConfigs.some((config) => !jobById.has(config.jobId))) { Alert.alert('Chưa đủ dữ liệu', 'Hãy tải lại danh sách hạng mục trước khi lưu.'); return; }
     if (validationError) {
       Alert.alert('Lỗi nhập liệu', validationError);
       return;
     }
 
+    submitting.current = true;
     setIsSubmitting(true);
     try {
       if (isEditMode && service) {
@@ -237,68 +259,46 @@ export default function ServiceFormModal({
           return;
         }
 
-        if (basicChanged) {
-          await updateServiceMutation.mutateAsync({
-            id: service.id,
-            name: trimmedName,
-            code: trimmedCode,
-            description: description.trim(),
-            unit: unit.trim(),
-            isAI,
-            isBudget,
-          });
-        }
-
-        if (jobsChanged) {
-          await updateServiceMutation.mutateAsync({
-            id: service.id,
-            jobConfigs: normalizedConfigs,
-          });
-        }
-      } else {
-        const created = await createServiceMutation.mutateAsync({
-          name: trimmedName,
-          code: trimmedCode,
-          description: description.trim() || undefined,
-          unit: unit.trim() || undefined,
-          isAI,
-          isBudget,
-          jobIds: normalizedConfigs.map((config) => config.jobId),
-          outputJobIds: normalizedConfigs
-            .filter((config) => config.isOutput)
-            .map((config) => config.jobId),
+        await updateServiceMutation.mutateAsync({
+          id: service.id,
+          ...(basicChanged ? { name: trimmedName, code: trimmedCode, description: description.trim(), unit: unit.trim(), isAI, isBudget } : {}),
+          ...(jobsChanged ? { jobConfigs: normalizedConfigs } : {}),
         });
-
-        // Backend `POST /services` luôn gán quantity = 1 cho mọi hạng mục,
-        // nên số lượng khác 1 phải đồng bộ lại qua nhánh jobConfigs.
-        const hasCustomQuantity = normalizedConfigs.some((config) => config.quantity !== 1);
-        if (created?.id && hasCustomQuantity) {
-          await updateServiceMutation.mutateAsync({
-            id: created.id,
-            jobConfigs: normalizedConfigs,
-          });
-        }
+      } else {
+        await creation.current.save({
+          create: (payload) => createServiceMutation.mutateAsync(payload),
+          update: (payload) => updateServiceMutation.mutateAsync(payload),
+        }, {
+          name: trimmedName, description: description.trim(), unit: unit.trim(), isAI, isBudget,
+          jobIds: normalizedConfigs.map((config) => config.jobId),
+          outputJobIds: normalizedConfigs.filter((config) => config.isOutput).map((config) => config.jobId),
+        }, normalizedConfigs);
       }
 
       await Haptic.notificationAsync(Haptic.NotificationFeedbackType.Success);
       onSuccess?.();
       onClose();
     } catch (error: any) {
+      setHasPartialCreation(Boolean(creation.current.createdId));
       await Haptic.notificationAsync(Haptic.NotificationFeedbackType.Error);
       Alert.alert(
         isEditMode ? 'Không thể cập nhật dịch vụ' : 'Không thể tạo dịch vụ',
         error?.message || 'Vui lòng kiểm tra dữ liệu và thử lại.',
       );
     } finally {
+      submitting.current = false;
       setIsSubmitting(false);
     }
   }, [
+    canWrite,
     code,
     createServiceMutation,
     description,
     isAI,
+    isBudget,
     isEditMode,
     jobConfigs,
+    jobById,
     name,
     onClose,
     onSuccess,
@@ -308,6 +308,7 @@ export default function ServiceFormModal({
     updateServiceMutation,
   ]);
 
+  const hasUnknownJobCost = jobConfigs.some((config) => jobById.get(config.jobId)?.costPrice == null);
   const previewCost = useMemo(
     () =>
       jobConfigs.reduce((sum, config) => {
@@ -318,7 +319,7 @@ export default function ServiceFormModal({
   );
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={requestClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1 justify-end bg-black/50"
@@ -336,7 +337,7 @@ export default function ServiceFormModal({
             </View>
             <TouchableOpacity
               className="h-12 w-12 items-center justify-center rounded-xl bg-slate-100"
-              onPress={onClose}
+              onPress={requestClose}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               accessibilityRole="button"
               accessibilityLabel="Đóng"
@@ -350,6 +351,7 @@ export default function ServiceFormModal({
             contentContainerClassName="gap-3.5 px-5 pb-6"
             keyboardShouldPersistTaps="handled"
           >
+
             <View>
               <Text className="mb-1.5 text-xs font-bold text-slate-700">
                 Tên dịch vụ <Text className="text-red-500">*</Text>
@@ -364,7 +366,7 @@ export default function ServiceFormModal({
               />
             </View>
 
-            <View>
+            {isEditMode ? <View>
               <Text className="mb-1.5 text-xs font-bold text-slate-700">
                 Mã dịch vụ <Text className="text-red-500">*</Text>
               </Text>
@@ -380,24 +382,10 @@ export default function ServiceFormModal({
               <Text className="mt-1 text-[11px] italic text-slate-400">
                 Mã dịch vụ là duy nhất (không phân biệt hoa/thường).
               </Text>
-            </View>
+            </View> : <Text className="text-xs text-slate-500">Mã dịch vụ được hệ thống tạo tự động.</Text>}
 
             <View>
-              <Text className="mb-1.5 text-xs font-bold text-slate-700">Mô tả</Text>
-              <TextInput
-                className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-900"
-                placeholder="Mô tả ngắn về phạm vi dịch vụ"
-                placeholderTextColor="#94A3B8"
-                multiline
-                numberOfLines={2}
-                textAlignVertical="top"
-                value={description}
-                onChangeText={setDescription}
-              />
-            </View>
-
-            <View>
-              <Text className="mb-1.5 text-xs font-bold text-slate-700">Đơn vị</Text>
+              <Text className="mb-1.5 text-xs font-bold text-slate-700">Đơn vị tính *</Text>
               <TextInput
                 testID="serviceUnitInput"
                 className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-900"
@@ -467,7 +455,7 @@ export default function ServiceFormModal({
               </View>
               <View className="flex-1">
                 <Text className="text-sm font-semibold text-slate-700">
-                  Cho phép nhập ngân sách (isBudget)
+                  Cho phép nhập ngân sách
                 </Text>
                 <Text className="text-[11px] text-slate-400">
                   Cho phép tạo yêu cầu chi phí/ngân sách quảng cáo cho dịch vụ này
@@ -475,11 +463,25 @@ export default function ServiceFormModal({
               </View>
             </TouchableOpacity>
 
+            <View>
+              <Text className="mb-1.5 text-xs font-bold text-slate-700">Mô tả</Text>
+              <TextInput
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-900"
+                placeholder="Mô tả ngắn về phạm vi dịch vụ"
+                placeholderTextColor="#94A3B8"
+                multiline
+                numberOfLines={2}
+                textAlignVertical="top"
+                value={description}
+                onChangeText={setDescription}
+              />
+            </View>
+
             {/* Bộ chọn hạng mục */}
             <View className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
               <View className="mb-2.5 flex-row items-center justify-between">
                 <Text className="text-xs font-bold text-slate-700">Hạng mục công việc</Text>
-                <Text className="text-xs font-bold text-orange-600">{formatVND(previewCost)}</Text>
+                <Text className="text-xs font-bold text-orange-600">{hasUnknownJobCost ? 'Chưa đủ dữ liệu giá vốn' : formatVND(previewCost)}</Text>
               </View>
 
               {jobConfigs.length === 0 ? (
@@ -564,7 +566,7 @@ export default function ServiceFormModal({
                         </View>
 
                         <Text className="mt-2 text-[11px] font-semibold text-slate-500">
-                          Thành tiền: {formatVND(Number(job?.costPrice || 0) * quantity)}
+                          Đơn vị: {job?.unit || '—'} · Thành tiền: {job?.costPrice == null ? 'Chưa có dữ liệu' : formatVND(Number(job.costPrice) * quantity)}
                         </Text>
                       </View>
                     );
@@ -572,6 +574,10 @@ export default function ServiceFormModal({
                 </View>
               )}
 
+              <View className="flex-row justify-between gap-2 border-t border-slate-200 py-3">
+                <Text className="text-xs font-bold text-slate-600">Tổng giá vốn tạm tính</Text>
+                <Text className="text-sm font-bold text-primary">{hasUnknownJobCost ? 'Chưa đủ dữ liệu' : formatVND(previewCost)}</Text>
+              </View>
               <TouchableOpacity
                 className="min-h-[48px] flex-row items-center justify-center gap-2 rounded-xl border border-dashed border-primary bg-white"
                 onPress={() => setIsJobPickerOpen((prev) => !prev)}
@@ -583,6 +589,7 @@ export default function ServiceFormModal({
 
               {isJobPickerOpen ? (
                 <View className="mt-2.5 rounded-xl border border-slate-200 bg-white p-2.5">
+                  {canWrite ? <TouchableOpacity className="min-h-[48px] justify-center px-3 mb-2 rounded-xl bg-orange-50" onPress={() => setIsCreateJobOpen(true)}><Text className="font-bold text-primary">Tạo hạng mục mới</Text></TouchableOpacity> : null}
                   {/* Tabs chọn nguồn thêm */}
                   <View className="mb-2.5 flex-row gap-2">
                     <TouchableOpacity
@@ -638,7 +645,7 @@ export default function ServiceFormModal({
                   </View>
 
                   {pickerTab === 'JOB' ? (
-                    isLoadingJobs ? (
+                    jobsError ? (<TouchableOpacity className="min-h-[48px] justify-center" onPress={() => refetchJobs()}><Text className="text-red-600">Không tải được hạng mục. Bấm thử lại.</Text></TouchableOpacity>) : isLoadingJobs ? (
                       <View className="items-center py-4">
                         <ActivityIndicator size="small" color={BrandColors.primary} />
                       </View>
@@ -663,7 +670,7 @@ export default function ServiceFormModal({
                               </Text>
                               <Text className="text-[11px] text-slate-400">
                                 {job.code ? `#${job.code} • ` : ''}
-                                {formatVND(job.costPrice ?? 0)}
+                                {job.costPrice == null ? 'Chưa có dữ liệu' : formatVND(job.costPrice)}
                               </Text>
                             </View>
                             <Feather name="plus-circle" size={18} color="#F38820" />
@@ -671,7 +678,7 @@ export default function ServiceFormModal({
                         ))}
                       </ScrollView>
                     )
-                  ) : isLoadingServices ? (
+                  ) : servicesError ? (<TouchableOpacity className="min-h-[48px] justify-center" onPress={() => refetchServices()}><Text className="text-red-600">Không tải được dịch vụ. Bấm thử lại.</Text></TouchableOpacity>) : isLoadingServices ? (
                     <View className="items-center py-4">
                       <ActivityIndicator size="small" color={BrandColors.primary} />
                     </View>
@@ -719,7 +726,7 @@ export default function ServiceFormModal({
           <View className="flex-row gap-3 border-t border-slate-100 px-5 py-3.5">
             <TouchableOpacity
               className="min-h-[48px] flex-1 items-center justify-center rounded-xl bg-slate-100 py-3.5"
-              onPress={onClose}
+              onPress={requestClose}
             >
               <Text className="text-sm font-bold text-slate-600">Hủy bỏ</Text>
             </TouchableOpacity>
@@ -728,20 +735,21 @@ export default function ServiceFormModal({
               testID="submitServiceButton"
               className="min-h-[48px] flex-1 items-center justify-center rounded-xl bg-primary py-3.5"
               onPress={submit}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !canWrite || hasUnknownJobCost}
               activeOpacity={0.8}
             >
               {isSubmitting ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
                 <Text className="text-sm font-bold text-white">
-                  {isEditMode ? 'Lưu thay đổi' : 'Lưu dịch vụ'}
+                  {hasPartialCreation && !isEditMode ? 'Thử lưu cấu hình lại' : isEditMode ? 'Lưu thay đổi' : 'Lưu dịch vụ'}
                 </Text>
               )}
             </TouchableOpacity>
           </View>
         </View>
       </KeyboardAvoidingView>
+      {isCreateJobOpen ? <JobFormModal visible onClose={() => setIsCreateJobOpen(false)} onSuccess={(job) => { if (job?.id) { setAddedJobs((previous) => [...previous, job]); handleAddJob(job.id); } void refetchJobs(); }} /> : null}
     </Modal>
   );
 }

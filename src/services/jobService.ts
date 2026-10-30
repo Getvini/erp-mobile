@@ -1,4 +1,5 @@
 import { apiService } from './api';
+import { JobLevel, JobResponsibleRole, validateJobMetadata } from '@/utils/jobMetadata';
 
 /**
  * HẠNG MỤC CÔNG VIỆC (JOBS) + TIÊU CHÍ ĐÁNH GIÁ (JOB CRITERIA)
@@ -39,7 +40,7 @@ export const JOB_CATEGORY_VALUES: JobCategory[] = [
   'KHAC',
 ];
 
-export const JOB_CATEGORY_OPTIONS: Array<{ value: JobCategory; label: string }> =
+export const JOB_CATEGORY_OPTIONS: { value: JobCategory; label: string }[] =
   JOB_CATEGORY_VALUES.map((value) => ({ value, label: JOB_CATEGORY_LABELS[value] }));
 
 export const JOB_CATEGORY_COLORS: Record<string, { color: string; bg: string; border: string }> = {
@@ -57,7 +58,7 @@ export const JOB_PERFORMER_TYPE_LABELS: Record<string, string> = {
   VENDOR: 'Vendor',
 };
 
-export const JOB_PERFORMER_TYPE_OPTIONS: Array<{ value: JobPerformerType; label: string }> = [
+export const JOB_PERFORMER_TYPE_OPTIONS: { value: JobPerformerType; label: string }[] = [
   { value: 'INTERNAL', label: JOB_PERFORMER_TYPE_LABELS.INTERNAL },
   { value: 'VENDOR', label: JOB_PERFORMER_TYPE_LABELS.VENDOR },
 ];
@@ -119,6 +120,10 @@ export interface JobVendorLink {
 }
 
 export interface Job {
+  level?: JobLevel;
+  responsibleRole?: JobResponsibleRole | null;
+  description?: string | null;
+  sampleDocumentUrl?: string | null;
   id: string;
   name: string;
   code?: string | null;
@@ -145,6 +150,10 @@ export interface JobListFilters {
 }
 
 export interface CreateJobPayload {
+  level?: JobLevel;
+  responsibleRole?: JobResponsibleRole | null;
+  description?: string | null;
+  sampleDocumentUrl?: string | null;
   name: string;
   code: string;
   nickname?: string | null;
@@ -216,7 +225,11 @@ const buildCriteriaBody = (criteria: JobCriteriaInput[] = [], keepIds = true): J
     })
     .filter((item) => item.name.length > 0);
 
-const buildJobBody = (payload: Partial<CreateJobPayload>) => ({
+export const buildJobBody = (payload: Partial<CreateJobPayload>) => ({
+  ...(payload.level !== undefined ? { level: payload.level } : {}),
+  ...(payload.responsibleRole !== undefined ? { responsibleRole: payload.responsibleRole || null } : {}),
+  ...(payload.description !== undefined ? { description: toNullableText(payload.description) } : {}),
+  ...(payload.sampleDocumentUrl !== undefined ? { sampleDocumentUrl: toNullableText(payload.sampleDocumentUrl) } : {}),
   name: String(payload.name ?? '').trim(),
   code: toNullableText(payload.code),
   nickname: toNullableText(payload.nickname),
@@ -245,6 +258,9 @@ class JobService {
       name: filters.name?.trim() || undefined,
       category: filters.category || undefined,
     });
+    if (!res.error && !Array.isArray(res.data) && !Array.isArray(res.data?.data)) {
+      return { data: [] as Job[], error: 'Phản hồi danh sách hạng mục không hợp lệ.' };
+    }
     return { data: unwrapArray<Job>(res.data), error: res.error };
   }
 
@@ -258,7 +274,9 @@ class JobService {
    * POST /jobs — body Job + `criteria[]` + `serviceIds?`.
    */
   async createJob(payload: CreateJobPayload) {
-    const body: Record<string, any> = buildJobBody(payload);
+    const error = validateJobMetadata(payload);
+    if (error) return { error, data: null };
+    const body: Record<string, any> = buildJobBody({ ...payload, level: payload.level ?? 'A' });
     body.criteria = buildCriteriaBody(payload.criteria || [], false);
     if (Array.isArray(payload.serviceIds) && payload.serviceIds.length > 0) {
       body.serviceIds = payload.serviceIds;
@@ -269,7 +287,13 @@ class JobService {
 
   /** PATCH /jobs/:id — partial, KHÔNG nhận `criteria`. */
   async updateJob(id: string, payload: Partial<CreateJobPayload>) {
-    const res = await apiService.patch<any>(`/jobs/${id}`, buildJobBody(payload));
+    const error = validateJobMetadata(payload);
+    if (error) return { error, data: null };
+    const body = buildJobBody(payload);
+    // PATCH must not reset fields omitted by a caller.
+    const partial = Object.fromEntries(Object.entries(body).filter(([key]) =>
+      Object.prototype.hasOwnProperty.call(payload, key) || (key === 'isQuotationItem' && payload.isBriefVideo === true)));
+    const res = await apiService.patch<any>('/jobs/' + id, partial);
     return { data: unwrapObject<Job>(res.data), error: res.error };
   }
 

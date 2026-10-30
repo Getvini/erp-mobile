@@ -32,6 +32,9 @@ import {
 } from '@/services/paymentRequestService';
 import { useAuthStore } from '@/stores/useAuthStore';
 import {
+  canDisbursePayment, canReviewPaymentSettlement, isPaymentAccountant, isPaymentBod,
+} from '@/utils/paymentRequestPermissions';
+import {
   formatVND,
   formatDateToDDMMYYYY,
   formatNumberInput,
@@ -138,9 +141,9 @@ export default function PaymentRequestDetailScreen() {
   // RBAC Privileges (Single source of truth theo Master Plan)
   const userRole = (currentUser?.role || '').toUpperCase();
   const isOwner = currentUser?.id === (request.requesterId || request.createdById);
-  const isBOD = ['ADMIN', 'DIRECTOR', 'BOD'].includes(userRole);
-  const isReviewer = ['ADMIN', 'DIRECTOR', 'BOD', 'ADMIN_SALE', 'MANAGER'].includes(userRole);
-  const isAccountant = ['ADMIN', 'DIRECTOR', 'BOD', 'ACCOUNTANT'].includes(userRole);
+  const isBOD = isPaymentBod(userRole);
+  const isReviewer = isPaymentAccountant(userRole);
+  const isAccountant = isPaymentAccountant(userRole);
 
   // Handlers
   const handleDeleteDraft = async () => {
@@ -321,16 +324,13 @@ export default function PaymentRequestDetailScreen() {
 
   const isAdvance = request.type === 'ADVANCE';
   const remainingToDisburse = Math.max(0, request.amount - (request.paidAmount || 0));
-  const canDisburse = isApproved && remainingToDisburse > 0 && isAccountant;
+  const canDisburse = canDisbursePayment(request, { id: currentUser?.id, role: userRole });
   const canSubmitSettlement =
     isAdvance &&
     (request.paidAmount || 0) > 0 &&
     isOwner &&
     (!request.settlementStatus || ['WAITING_SETTLEMENT', 'PENDING'].includes(request.settlementStatus));
-  const canReviewSettlement =
-    isAdvance &&
-    request.settlementStatus === 'SETTLEMENT_SUBMITTED' &&
-    (isAccountant || isBOD);
+  const canReviewSettlement = canReviewPaymentSettlement(request, { id: currentUser?.id, role: userRole });
 
   const hasAnyAction =
     ((isDraft || needsMoreDocs) && isOwner) ||
@@ -1463,7 +1463,7 @@ export default function PaymentRequestDetailScreen() {
 
       {/* 3 Bottom Sheets cho Payment Production Suite */}
       <PaymentDisbursementBottomSheet
-        visible={showDisbursementModal}
+        visible={showDisbursementModal && canDisburse}
         paymentRequest={request}
         onClose={() => setShowDisbursementModal(false)}
         onSuccess={() => refetch()}
@@ -1477,7 +1477,7 @@ export default function PaymentRequestDetailScreen() {
       />
 
       <PaymentSettlementReviewBottomSheet
-        visible={showSettlementReviewModal}
+        visible={showSettlementReviewModal && canReviewSettlement}
         paymentRequest={request}
         onClose={() => setShowSettlementReviewModal(false)}
         onSuccess={() => refetch()}

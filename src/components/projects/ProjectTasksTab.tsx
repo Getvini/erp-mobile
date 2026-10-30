@@ -264,7 +264,7 @@ interface ProjectTasksTabProps {
   onToggleSelectGroup?: (groupTasks: TaskDetail[]) => void;
   onOpenUpdateTask?: (task: TaskDetail) => void;
   onAssignTask?: (task: TaskDetail | TaskDetail[]) => void;
-  onOpenAddExtraTask: () => void;
+  onOpenAddServices: () => void;
 }
 
 export default function ProjectTasksTab({
@@ -280,7 +280,7 @@ export default function ProjectTasksTab({
   onToggleSelectTask,
   onToggleSelectGroup,
   onAssignTask,
-  onOpenAddExtraTask,
+  onOpenAddServices,
 }: ProjectTasksTabProps) {
   const router = useRouter();
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -484,12 +484,12 @@ export default function ProjectTasksTab({
             {!isPendingConfirmation && canCreateProjectWork && (
               <TouchableOpacity
                 className="flex-row items-center gap-1.5 rounded-xl bg-primary px-3 py-2"
-                onPress={onOpenAddExtraTask}
+                onPress={onOpenAddServices}
                 activeOpacity={0.8}
               >
                 <Feather name="plus" size={15} color="#FFFFFF" />
                 <Text className="text-[12px] font-bold text-white" numberOfLines={1}>
-                  Thêm việc
+                  Thêm dịch vụ
                 </Text>
               </TouchableOpacity>
             )}

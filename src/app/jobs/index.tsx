@@ -1,3 +1,6 @@
+import CatalogSortControls from '@/components/catalog/CatalogSortControls';
+import { CatalogSort, sortCatalog } from '@/utils/catalogSorting';
+import { useCatalogViewState } from '@/hooks/useCatalogViewState';
 import React, { useMemo, useState, useCallback } from 'react';
 import {
   ActivityIndicator,
@@ -13,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import BottomNavBar from '@/components/BottomNavBar';
-import JobCard from '@/components/jobs/JobCard';
+import { JobCard } from '@/components/jobs/JobCard';
 import JobFormModal from '@/components/jobs/JobFormModal';
 import { BrandColors } from '@/constants/colors';
 import { useJobsQuery } from '@/hooks/queries/useJobs';
@@ -27,16 +30,16 @@ const ALL_CATEGORY = 'ALL';
  * Danh sách HẠNG MỤC CÔNG VIỆC (Jobs) — `/jobs`.
  * Tìm kiếm & lọc category hoàn toàn client-side (GET /jobs trả mảng thô đầy đủ quan hệ).
  *
- * ⚠️ Backend KHÔNG có roleMiddleware cho jobs ⇒ client tự chặn theo chuẩn Web
- * (`JobDetailPage.jsx:37`: `canEdit = role === 'ADMIN' || role === 'BOD'`).
+ * Ghi dữ liệu chỉ dành cho Admin/BOD theo quyền backend.
  */
 export default function JobsScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const isAuthLoading = useAuthStore((state) => state.isLoading);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState<string>(ALL_CATEGORY);
+  const [searchQuery, setSearchQuery] = useCatalogViewState('jobs-search', '');
+  const [sort, setSort] = useCatalogViewState<CatalogSort>('jobs-sort', { key: 'code', direction: 'asc' });
+  const [activeCategory, setActiveCategory] = useCatalogViewState<string>('jobs-category', ALL_CATEGORY);
   const [isFormVisible, setIsFormVisible] = useState(false);
 
   const hasAccess = canAccessJobs(user?.role);
@@ -48,7 +51,7 @@ export default function JobsScreen() {
 
   const filteredJobs = useMemo(() => {
     const keyword = searchQuery.trim().toLowerCase();
-    return jobs.filter((job) => {
+    return sortCatalog(jobs.filter((job) => {
       const categories = Array.isArray(job.categories) ? job.categories : [];
       if (activeCategory !== ALL_CATEGORY && !categories.includes(activeCategory)) return false;
       if (!keyword) return true;
@@ -56,8 +59,8 @@ export default function JobsScreen() {
       const code = String(job.code || '').toLowerCase();
       const nickname = String(job.nickname || '').toLowerCase();
       return name.includes(keyword) || code.includes(keyword) || nickname.includes(keyword);
-    });
-  }, [jobs, activeCategory, searchQuery]);
+    }), sort);
+  }, [jobs, activeCategory, searchQuery, sort]);
 
   const handleJobPress = useCallback(
     (job: Job) => {
@@ -177,6 +180,7 @@ export default function JobsScreen() {
         </ScrollView>
       </View>
 
+      <CatalogSortControls value={sort} onChange={setSort} options={[{ key: 'code', label: 'Mã' }, { key: 'name', label: 'Tên' }, { key: 'level', label: 'Cấp độ' }, { key: 'responsibleRole', label: 'Phụ trách' }, { key: 'costPrice', label: 'Giá vốn' }, { key: 'vinicoin', label: 'Vinicoin' }]} />
       {/* Body: 4 trạng thái */}
       {isLoading ? (
         <View className="flex-1 items-center justify-center gap-3 py-16">
@@ -228,7 +232,7 @@ export default function JobsScreen() {
               </Text>
               <Text className="text-[13px] text-[#64748B] text-center leading-[18px]">
                 {searchQuery || activeCategory !== ALL_CATEGORY
-                  ? 'Thử đổi từ khóa tìm kiếm hoặc bộ lọc category khác.'
+                  ? 'Thử đổi từ khóa tìm kiếm hoặc bộ lọc nhóm khác.'
                   : 'Nhấn "Thêm hạng mục" để tạo hạng mục công việc đầu tiên.'}
               </Text>
             </View>

@@ -232,7 +232,7 @@ export const canAccessJobs = (role?: string): boolean => {
   return ['ADMIN', 'BOD', 'BD', 'ADMIN_SALE', 'PM'].includes(role);
 };
 
-export const canManageJobs = canAccessJobs;
+export const canManageJobs = isManagementRole;
 
 /** Announcements — không giới hạn ở Sidebar; Route chỉ chặn create/update/delete. */
 export const canAccessAnnouncements = (role?: string): boolean => Boolean(role);

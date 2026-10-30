@@ -26,6 +26,12 @@ export interface QuotationItem {
   };
 }
 
+export interface CreateAddendumQuotationPayload {
+  opportunityId: string;
+  taskIds: string[];
+  note?: string;
+}
+
 export interface QuotationDetailItem {
   id?: string;
   serviceId: string;
@@ -150,8 +156,8 @@ export const quotationService = {
     return apiService.delete<{ message: string }>(`/quotations/${id}`);
   },
 
-  async createAddendumQuotation(data: any) {
-    return apiService.post<any>('/quotations/addendum', data);
+  async createAddendumQuotation(data: CreateAddendumQuotationPayload) {
+    return apiService.post<QuotationItem>('/quotations/addendum', data);
   },
 
   async getOpportunityServices(opportunityId: string) {

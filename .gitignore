@@ -44,10 +44,17 @@ example
 /android
 *.md
 
-/test
+/test/*
+!/test/catalog-sync.test.ts
+!/test/p1-flows.test.ts
+!/test/p2-flows.test.ts
+!/docs/catalog-sync.md
+!/docs/p1-mobile-flows.md
 
 # Firebase configuration (NEVER commit to git)
 google-services.json
 GoogleService-Info.plist
 *-firebase-adminsdk-*.json
 erp-getvini-firebase-adminsdk-fbsvc-8553dfa246.json
+*.md
+*.test.ts

@@ -3,6 +3,8 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
   RefreshControl,
   ScrollView,
   Text,
@@ -31,6 +33,8 @@ import { canAccessServiceCatalog, canBulkDeleteServices } from '@/utils/rbac';
 import { formatVND } from '@/utils/formatters';
 import { computeServiceCost } from '@/utils/catalogPricing';
 import { safeGoBack } from '@/utils/navigation';
+import JobFormModal from '@/components/jobs/JobFormModal';
+import { validateServiceForm } from '@/utils/serviceValidation';
 
 export default function ServiceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -47,6 +51,8 @@ export default function ServiceDetailScreen() {
   const [isJobSheetOpen, setIsJobSheetOpen] = useState(false);
   const [pickerTab, setPickerTab] = useState<'JOB' | 'SERVICE'>('JOB');
   const [jobSearch, setJobSearch] = useState('');
+  const [isCreateJobOpen, setIsCreateJobOpen] = useState(false);
+  const [draft, setDraft] = useState<Record<string, { quantity?: string; isOutput?: boolean }>>({});
 
   const {
     data: service,
@@ -61,12 +67,12 @@ export default function ServiceDetailScreen() {
   const addJobMutation = useAddServiceJobMutation();
   const removeJobMutation = useRemoveServiceJobMutation();
 
-  const { data: jobs = [], isLoading: isLoadingJobs } = useJobsQuery(
+  const { data: jobs = [], isLoading: isLoadingJobs, isError: jobsError, refetch: refetchJobs } = useJobsQuery(
     {},
     { enabled: Boolean(serviceId) && canManage }
   );
 
-  const { data: services = [], isLoading: isLoadingServices } = useServicesQuery(
+  const { data: services = [], isLoading: isLoadingServices, isError: servicesError, refetch: refetchServices } = useServicesQuery(
     {},
     { enabled: Boolean(serviceId) && canManage && isJobSheetOpen && pickerTab === 'SERVICE' },
   );
@@ -76,7 +82,22 @@ export default function ServiceDetailScreen() {
     [service],
   );
 
-  const totalCost = useMemo(() => computeServiceCost(serviceJobs), [serviceJobs]);
+  const draftConfigs = useMemo(() => serviceJobs.map((item) => ({
+    jobId: item.jobId, quantity: Number(draft[item.jobId]?.quantity ?? item.quantity ?? 1),
+    isOutput: draft[item.jobId]?.isOutput ?? Boolean(item.isOutput),
+  })), [serviceJobs, draft]);
+  const hasUnknownCost = serviceJobs.some((item) => item.job?.costPrice == null);
+  const totalCost = useMemo(() => computeServiceCost(serviceJobs.map((item) => ({ ...item, quantity: Number(draft[item.jobId]?.quantity ?? item.quantity ?? 1) }))), [serviceJobs, draft]);
+  const saveDraft = async () => {
+    if (!canManage || updateServiceMutation.isPending || !service) return;
+    const error = validateServiceForm({ name: service.name, unit: service.unit || 'Đơn vị', jobConfigs: draftConfigs }, false);
+    if (error) { Alert.alert('Lỗi nhập liệu', error); return; }
+    try {
+      await updateServiceMutation.mutateAsync({ id: serviceId, jobConfigs: draftConfigs });
+      setDraft({});
+      Alert.alert('Thành công', 'Đã lưu cấu hình hạng mục.');
+    } catch (error) { Alert.alert('Không thể lưu cấu hình', error instanceof Error ? error.message : 'Vui lòng thử lại.'); }
+  };
 
   const availableJobs = useMemo(() => {
     const usedIds = new Set(serviceJobs.map((serviceJob) => serviceJob.jobId));
@@ -113,6 +134,8 @@ export default function ServiceDetailScreen() {
 
   const handleAddJob = useCallback(
     async (job: JobReference) => {
+      if (!canManage || addJobMutation.isPending) return;
+      if (Object.keys(draft).length > 0) { Alert.alert('Chưa lưu cấu hình', 'Hãy lưu hoặc hoàn tác cấu hình trước khi thêm hạng mục.'); return; }
       try {
         await addJobMutation.mutateAsync({ id: serviceId, jobId: job.id });
         await Haptic.notificationAsync(Haptic.NotificationFeedbackType.Success);
@@ -126,11 +149,13 @@ export default function ServiceDetailScreen() {
         );
       }
     },
-    [addJobMutation, serviceId],
+    [canManage, draft, addJobMutation, serviceId],
   );
 
   const handleAddJobsFromService = useCallback(
     async (sourceService: ServiceItem) => {
+      if (!canManage || updateServiceMutation.isPending) return;
+      if (Object.keys(draft).length > 0) { Alert.alert('Chưa lưu cấu hình', 'Hãy lưu hoặc hoàn tác cấu hình trước khi thêm hạng mục từ dịch vụ khác.'); return; }
       try {
         const existingIds = new Set(serviceJobs.map((sj) => String(sj.jobId)));
         const sourceJobs = sourceService.serviceJobs ?? [];
@@ -172,12 +197,13 @@ export default function ServiceDetailScreen() {
         );
       }
     },
-    [serviceId, serviceJobs, updateServiceMutation],
+    [canManage, draft, serviceId, serviceJobs, updateServiceMutation],
   );
 
   const handleRemoveJob = useCallback(
     (serviceJob: ServiceJobItem) => {
-      if (removeJobMutation.isPending) return;
+      if (!canManage || removeJobMutation.isPending) return;
+      if (Object.keys(draft).length > 0) { Alert.alert('Chưa lưu cấu hình', 'Hãy lưu hoặc hoàn tác cấu hình trước khi gỡ hạng mục.'); return; }
       Alert.alert(
         'Gỡ hạng mục',
         `Bạn có chắc muốn gỡ hạng mục “${serviceJob.job?.name || serviceJob.jobId}” khỏi dịch vụ?`,
@@ -202,11 +228,11 @@ export default function ServiceDetailScreen() {
         ],
       );
     },
-    [removeJobMutation, serviceId],
+    [canManage, draft, removeJobMutation, serviceId],
   );
 
   const handleDelete = useCallback(() => {
-    if (!service || deleteMutation.isPending) return;
+    if (!canManage || !service || deleteMutation.isPending) return;
 
     Alert.alert(
       'Xóa dịch vụ',
@@ -234,7 +260,7 @@ export default function ServiceDetailScreen() {
         },
       ],
     );
-  }, [deleteMutation, router, service]);
+  }, [canManage, deleteMutation, router, service]);
 
   if (!canAccess) {
     return (
@@ -318,7 +344,9 @@ export default function ServiceDetailScreen() {
               testID="editServiceButton"
               className="h-12 w-12 items-center justify-center rounded-xl bg-slate-100"
               onPress={() => {
-                setEditFormKey((key) => key + 1);
+                if (!canManage) return;
+              if (Object.keys(draft).length > 0) { Alert.alert('Chưa lưu cấu hình', 'Hãy lưu hoặc hoàn tác cấu hình trước khi mở biểu mẫu sửa.'); return; }
+              setEditFormKey((key) => key + 1);
                 setIsEditOpen(true);
               }}
               activeOpacity={0.7}
@@ -348,7 +376,9 @@ export default function ServiceDetailScreen() {
         )}
       </View>
 
+      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }}
         refreshControl={
@@ -394,13 +424,13 @@ export default function ServiceDetailScreen() {
             <View className="flex-1">
               <Text className="text-xs font-semibold uppercase text-slate-400">Giá vốn (hệ thống)</Text>
               <Text className="text-sm font-extrabold text-orange-600">
-                {formatVND(service.costPrice ?? totalCost)}
+                {service.costPrice == null ? 'Chưa có dữ liệu' : formatVND(service.costPrice)}
               </Text>
             </View>
             <View className="flex-1">
               <Text className="text-xs font-semibold uppercase text-slate-400">Chi phí chung</Text>
               <Text className="text-sm font-bold text-slate-700">
-                {formatVND(service.overheadCost ?? 0)}
+                {service.overheadCost == null ? 'Chưa có dữ liệu' : formatVND(service.overheadCost)}
               </Text>
             </View>
           </View>
@@ -440,7 +470,7 @@ export default function ServiceDetailScreen() {
             </View>
           ) : (
             serviceJobs.map((serviceJob, index) => {
-              const quantity = Number(serviceJob.quantity || 0);
+              const quantity = Number(draft[serviceJob.jobId]?.quantity ?? serviceJob.quantity ?? 1);
               const unitCost = Number(serviceJob.job?.costPrice || 0);
               return (
                 <View
@@ -454,7 +484,7 @@ export default function ServiceDetailScreen() {
                       <Text className="text-sm font-bold text-slate-800">
                         {serviceJob.job?.name || 'Hạng mục'}
                       </Text>
-                      {serviceJob.isOutput ? (
+                      {(draft[serviceJob.jobId]?.isOutput ?? serviceJob.isOutput) ? (
                         <View className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5">
                           <Text className="text-[10px] font-bold text-emerald-600">Đầu ra</Text>
                         </View>
@@ -463,10 +493,16 @@ export default function ServiceDetailScreen() {
                     <Text className="mt-0.5 text-[11px] font-semibold text-slate-400">
                       {serviceJob.job?.code ? `#${serviceJob.job.code}` : `#${serviceJob.jobId.slice(0, 8)}`}
                       {` • SL: ${quantity}`}
-                      {` • Đơn giá: ${formatVND(unitCost)}`}
+                      {` • Đơn giá: ${serviceJob.job?.costPrice == null ? 'Chưa có dữ liệu' : formatVND(unitCost)}`}
                     </Text>
+                    <Text className="mt-1 text-xs text-slate-500">Đơn vị: {serviceJob.job?.unit || '—'} · Đầu ra: {(draft[serviceJob.jobId]?.isOutput ?? serviceJob.isOutput) ? 'Có' : 'Không'}</Text>
+                    {canManage ? <View className="flex-row flex-wrap items-center gap-2 mt-2">
+                      <Text className="text-xs text-slate-600">Số lượng</Text>
+                      <TextInput accessibilityLabel={'Số lượng ' + (serviceJob.job?.name || serviceJob.jobId)} className="min-h-[48px] min-w-[64px] px-3 rounded-xl border border-slate-200 text-slate-900" keyboardType="number-pad" editable={!updateServiceMutation.isPending} value={draft[serviceJob.jobId]?.quantity ?? String(serviceJob.quantity ?? 1)} onChangeText={(quantity) => setDraft((previous) => ({ ...previous, [serviceJob.jobId]: { ...previous[serviceJob.jobId], quantity } }))} />
+                      <TouchableOpacity disabled={updateServiceMutation.isPending} accessibilityRole="checkbox" accessibilityLabel={'Đầu ra ' + (serviceJob.job?.name || serviceJob.jobId)} accessibilityState={{ checked: draft[serviceJob.jobId]?.isOutput ?? Boolean(serviceJob.isOutput) }} className="min-h-[48px] justify-center px-3 rounded-xl border border-slate-200" onPress={() => setDraft((previous) => ({ ...previous, [serviceJob.jobId]: { ...previous[serviceJob.jobId], isOutput: !(previous[serviceJob.jobId]?.isOutput ?? serviceJob.isOutput) } }))}><Text className="text-xs text-slate-700">{(draft[serviceJob.jobId]?.isOutput ?? serviceJob.isOutput) ? '☑ Đầu ra' : '☐ Đầu ra'}</Text></TouchableOpacity>
+                    </View> : null}
                     <Text className="mt-1 text-sm font-bold text-orange-600">
-                      {formatVND(unitCost * quantity)}
+                      {serviceJob.job?.costPrice == null ? 'Chưa có dữ liệu' : formatVND(unitCost * quantity)}
                     </Text>
                   </View>
 
@@ -485,14 +521,19 @@ export default function ServiceDetailScreen() {
             })
           )}
 
+          {canManage && Object.keys(draft).length > 0 ? <View className="flex-row gap-3 mt-3">
+            <TouchableOpacity className="min-h-[48px] flex-1 justify-center items-center rounded-xl bg-slate-100" disabled={updateServiceMutation.isPending} onPress={() => setDraft({})}><Text className="font-bold text-slate-600">Hoàn tác</Text></TouchableOpacity>
+            <TouchableOpacity className="min-h-[48px] flex-1 justify-center items-center rounded-xl bg-primary" disabled={updateServiceMutation.isPending} onPress={saveDraft}>{updateServiceMutation.isPending ? <ActivityIndicator color="white" /> : <Text className="font-bold text-white">Lưu cấu hình</Text>}</TouchableOpacity>
+          </View> : null}
           {serviceJobs.length > 0 ? (
             <View className="mt-3 flex-row items-center justify-between border-t border-slate-200 pt-3">
               <Text className="text-xs font-bold text-slate-600">Tổng giá vốn hạng mục</Text>
-              <Text className="text-sm font-extrabold text-orange-600">{formatVND(totalCost)}</Text>
+              <Text className="text-sm font-extrabold text-orange-600">{hasUnknownCost ? 'Chưa đủ dữ liệu giá vốn' : formatVND(totalCost)}</Text>
             </View>
           ) : null}
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Bottom sheet chọn Job / Dịch vụ khác */}
       <Modal
@@ -515,6 +556,7 @@ export default function ServiceDetailScreen() {
               </TouchableOpacity>
             </View>
 
+            {canManage ? <TouchableOpacity className="min-h-[48px] justify-center px-5" onPress={() => setIsCreateJobOpen(true)}><Text className="font-bold text-primary">Tạo hạng mục mới</Text></TouchableOpacity> : null}
             {/* Tabs chọn nguồn thêm */}
             <View className="flex-row gap-2 px-5 pt-3">
               <TouchableOpacity
@@ -577,7 +619,7 @@ export default function ServiceDetailScreen() {
               keyboardShouldPersistTaps="handled"
             >
               {pickerTab === 'JOB' ? (
-                isLoadingJobs ? (
+                jobsError ? (<TouchableOpacity className="min-h-[48px] justify-center" onPress={() => refetchJobs()}><Text className="text-red-600">Không tải được hạng mục. Bấm thử lại.</Text></TouchableOpacity>) : isLoadingJobs ? (
                   <View className="items-center py-8">
                     <ActivityIndicator color={BrandColors.primary} />
                   </View>
@@ -605,7 +647,7 @@ export default function ServiceDetailScreen() {
                         </Text>
                         <Text className="text-[11px] text-slate-400">
                           {job.code ? `#${job.code} • ` : ''}
-                          {formatVND(job.costPrice ?? 0)}
+                          {job.costPrice == null ? 'Chưa có dữ liệu' : formatVND(job.costPrice)}
                           {job.unit ? ` • ${job.unit}` : ''}
                         </Text>
                       </View>
@@ -613,7 +655,7 @@ export default function ServiceDetailScreen() {
                     </TouchableOpacity>
                   ))
                 )
-              ) : isLoadingServices ? (
+              ) : servicesError ? (<TouchableOpacity className="min-h-[48px] justify-center" onPress={() => refetchServices()}><Text className="text-red-600">Không tải được dịch vụ. Bấm thử lại.</Text></TouchableOpacity>) : isLoadingServices ? (
                 <View className="items-center py-8">
                   <ActivityIndicator color={BrandColors.primary} />
                 </View>
@@ -657,6 +699,7 @@ export default function ServiceDetailScreen() {
             </ScrollView>
           </View>
         </View>
+        {isCreateJobOpen ? <JobFormModal visible onClose={() => setIsCreateJobOpen(false)} onSuccess={(job) => { if (job?.id) void handleAddJob(job); }} /> : null}
       </Modal>
 
       <ServiceFormModal

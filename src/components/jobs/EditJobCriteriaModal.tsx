@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useAuthStore } from '@/stores/useAuthStore';
+import { isManagementRole } from '@/utils/rbac';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +15,6 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { Job, JobCriteriaInput } from '@/services/jobService';
 import { useSyncJobCriteriasMutation } from '@/hooks/queries/useJobs';
-import { BrandColors } from '@/constants/colors';
 import JobCriteriaEditor from './JobCriteriaEditor';
 
 interface EditJobCriteriaModalProps {
@@ -23,32 +24,27 @@ interface EditJobCriteriaModalProps {
   onSuccess?: () => void;
 }
 
-export default function EditJobCriteriaModal({
+export default function EditJobCriteriaModal(props: EditJobCriteriaModalProps) {
+  return props.visible && props.job ? <CriteriaSheet key={props.job.id} {...props} /> : null;
+}
+
+function CriteriaSheet({
   visible,
   onClose,
   job,
   onSuccess,
 }: EditJobCriteriaModalProps) {
-  const [criteria, setCriteria] = useState<JobCriteriaInput[]>([]);
+  const canWrite = isManagementRole(useAuthStore((state) => state.user?.role));
+  const [criteria, setCriteria] = useState<JobCriteriaInput[]>(() => (job?.criteria || []).map((item) => ({ id: item.id, name: item.name, description: item.description || '' })));
   const [showErrors, setShowErrors] = useState(false);
 
   const syncMutation = useSyncJobCriteriasMutation();
   const isSubmitting = syncMutation.isPending;
 
-  useEffect(() => {
-    if (visible && job) {
-      const initialCriteria = (job.criteria || []).map((c) => ({
-        id: c.id,
-        name: c.name,
-        description: c.description || '',
-      }));
-      setCriteria(initialCriteria);
-      setShowErrors(false);
-    }
-  }, [visible, job]);
+
 
   const handleSubmit = async () => {
-    if (!job?.id) return;
+    if (!canWrite || !job?.id || isSubmitting) return;
 
     // Kiểm tra tên tiêu chí có bị để trống không
     const hasEmptyName = criteria.some((c) => !String(c.name || '').trim());
@@ -137,7 +133,7 @@ export default function EditJobCriteriaModal({
             <TouchableOpacity
               className="px-4 py-3 rounded-xl bg-slate-100 min-h-[48px] justify-center"
               onPress={onClose}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !canWrite}
             >
               <Text className="text-sm font-semibold text-slate-600">Hủy</Text>
             </TouchableOpacity>
@@ -147,7 +143,7 @@ export default function EditJobCriteriaModal({
                 isSubmitting ? 'opacity-60' : ''
               }`}
               onPress={handleSubmit}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !canWrite}
             >
               {isSubmitting ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />

@@ -51,7 +51,7 @@ function ServicePackageCard({ servicePackage, onPress }: ServicePackageCardProps
 
           <View className="mt-2.5 flex-row items-center justify-between">
             <Text className="text-sm font-extrabold text-orange-600">
-              {formatVND(servicePackage.price ?? 0)}
+              Giá gói (hệ thống): {servicePackage.price == null ? 'Chưa có dữ liệu' : formatVND(servicePackage.price)}
             </Text>
             <View className="flex-row items-center gap-1">
               <Feather name="layers" size={12} color="#64748B" />

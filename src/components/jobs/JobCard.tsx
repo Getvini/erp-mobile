@@ -1,4 +1,5 @@
 import React from 'react';
+import { JOB_RESPONSIBLE_ROLE_LABELS } from '@/utils/jobMetadata';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import {
@@ -71,6 +72,7 @@ function JobCardComponent({ job, onPress }: JobCardProps) {
         </Text>
       ) : null}
 
+      <Text className="text-xs text-slate-600 mb-2">Cấp độ: {job.level || 'A'} · Phụ trách: {job.responsibleRole ? JOB_RESPONSIBLE_ROLE_LABELS[job.responsibleRole] || job.responsibleRole : 'Chưa chọn'}</Text>
       {/* Badge category */}
       <View className="flex-row flex-wrap gap-1.5 mb-3">
         {categories.length > 0 ? (
@@ -89,7 +91,7 @@ function JobCardComponent({ job, onPress }: JobCardProps) {
             );
           })
         ) : (
-          <Text className="text-[11px] italic text-[#94A3B8]">Chưa xác định category</Text>
+          <Text className="text-[11px] italic text-[#94A3B8]">Chưa chọn nhóm</Text>
         )}
       </View>
 

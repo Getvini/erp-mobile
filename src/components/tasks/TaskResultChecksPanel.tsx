@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Linking, Alert } from 'react-native';
+import { View, Text, TextInput, Switch, TouchableOpacity, ActivityIndicator, Linking, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import SpellCheckWhitelist from './SpellCheckWhitelist';
@@ -18,6 +18,7 @@ import type {
   CheckRunStatus,
   QcMismatchResultItem,
   RerunKind,
+  RerunScope,
   SpellCheckResultItem,
 } from '@/services/taskResultChecksService';
 import { createTaskSource } from '@/utils/sheetPreviewSource';
@@ -146,6 +147,9 @@ export default function TaskResultChecksPanel({ taskId, projectId }: TaskResultC
   const rerunQcMutation = useRerunResultCheckMutation();
   const rerunScopedMutation = useRerunResultCheckMutation();
   const [rerunWhitelist, setRerunWhitelist] = useState<string[] | null>(null);
+  const [qcNote, setQcNote] = useState('');
+  const [qcRefresh, setQcRefresh] = useState(false);
+  const rerunLock = useRef(false);
   const [expandedTokens, setExpandedTokens] = useState<Record<string, boolean>>({});
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewFocus, setPreviewFocus] = useState<ScopeFocus | null>(null);
@@ -222,8 +226,21 @@ export default function TaskResultChecksPanel({ taskId, projectId }: TaskResultC
   const selectedScenarioCount = detectedScenarios.filter((s) => selectedScenarioIds.includes(s.id)).length;
   const fallbackSheet = scopeSheets.length === 1 ? scopeSheets[0] : null;
   const canRerunScoped = canReview && !isFinalized;
-  const isAnyRunning = spellStatus === 'RUNNING' || qcStatus === 'RUNNING';
+  const isAnyRunning = ['PENDING', 'RUNNING'].includes(spellStatus) || ['PENDING', 'RUNNING'].includes(qcStatus) ||
+    rerunSpellMutation.isPending || rerunQcMutation.isPending || rerunScopedMutation.isPending;
   const canEdit = !isFinalized && canReview;
+
+  const requestRerun = async (kind: RerunKind, scope?: RerunScope) => {
+    if (rerunLock.current || isAnyRunning || !canEdit) return false;
+    rerunLock.current = true;
+    try {
+      const mutation = scope ? rerunScopedMutation : kind === 'SPELL' ? rerunSpellMutation : rerunQcMutation;
+      await mutation.mutateAsync({ taskId, kind, whitelist: activeWhitelist, scope,
+        ...(kind !== 'SPELL' ? { reviewerNote: qcNote.trim() || undefined, refresh: qcRefresh } : {}),
+      });
+      return true;
+    } finally { rerunLock.current = false; }
+  };
 
   const openPreview = (target: LocatedCell | null) => {
     focusCounter.current += 1;
@@ -245,12 +262,7 @@ export default function TaskResultChecksPanel({ taskId, projectId }: TaskResultC
 
   const handleScopedRerun = async (kind: RerunKind) => {
     try {
-      await rerunScopedMutation.mutateAsync({
-        taskId,
-        kind,
-        whitelist: activeWhitelist,
-        scope: { scenarioIds: [], regions: rerunRegions },
-      });
+      if (!rerunRegions.length || !await requestRerun(kind, { scenarioIds: [], regions: rerunRegions })) return;
       Alert.alert('Thành công', 'Đang quét lại các vùng đã chọn...');
       setRerunRegions([]);
       setIsPreviewOpen(false);
@@ -308,7 +320,7 @@ export default function TaskResultChecksPanel({ taskId, projectId }: TaskResultC
 
   const handleRerunSpell = async () => {
     try {
-      await rerunSpellMutation.mutateAsync({ taskId, kind: 'SPELL', whitelist: activeWhitelist });
+      if (!await requestRerun('SPELL')) return;
       Alert.alert('Thành công', 'Đang kiểm tra lại chính tả...');
     } catch (err) {
       Alert.alert('Lỗi', errorText(err, 'Không thể kiểm tra lại chính tả'));
@@ -317,7 +329,7 @@ export default function TaskResultChecksPanel({ taskId, projectId }: TaskResultC
 
   const handleRerunQc = async () => {
     try {
-      await rerunQcMutation.mutateAsync({ taskId, kind: 'QC', whitelist: activeWhitelist });
+      if (!await requestRerun('QC')) return;
       Alert.alert('Thành công', 'Đang kiểm tra lại QC...');
     } catch (err) {
       Alert.alert('Lỗi', errorText(err, 'Không thể kiểm tra lại QC'));
@@ -348,6 +360,7 @@ export default function TaskResultChecksPanel({ taskId, projectId }: TaskResultC
 
   return (
     <View className="p-4 bg-background border border-border rounded-2xl gap-4">
+      {!!record.qcModels?.reviewerNote && <Text className="text-xs text-slate-600">Ghi chú cho AI lần kiểm tra đã lưu: {record.qcModels.reviewerNote}</Text>}
       {scopeSheets.length > 0 && previewSource && (
         <View className="gap-2 pb-3 border-b border-border">
           <View className="flex-row items-center justify-between gap-2">
@@ -623,6 +636,13 @@ export default function TaskResultChecksPanel({ taskId, projectId }: TaskResultC
 
           {canEdit && (
             <View className="gap-2">
+              <Text className="text-xs font-bold text-slate-600">Ghi chú cho AI khi kiểm tra lại (tùy chọn)</Text>
+              <TextInput accessibilityLabel="Ghi chú cho AI khi kiểm tra lại QC" multiline maxLength={1000} value={qcNote} onChangeText={setQcNote} editable={!isAnyRunning} placeholder="Ví dụ: chú ý đơn vị dung tích..." className="min-h-[80px] rounded-xl border border-slate-200 p-3 text-slate-900" />
+              <Text className="text-xs text-slate-500">{qcNote.length}/1.000 · AI vẫn lấy thông tin sản phẩm đã duyệt làm chuẩn. Có ghi chú thì các kịch bản đều được kiểm tra lại.</Text>
+              <View className="flex-row items-center gap-2">
+                <Switch accessibilityLabel="Gọi lại AI cho cả kịch bản không đổi" value={qcRefresh} onValueChange={setQcRefresh} disabled={isAnyRunning} />
+                <Text className="flex-1 text-xs text-slate-600">Gọi lại AI cho cả kịch bản không đổi (không dùng kết quả đã lưu)</Text>
+              </View>
               {!!projectId && (
                 <TouchableOpacity
                   className="flex-row items-center gap-1.5 self-start py-2"
@@ -635,7 +655,7 @@ export default function TaskResultChecksPanel({ taskId, projectId }: TaskResultC
                 </TouchableOpacity>
               )}
               <View className="self-start">
-                <ActionButton label="Kiểm tra lại QC" icon="refresh-cw" onPress={handleRerunQc} loading={rerunQcMutation.isPending} />
+                <ActionButton label="Kiểm tra lại QC" icon="refresh-cw" onPress={handleRerunQc} loading={rerunQcMutation.isPending} disabled={isAnyRunning} />
               </View>
             </View>
           )}

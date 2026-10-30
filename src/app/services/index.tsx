@@ -1,3 +1,6 @@
+import CatalogSortControls from '@/components/catalog/CatalogSortControls';
+import { CatalogSort, sortCatalog } from '@/utils/catalogSorting';
+import { useCatalogViewState } from '@/hooks/useCatalogViewState';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -34,7 +37,8 @@ export default function ServicesScreen() {
   // Tạo / Nhân bản / Xóa chỉ dành cho ADMIN & BOD (Service.Route.ts: roleMiddleware(["ADMIN","BOD"])).
   const canManage = canBulkDeleteServices(role);
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useCatalogViewState('services-search', '');
+  const [sort, setSort] = useCatalogViewState<CatalogSort>('services-sort', { key: 'code', direction: 'asc' });
   const [isFormOpen, setIsFormOpen] = useState(false);
   // `key` mới mỗi lần mở ⇒ ServiceFormModal remount và khởi tạo lại form state.
   const [formKey, setFormKey] = useState(0);
@@ -55,16 +59,8 @@ export default function ServicesScreen() {
         )
       : services;
 
-    // Sort mặc định theo `code` asc; dịch vụ chưa có mã xuống cuối.
-    return [...filtered].sort((a, b) => {
-      const codeA = (a.code || '').trim();
-      const codeB = (b.code || '').trim();
-      if (!codeA && !codeB) return (a.name || '').localeCompare(b.name || '');
-      if (!codeA) return 1;
-      if (!codeB) return -1;
-      return codeA.localeCompare(codeB, 'vi', { sensitivity: 'base' });
-    });
-  }, [searchQuery, services]);
+    return sortCatalog(filtered, sort);
+  }, [searchQuery, services, sort]);
 
   const exitSelectionMode = useCallback(() => {
     setIsSelectionMode(false);
@@ -88,16 +84,14 @@ export default function ServicesScreen() {
   );
 
   const handleDuplicate = useCallback(async () => {
-    if (selectedIds.length !== 1 || duplicateMutation.isPending) return;
+    if (!canManage || selectedIds.length !== 1 || duplicateMutation.isPending) return;
     const source = services.find((service) => service.id === selectedIds[0]);
     if (!source) return;
 
     try {
-      // Truyền danh sách mã hiện có để bản sao nhận mã duy nhất (`-COPY`, `-COPY2`, ...)
-      // — backend chặn trùng `code` nên giữ nguyên mã gốc sẽ luôn lỗi.
+      // Retry resumes configuration if the copy was already created.
       const duplicated = await duplicateMutation.mutateAsync({
         service: source,
-        existingCodes: services.map((service) => service.code),
       });
       await Haptic.notificationAsync(Haptic.NotificationFeedbackType.Success);
       exitSelectionMode();
@@ -113,10 +107,10 @@ export default function ServicesScreen() {
         duplicateError?.message || 'Vui lòng kiểm tra lại mã dịch vụ và thử lại.',
       );
     }
-  }, [duplicateMutation, exitSelectionMode, selectedIds, services]);
+  }, [canManage, duplicateMutation, exitSelectionMode, selectedIds, services]);
 
   const handleBulkDelete = useCallback(() => {
-    if (selectedIds.length === 0 || bulkDeleteMutation.isPending) return;
+    if (!canManage || selectedIds.length === 0 || bulkDeleteMutation.isPending) return;
 
     Alert.alert(
       'Xóa dịch vụ',
@@ -143,7 +137,7 @@ export default function ServicesScreen() {
         },
       ],
     );
-  }, [bulkDeleteMutation, exitSelectionMode, selectedIds]);
+  }, [canManage, bulkDeleteMutation, exitSelectionMode, selectedIds]);
 
   const handleServicePress = useCallback(
     (service: ServiceItem) => {
@@ -243,6 +237,7 @@ export default function ServicesScreen() {
         )}
       </View>
 
+      <CatalogSortControls value={sort} onChange={setSort} options={[{ key: 'name', label: 'Tên' }, { key: 'code', label: 'Mã' }, { key: 'unit', label: 'Đơn vị' }, { key: 'costPrice', label: 'Giá vốn' }]} />
       {/* Selection toolbar — chỉ ADMIN/BOD */}
       {isSelectionMode && canManage ? (
         <View className="flex-row gap-2 border-b border-slate-200 bg-white px-4 pb-3">
