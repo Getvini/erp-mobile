@@ -8,9 +8,11 @@ import {
   ActivityIndicator,
   RefreshControl,
   BackHandler,
+  Alert,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
-import { useRouter } from 'expo-router';
+import { getTaskPolicy, getTaskDisplayName } from '@/utils/taskPolicy';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -39,6 +41,8 @@ type StatusFilter =
   | 'AWAITING_PRICING'
   | 'AWAITING_SUPPORT'
   | 'OVERDUE'
+  | 'SUPPORT_PENDING'
+  | 'SUPPORT_AWAITING_RETURN'
   | 'ON_HOLD'
   | 'CANCELLED';
 
@@ -59,6 +63,8 @@ const STATUS_TABS: Array<{ id: StatusFilter; label: string }> = [
   { id: 'AWAITING_PRICING', label: 'Chờ định giá' },
   { id: 'AWAITING_SUPPORT', label: 'Nhờ hỗ trợ' },
   { id: 'OVERDUE', label: 'Quá hạn' },
+  { id: 'SUPPORT_PENDING', label: 'Chờ xác nhận hỗ trợ' },
+  { id: 'SUPPORT_AWAITING_RETURN', label: 'Chờ xác nhận hoàn thành' },
   { id: 'ON_HOLD', label: 'Tạm dừng' },
   { id: 'CANCELLED', label: 'Đã hủy' },
 ];
@@ -162,7 +168,7 @@ const TaskCardItem = React.memo(function TaskCardItem({
           </View>
 
           <Text className="mb-2.5 text-[15px] font-bold leading-[22px] text-slate-900" numberOfLines={2}>
-            {item.name}
+            {getTaskDisplayName(item)}
           </Text>
 
           <View className="mb-2.5 h-px bg-slate-100" />
@@ -196,23 +202,27 @@ const TaskCardItem = React.memo(function TaskCardItem({
 
 export default function TasksScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ status?: string; search?: string; projectId?: string; assigneeId?: string; deadline?: string; deadlineFrom?: string; deadlineTo?: string; dateType?: string; sortBy?: string; sortDir?: string }>();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<StatusFilter>('ALL');
+  const [activeTab, setActiveTab] = useState<StatusFilter>(STATUS_TABS.some(tab => tab.id === params.status) ? params.status as StatusFilter : 'ALL');
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('MINE');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(params.search || '');
+  const [debouncedSearch, setDebouncedSearch] = useState(params.search || '');
   const [page, setPage] = useState(1);
   const PAGE_LIMIT = 50;
 
   // Multi-select & Bulk Assign states
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [showAssignModal, setShowAssignModal] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => { setDebouncedSearch(searchQuery.trim()); setPage(1); setSelectedTaskIds([]); }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const currentUserId = user?.id;
   const userRole = user?.role;
   const canViewAllTasks = isManagementRole(userRole) || isProjectManagerRole(userRole) || isSalesRole(userRole);
 
-  const selectedTaskIdsSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds]);
-  const isSelectionMode = selectedTaskIds.length > 0;
 
   // Lắng nghe nút Back phần cứng trên Android: nếu đang chọn nhiều, bấm Back chỉ thoát Selection Mode
   useEffect(() => {
@@ -226,9 +236,11 @@ export default function TasksScreen() {
     return () => backHandler.remove();
   }, [selectedTaskIds.length]);
 
-  const { data: tasksRes, isLoading, isFetching, refetch } = useTasksQuery({
+  const { data: tasksRes, isLoading, isFetching, isError, refetch } = useTasksQuery({
+    search: debouncedSearch || undefined,
+    projectId: params.projectId, deadline: params.deadline, deadlineFrom: params.deadlineFrom, deadlineTo: params.deadlineTo, dateType: params.dateType, sortBy: params.sortBy, sortDir: params.sortDir,
     status: activeTab !== 'ALL' ? activeTab : undefined,
-    assigneeId: scopeFilter === 'MINE' || !canViewAllTasks ? currentUserId : undefined,
+    assigneeId: params.assigneeId || (scopeFilter === 'MINE' || !canViewAllTasks ? currentUserId : undefined),
     page: 1,
     limit: PAGE_LIMIT * page,
   });
@@ -238,6 +250,9 @@ export default function TasksScreen() {
     if (Array.isArray(tasksRes)) return tasksRes;
     return tasksRes.data || [];
   }, [tasksRes]);
+
+  const selectedTaskIdsSet = useMemo(() => new Set(tasks.filter(item => selectedTaskIds.includes(item.id) && getTaskPolicy(item, user).assign.enabled).map(item => item.id)), [tasks, selectedTaskIds, user]);
+  const isSelectionMode = selectedTaskIdsSet.size > 0;
 
   const totalTasksCount = useMemo(() => {
     if (!tasksRes) return 0;
@@ -251,11 +266,13 @@ export default function TasksScreen() {
   };
 
   const handleStatusTabChange = (status: StatusFilter) => {
+    setSelectedTaskIds([]);
     setActiveTab(status);
     setPage(1);
   };
 
   const handleScopeFilterChange = (scope: ScopeFilter) => {
+    setSelectedTaskIds([]);
     setScopeFilter(scope);
     setPage(1);
   };
@@ -272,46 +289,43 @@ export default function TasksScreen() {
         }
       }
 
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
-      return (
-        t.name?.toLowerCase().includes(q) ||
-        t.code?.toLowerCase().includes(q) ||
-        t.project?.name?.toLowerCase().includes(q) ||
-        t.assignee?.fullName?.toLowerCase().includes(q)
-      );
+      return true;
     });
-  }, [tasks, scopeFilter, currentUserId, searchQuery]);
+  }, [tasks, scopeFilter, currentUserId]);
 
+  const selectableTasks = useMemo(() => filteredTasks.filter(item => getTaskPolicy(item, user).assign.enabled), [filteredTasks, user]);
+  const canSelectTasks = selectableTasks.length > 0;
+  const selectionProjectId = tasks.find(item => selectedTaskIdsSet.has(item.id))?.project?.id;
   // Các thao tác chọn nhiều
   const handleToggleSelectTask = useCallback((id: string) => {
+    const item = tasks.find(item => item.id === id);
+    const state = getTaskPolicy(item, user).assign;
+    if (!state.enabled) return;
+    if (selectedTaskIds.length && item?.project?.id !== selectionProjectId) { Alert.alert('Chọn công việc', 'Vui lòng chọn các công việc trong cùng một dự án.'); return; }
     Haptics.selectionAsync();
     setSelectedTaskIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
-  }, []);
+  }, [tasks, user, selectedTaskIds, selectionProjectId]);
 
   const handleTaskLongPress = useCallback(
     (item: TaskItem) => {
-      if (!canViewAllTasks) return;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      setSelectedTaskIds((prev) =>
-        prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]
-      );
+      handleToggleSelectTask(item.id);
     },
-    [canViewAllTasks]
+    [handleToggleSelectTask]
   );
 
   const isAllFilteredSelected = useMemo(() => {
     return (
-      filteredTasks.length > 0 &&
-      filteredTasks.every((t) => selectedTaskIdsSet.has(t.id))
+      selectableTasks.length > 0 &&
+      selectableTasks.filter(task => task.project?.id === selectionProjectId).every((t) => selectedTaskIdsSet.has(t.id))
     );
-  }, [filteredTasks, selectedTaskIdsSet]);
+  }, [selectableTasks, selectedTaskIdsSet, selectionProjectId]);
 
   const handleToggleSelectAll = useCallback(() => {
     Haptics.selectionAsync();
-    const allFilteredIds = filteredTasks.map((t) => t.id);
+    const firstProject = selectionProjectId || selectableTasks[0]?.project?.id;
+    const allFilteredIds = selectableTasks.filter(item => item.project?.id === firstProject).map((t) => t.id);
     const isAllSelected =
       allFilteredIds.length > 0 && allFilteredIds.every((id) => selectedTaskIdsSet.has(id));
 
@@ -320,15 +334,15 @@ export default function TasksScreen() {
     } else {
       setSelectedTaskIds(allFilteredIds);
     }
-  }, [filteredTasks, selectedTaskIdsSet]);
+  }, [selectableTasks, selectionProjectId, selectedTaskIdsSet]);
 
   const handleCancelSelection = useCallback(() => {
     setSelectedTaskIds([]);
   }, []);
 
   const selectedTasksForAssign = useMemo(() => {
-    return tasks.filter((t) => selectedTaskIdsSet.has(t.id));
-  }, [tasks, selectedTaskIdsSet]);
+    return tasks.filter((t) => selectedTaskIdsSet.has(t.id) && getTaskPolicy(t, user).assign.enabled);
+  }, [tasks, selectedTaskIdsSet, user]);
 
   const handleOpenBulkAssignModal = useCallback(() => {
     if (selectedTasksForAssign.length === 0) return;
@@ -408,7 +422,7 @@ export default function TasksScreen() {
           <View className="flex-row items-center gap-1.5">
             <View className="h-2 w-2 rounded-full bg-primary" />
             <Text className="text-[15px] font-bold text-slate-900">
-              Đã chọn {selectedTaskIds.length} việc
+              Đã chọn {selectedTaskIdsSet.size} việc
             </Text>
           </View>
           <TouchableOpacity
@@ -431,13 +445,14 @@ export default function TasksScreen() {
             <Feather name="arrow-left" size={20} color="#0F172A" />
           </TouchableOpacity>
           <Text className="text-[17px] font-bold text-slate-900">Nhiệm vụ & Tiến độ</Text>
-          {canViewAllTasks ? (
+          {canSelectTasks ? (
             <TouchableOpacity
+              disabled={selectableTasks.length === 0}
               className="flex-row items-center gap-1 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5"
               onPress={() => {
                 Haptics.selectionAsync();
-                if (filteredTasks.length > 0) {
-                  setSelectedTaskIds([filteredTasks[0].id]);
+                if (selectableTasks.length > 0) {
+                  setSelectedTaskIds([selectableTasks[0].id]);
                 }
               }}
               activeOpacity={0.7}
@@ -568,6 +583,11 @@ export default function TasksScreen() {
           <ActivityIndicator size="large" color={BrandColors.primary} />
           <Text className="text-[13px] text-slate-400">Đang tải danh sách công việc...</Text>
         </View>
+      ) : isError ? (
+        <View className="flex-1 items-center justify-center gap-3 px-4">
+          <Text className="text-sm text-slate-600">Không thể tải danh sách công việc.</Text>
+          <TouchableOpacity onPress={() => refetch()} className="rounded-xl bg-orange-50 px-4 py-3"><Text>Thử lại</Text></TouchableOpacity>
+        </View>
       ) : (
         <FlashList
           data={filteredTasks}
@@ -577,7 +597,7 @@ export default function TasksScreen() {
           showsVerticalScrollIndicator={false}
           onEndReachedThreshold={0.4}
           onEndReached={() => {
-            if (!isFetching && filteredTasks.length >= PAGE_LIMIT * page) {
+            if (!isFetching && !isError && tasks.length < totalTasksCount) {
               setPage((prev) => prev + 1);
             }
           }}
@@ -612,7 +632,7 @@ export default function TasksScreen() {
       )}
 
       {/* Floating Bulk Action Bar — Nằm trong Thumb Zone đáy màn hình */}
-      {selectedTaskIds.length > 0 && (
+      {selectedTaskIdsSet.size > 0 && (
         <View
           className="absolute bottom-20 left-4 right-4 z-50 flex-row items-center justify-between rounded-2xl border border-orange-200 bg-white px-4 py-3"
           style={{
@@ -625,7 +645,7 @@ export default function TasksScreen() {
         >
           <View className="flex-row items-center gap-2">
             <View className="rounded-full bg-orange-100 px-2.5 py-0.5">
-              <Text className="text-xs font-black text-orange-700">{selectedTaskIds.length}</Text>
+              <Text className="text-xs font-black text-orange-700">{selectedTaskIdsSet.size}</Text>
             </View>
             <Text className="text-xs font-semibold text-slate-700">việc đã chọn</Text>
           </View>
@@ -637,7 +657,7 @@ export default function TasksScreen() {
           >
             <Feather name="users" size={15} color="#FFFFFF" />
             <Text className="text-[13px] font-bold text-white">
-              Phân công ({selectedTaskIds.length})
+              Phân công ({selectedTaskIdsSet.size})
             </Text>
           </TouchableOpacity>
         </View>

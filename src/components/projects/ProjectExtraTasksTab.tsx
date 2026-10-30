@@ -1,3 +1,4 @@
+import { getTaskDisplayName } from '@/utils/taskPolicy';
 import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -190,7 +191,7 @@ export default function ProjectExtraTasksTab({
                   </View>
                 </View>
 
-                <Text className="text-[13px] font-bold text-slate-950">{task.name}</Text>
+                <Text className="text-[13px] font-bold text-slate-950">{getTaskDisplayName(task)}</Text>
                 {(task as any).job?.name ? (
                   <Text className="text-[11px] text-slate-500" numberOfLines={1}>
                     {(task as any).job.name}

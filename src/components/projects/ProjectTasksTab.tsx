@@ -1,3 +1,5 @@
+import { useAuth } from '@/context/AuthContext';
+import { getTaskPolicy, getTaskDisplayName } from '@/utils/taskPolicy';
 import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
@@ -12,6 +14,7 @@ import * as Haptics from 'expo-haptics';
 import { TaskDetail, TASK_STATUS_CONFIG } from '@/services/taskService';
 import { BrandColors } from '@/constants/colors';
 import { REWORK_STATUSES } from '@/utils/taskLifecycle';
+import { EditTaskNicknameModal } from '@/components/tasks/EditTaskNicknameModal';
 
 const codeCollator = new Intl.Collator(undefined, { numeric: true });
 const groupCollator = new Intl.Collator('vi');
@@ -36,6 +39,7 @@ const getStatusBadge = (status?: string) => {
 };
 
 interface TaskCardProps {
+  project?: any;
   item: TaskDetail;
   isSelected: boolean;
   canAssign: boolean;
@@ -44,6 +48,7 @@ interface TaskCardProps {
   onToggleSelect: (id: string) => void;
   onPress: (id: string) => void;
   onAssign: (item: TaskDetail) => void;
+  onEditNickname?: (item: TaskDetail) => void;
 }
 
 /**
@@ -52,6 +57,7 @@ interface TaskCardProps {
  */
 const TaskCard = React.memo(function TaskCard({
   item,
+  project,
   isSelected,
   canAssign,
   isPendingConfirmation,
@@ -59,11 +65,15 @@ const TaskCard = React.memo(function TaskCard({
   onToggleSelect,
   onPress,
   onAssign,
+  onEditNickname,
 }: TaskCardProps) {
+  const { user } = useAuth();
+  const assignmentPolicy = getTaskPolicy(item, user, { project })[
+    item.assigneeId || item.assignee?.id || (item as any).vendorId || (item as any).vendor ? 'reassign' : 'assign'];
   const statusInfo = getStatusBadge(item.status);
   const progress = item.progress ?? (item.status === 'DONE' ? 100 : 0);
   const isUnassigned = !item.assigneeId && (item.status === 'PENDING' || item.status === 'AWAITING_SUPPORT');
-  const isAssigned = ['DOING', 'OVERDUE', ...REWORK_STATUSES].includes(item.status || '');
+
   const isExtra = isExtraTaskItem(item);
 
   return (
@@ -138,7 +148,24 @@ const TaskCard = React.memo(function TaskCard({
         )}
       </View>
 
-      <Text className="text-[13px] font-bold text-slate-950">{item.nickname ?? item.name}</Text>
+      <View className="flex-row items-center justify-between gap-2">
+        <Text className="flex-1 text-[13px] font-bold text-slate-950" numberOfLines={2}>
+          {getTaskDisplayName(item)}
+        </Text>
+        {canManageAssignment && onEditNickname && (
+          <TouchableOpacity
+            onPress={(e) => {
+              e.stopPropagation();
+              onEditNickname(item);
+            }}
+            hitSlop={8}
+            className="h-6 w-6 items-center justify-center rounded-md border border-slate-200 bg-slate-50"
+            accessibilityLabel="Đổi tên gợi nhớ công việc"
+          >
+            <Feather name="edit-2" size={11} color="#64748B" />
+          </TouchableOpacity>
+        )}
+      </View>
       {item.description ? (
         <Text className="text-xs leading-4 text-slate-500" numberOfLines={2}>
           {item.description}
@@ -176,26 +203,13 @@ const TaskCard = React.memo(function TaskCard({
           </View>
         </View>
 
-        {!isPendingConfirmation && canManageAssignment && (
-          isUnassigned ? (
-            <TouchableOpacity
-              className="flex-row items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5"
-              onPress={() => onAssign(item)}
-              activeOpacity={0.7}
-            >
-              <Feather name="user-plus" size={13} color="#FFFFFF" />
-              <Text className="text-[11px] font-bold text-white">Phân công</Text>
-            </TouchableOpacity>
-          ) : isAssigned ? (
-            <TouchableOpacity
-              className="flex-row items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5"
-              onPress={() => onAssign(item)}
-              activeOpacity={0.7}
-            >
-              <Feather name="user-check" size={13} color="#D97706" />
-              <Text className="text-[11px] font-bold text-amber-600">Đổi người</Text>
-            </TouchableOpacity>
-          ) : null
+        {assignmentPolicy.enabled && (
+          <TouchableOpacity accessibilityLabel="Phân công công việc"
+            className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-3"
+            onPress={event => { event.stopPropagation(); onAssign(item); }}
+            accessibilityRole="button">
+            <Text className="text-xs font-bold text-orange-700">{item.assigneeId || item.assignee?.id || (item as any).vendor ? 'Đổi người' : 'Phân công'}</Text>
+          </TouchableOpacity>
         )}
       </View>
     </TouchableOpacity>
@@ -251,6 +265,7 @@ const GroupHeaderRow = React.memo(function GroupHeaderRow({
 });
 
 interface ProjectTasksTabProps {
+  project?: any;
   tasks: TaskDetail[];
   isLoading: boolean;
   isRefreshing?: boolean;
@@ -264,10 +279,13 @@ interface ProjectTasksTabProps {
   onToggleSelectGroup?: (groupTasks: TaskDetail[]) => void;
   onOpenUpdateTask?: (task: TaskDetail) => void;
   onAssignTask?: (task: TaskDetail | TaskDetail[]) => void;
-  onOpenAddExtraTask: () => void;
+  onOpenAddService: () => void;
+  isProjectLead?: boolean;
+  onOpenRequestStaffing?: () => void;
 }
 
 export default function ProjectTasksTab({
+  project,
   tasks,
   isLoading,
   isRefreshing = false,
@@ -280,15 +298,20 @@ export default function ProjectTasksTab({
   onToggleSelectTask,
   onToggleSelectGroup,
   onAssignTask,
-  onOpenAddExtraTask,
+  onOpenAddService,
+  isProjectLead = false,
+  onOpenRequestStaffing,
 }: ProjectTasksTabProps) {
   const router = useRouter();
+  const { user } = useAuth();
+  const canAssignItem = useCallback((item: TaskDetail) => getTaskPolicy(item, user, { project, assignmentContext: 'batch' }).assign.enabled, [user, project]);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [internalSelectedTaskIds, setInternalSelectedTaskIds] = useState<string[]>([]);
+  const [editingNicknameTask, setEditingNicknameTask] = useState<TaskDetail | null>(null);
 
-  const selectedTaskIds = useMemo(() => propSelectedTaskIds ?? internalSelectedTaskIds.filter(
-    (id) => tasks.some((task) => task.id === id && isTaskAssignable(task)),
-  ), [propSelectedTaskIds, internalSelectedTaskIds, tasks]);
+  const selectedTaskIds = useMemo(() => (propSelectedTaskIds ?? internalSelectedTaskIds).filter(
+    (id) => tasks.some((task) => task.id === id && canAssignItem(task)),
+  ), [propSelectedTaskIds, internalSelectedTaskIds, tasks, canAssignItem]);
 
   // Set lookup O(1) thay cho Array.includes O(N) khi render hàng loạt item
   const selectedTaskIdsSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds]);
@@ -300,13 +323,15 @@ export default function ProjectTasksTab({
     }));
   }, []);
 
-  const assignableTasks = useMemo(() => tasks.filter(isTaskAssignable), [tasks]);
+  const assignableTasks = useMemo(() => tasks.filter(canAssignItem), [tasks, canAssignItem]);
   const assignableTaskIdSet = useMemo(
     () => new Set(assignableTasks.map((t) => t.id)),
     [assignableTasks]
   );
 
   const toggleSelectTask = useCallback((taskId: string) => {
+    const selectedTask = tasks.find(task => task.id === taskId);
+    if (!selectedTask || !canAssignItem(selectedTask)) return;
     if (onToggleSelectTask) {
       onToggleSelectTask(taskId);
     } else {
@@ -314,7 +339,7 @@ export default function ProjectTasksTab({
         prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]
       );
     }
-  }, [onToggleSelectTask]);
+  }, [onToggleSelectTask, tasks, canAssignItem]);
 
   const toggleSelectGroup = useCallback((groupTasks: TaskDetail[]) => {
     if (onToggleSelectGroup) {
@@ -322,7 +347,7 @@ export default function ProjectTasksTab({
       return;
     }
 
-    const groupAssignable = groupTasks.filter(isTaskAssignable);
+    const groupAssignable = groupTasks.filter(canAssignItem);
     if (groupAssignable.length === 0) return;
 
     const assignableIds = groupAssignable.map((t) => t.id);
@@ -333,15 +358,17 @@ export default function ProjectTasksTab({
     } else {
       setInternalSelectedTaskIds((prev) => Array.from(new Set([...prev, ...assignableIds])));
     }
-  }, [onToggleSelectGroup, selectedTaskIdsSet]);
+  }, [onToggleSelectGroup, selectedTaskIdsSet, canAssignItem]);
 
   const handlePressTask = useCallback((taskId: string) => {
     router.push(`/tasks/${taskId}` as any);
   }, [router]);
 
   const handleAssignTask = useCallback((item: TaskDetail) => {
+    const state = getTaskPolicy(item, user, { project })[item.assigneeId || item.assignee?.id || (item as any).vendor ? 'reassign' : 'assign'];
+    if (!state.enabled) return;
     onAssignTask?.(item);
-  }, [onAssignTask]);
+  }, [onAssignTask, user, project]);
 
   const isPendingConfirmation = projectStatus === 'PENDING_CONFIRMATION';
 
@@ -363,7 +390,7 @@ export default function ProjectTasksTab({
         groups[jobId] = { jobName, tasks: [], assignableTaskIds: [] };
       }
       groups[jobId].tasks.push(t);
-      if (isTaskAssignable(t)) {
+      if (canAssignItem(t)) {
         groups[jobId].assignableTaskIds.push(t.id);
       }
     });
@@ -378,7 +405,7 @@ export default function ProjectTasksTab({
         assignableTaskIds: groups[key].assignableTaskIds,
       }))
       .sort((a, b) => groupCollator.compare(a.jobName, b.jobName));
-  }, [tasks]);
+  }, [tasks, canAssignItem]);
 
   // Tách từng task thành một row: nhóm lớn cũng chỉ dựng các thẻ trong vùng nhìn.
   const rows = useMemo(() => groupedTasks.flatMap((group) => [
@@ -396,6 +423,7 @@ export default function ProjectTasksTab({
           <View className="mb-2.5">
             <TaskCard
               item={task}
+              project={project}
               isSelected={selectedTaskIdsSet.has(task.id)}
               canAssign={canAssignTasks && assignableTaskIdSet.has(task.id)}
               isPendingConfirmation={isPendingConfirmation}
@@ -403,6 +431,7 @@ export default function ProjectTasksTab({
               onToggleSelect={toggleSelectTask}
               onPress={handlePressTask}
               onAssign={handleAssignTask}
+              onEditNickname={setEditingNicknameTask}
             />
           </View>
         );
@@ -423,6 +452,7 @@ export default function ProjectTasksTab({
     },
     [
       selectedTaskIdsSet,
+      project,
       canAssignTasks,
       assignableTaskIdSet,
       isPendingConfirmation,
@@ -440,7 +470,8 @@ export default function ProjectTasksTab({
   const getItemType = useCallback((row: (typeof rows)[number]) => (row.task ? 'task' : 'group'), []);
 
   return (
-    <FlashList
+    <>
+      <FlashList
       data={isLoading ? [] : rows}
       keyExtractor={keyExtractor}
       renderItem={renderRow}
@@ -481,18 +512,37 @@ export default function ProjectTasksTab({
               </Text>
             </View>
 
-            {!isPendingConfirmation && canCreateProjectWork && (
-              <TouchableOpacity
-                className="flex-row items-center gap-1.5 rounded-xl bg-primary px-3 py-2"
-                onPress={onOpenAddExtraTask}
-                activeOpacity={0.8}
-              >
-                <Feather name="plus" size={15} color="#FFFFFF" />
-                <Text className="text-[12px] font-bold text-white" numberOfLines={1}>
-                  Thêm việc
-                </Text>
-              </TouchableOpacity>
-            )}
+            <View className="flex-row items-center gap-2">
+              {!isPendingConfirmation && isProjectLead && onOpenRequestStaffing && (
+                <TouchableOpacity
+                  className="min-h-12 flex-row items-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2"
+                  onPress={onOpenRequestStaffing}
+                  accessibilityRole="button"
+                  accessibilityLabel="Yêu cầu thêm người"
+                  activeOpacity={0.8}
+                >
+                  <Feather name="user-plus" size={15} color={BrandColors.primary} />
+                  <Text className="text-[12px] font-bold text-primary" numberOfLines={1}>
+                    Thêm người
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {!isPendingConfirmation && canCreateProjectWork && (
+                <TouchableOpacity
+                  className="min-h-12 flex-row items-center gap-1.5 rounded-xl bg-primary px-3 py-2"
+                  onPress={onOpenAddService}
+                  accessibilityRole="button"
+                  accessibilityLabel="Thêm dịch vụ"
+                  activeOpacity={0.8}
+                >
+                  <Feather name="plus" size={15} color="#FFFFFF" />
+                  <Text className="text-[12px] font-bold text-white" numberOfLines={1}>
+                    Thêm dịch vụ
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
       }
@@ -520,5 +570,11 @@ export default function ProjectTasksTab({
         )
       }
     />
+      <EditTaskNicknameModal
+        visible={Boolean(editingNicknameTask)}
+        task={editingNicknameTask}
+        onClose={() => setEditingNicknameTask(null)}
+      />
+    </>
   );
 }

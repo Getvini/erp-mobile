@@ -1,3 +1,5 @@
+import { useAuth } from '@/context/AuthContext';
+import { getTaskPolicy, getTaskDisplayName } from '@/utils/taskPolicy';
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -11,10 +13,11 @@ import { useBulkStartTasksMutation } from '@/hooks/queries/useTasks';
  * Tab "Công việc của tôi" (P1.11) — mirror `TaskTable bulkAction="start"` của Web:
  * chỉ chọn được việc đang ở NOT_STARTED, đã giao cho mình, và dự án đang chạy.
  */
-const STARTABLE_TASK_STATUS = 'NOT_STARTED';
-const PROJECT_STARTABLE_STATUSES = ['IN_PROGRESS', 'CONFIRMED'];
+
+
 
 interface ProjectMyTasksTabProps {
+  project?: any;
   projectId: string;
   tasks: TaskDetail[];
   isLoading?: boolean;
@@ -27,6 +30,7 @@ interface ProjectMyTasksTabProps {
 }
 
 export default function ProjectMyTasksTab({
+  project,
   projectId,
   tasks,
   isLoading = false,
@@ -36,24 +40,20 @@ export default function ProjectMyTasksTab({
   onChanged,
 }: ProjectMyTasksTabProps) {
   const router = useRouter();
+  const { user } = useAuth();
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedTaskIds] = useState<string[]>([]);
 
   const myTasks = useMemo(() => {
     if (!currentUserId) return [];
     return tasks.filter(
-      (t) => t.assigneeId === currentUserId || (t as any).assignee?.id === currentUserId
+      (t) => t.assigneeId === currentUserId || (t as any).assignee?.id === currentUserId || t.helperId === currentUserId || (t as any).helper?.id === currentUserId
     );
   }, [tasks, currentUserId]);
 
-  const isProjectStartable = projectHasAccount && PROJECT_STARTABLE_STATUSES.includes(projectStatus || '');
-
   const isTaskStartable = useCallback(
-    (task: TaskDetail): boolean =>
-      isProjectStartable &&
-      task.status === STARTABLE_TASK_STATUS &&
-      (task.assigneeId === currentUserId || (task as any).assignee?.id === currentUserId),
-    [isProjectStartable, currentUserId],
+    (task: TaskDetail): boolean => getTaskPolicy(task, user, { project: project || task.project }).start.enabled,
+    [user, project],
   );
 
   const startableTasks = useMemo(
@@ -85,6 +85,7 @@ export default function ProjectMyTasksTab({
         {
           text: 'Bắt đầu',
           onPress: async () => {
+            if (bulkStartMutation.isPending || selectedTaskIds.some(id => !tasks.some(task => task.id === id && isTaskStartable(task)))) return;
             try {
               await bulkStartMutation.mutateAsync({ projectId, taskIds: selectedTaskIds });
               Alert.alert('Thành công', `Đã bắt đầu ${selectedTaskIds.length} công việc.`);
@@ -259,7 +260,7 @@ export default function ProjectMyTasksTab({
                   )} */}
                 </View>
 
-                <Text className="text-[13px] font-bold text-slate-950">{item.name}</Text>
+                <Text className="text-[13px] font-bold text-slate-950">{getTaskDisplayName(item)}</Text>
                 {item.description ? (
                   <Text className="text-xs leading-4 text-slate-500" numberOfLines={2}>
                     {item.description}

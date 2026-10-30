@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { getTaskPolicy } from '@/utils/taskPolicy';
 import { useAuth } from '@/context/AuthContext';
 import { type TaskDetail } from '@/services/taskService';
+import { BrandColors } from '@/constants/colors';
 import {
   useStartTaskMutation,
   useSubmitResultForReviewMutation,
@@ -38,13 +40,28 @@ interface TaskLifecycleActionsProps {
   onOpenResultModal?: () => void;
   /** Sau khi xóa thành công (mặc định fallback về onChanged) */
   onDeleted?: () => void;
+  canAddSubtask?: boolean;
+  onOpenSubtaskModal?: () => void;
+  canRemind?: boolean;
+  onSendReminder?: () => void;
+  canAssign?: boolean;
+  onOpenAssignModal?: () => void;
+  canRework?: boolean;
+  onOpenReworkModal?: () => void;
+  canReview?: boolean;
+  onOpenReviewModal?: () => void;
+  canCustomerApprove?: boolean;
+  onCustomerApprove?: () => void;
+  canRequestSupport?: boolean;
+  onRequestSupport?: () => void;
+  isActionLoading?: boolean;
 }
 
 /** Trạng thái cho phép Account/Admin gửi yêu cầu bổ sung nhân sự (mirror erp-UI TaskDelegationPanel) */
-const STAFFING_REQUESTABLE_STATUSES = ['PENDING', 'NOT_STARTED', 'DOING', 'REWORKING', 'OVERDUE'];
+
 
 /** Vai trò được phép "Khách không mua" (task Video AI demo) */
-const NOT_PURCHASE_ROLES = ['BD', 'ADMIN_SALE', 'ADMIN', 'BOD'];
+
 
 export default function TaskLifecycleActions({
   task,
@@ -52,6 +69,21 @@ export default function TaskLifecycleActions({
   onChanged,
   onOpenResultModal,
   onDeleted,
+  canAddSubtask,
+  onOpenSubtaskModal,
+  canRemind,
+  onSendReminder,
+  canAssign,
+  onOpenAssignModal,
+  canRework,
+  onOpenReworkModal,
+  canReview,
+  onOpenReviewModal,
+  canCustomerApprove,
+  onCustomerApprove,
+  canRequestSupport,
+  onRequestSupport,
+  isActionLoading = false,
 }: TaskLifecycleActionsProps) {
   const { user } = useAuth();
   const [isStaffingModalOpen, setIsStaffingModalOpen] = useState(false);
@@ -65,59 +97,20 @@ export default function TaskLifecycleActions({
   const deleteTaskMutation = useDeleteTaskMutation();
   const customerNotPurchaseMutation = useCustomerNotPurchaseMutation();
 
-  const currentUserId = user?.id;
-  const role = String(user?.role || '').toUpperCase();
-  const status = String(task?.status || '');
+
   const resolvedProjectId = projectId || task?.project?.id;
-
-  const isAdminOverride = ['ADMIN', 'BOD'].includes(role);
-  const isManagement = ['ADMIN', 'BOD', 'PM', 'TEAM_LEAD'].includes(role);
-  const teamLeadId = task?.project?.team?.teamLead?.id;
-  const isProjectAccount = Boolean(currentUserId && teamLeadId && currentUserId === teamLeadId);
-  const isAccount = isProjectAccount || role === 'TEAM_LEAD';
-  const projectManagerId = (task as any)?.project?.projectManager?.id;
-  const isAssignedPM = Boolean(currentUserId && projectManagerId && currentUserId === projectManagerId);
-  const canRespondStaffingRole = ['PM', 'TEAM_LEAD'].includes(role) || isAdminOverride || isAssignedPM;
-
-  const isAssignee = Boolean(currentUserId && task?.assigneeId && currentUserId === task.assigneeId);
-  const isHelper = Boolean(currentUserId && task?.helperId && currentUserId === task.helperId);
-  const isAssigner = Boolean(currentUserId && task?.assignerId && currentUserId === task.assignerId);
-
-  /** Task Video AI demo: `opportunityService.job.isBriefVideo` (fallback các biến thể payload) */
-  const isVideoDemoTask = Boolean(
-    (task as any)?.opportunityServiceJob?.isBriefVideo ||
-      (task as any)?.opportunityServiceJob?.job?.isBriefVideo ||
-      (task as any)?.job?.isBriefVideo
-  );
-
-  const isStartableWindow = STARTABLE.includes(status);
-  const canStart = canStartTask(status, isAssignee);
+  const policy = getTaskPolicy(task, user);
+  const isStartableWindow = policy.start.enabled;
+  const canStart = policy.start.enabled;
+  const isAssignee = policy.start.enabled;
   const isParentBlocked = isParentBlockedBySubtasks(task);
-  const canUploadResult = canSubmitResult(status) && (isAssignee || isHelper || isAssigner || isManagement);
+  const canUploadResult = policy.uploadResult.enabled;
   const hasSubmittedResult = Boolean(task?.result);
-  const canSubmitForReview =
-    canSubmitResult(status) &&
-    hasSubmittedResult &&
-    (isAdminOverride ||
-      isAssignee ||
-      isHelper ||
-      (Boolean(currentUserId) &&
-        ((task as any)?.lastSubmittedById === currentUserId ||
-          task?.lastSubmittedBy?.id === currentUserId))) &&
-    !isParentBlocked;
-  const isPendingStaffingRequest =
-    task?.supportRequestType === 'STAFFING' &&
-    Boolean(task?.isSupportRequested) &&
-    !task?.isSupportAccepted;
-  const canRequestStaffing =
-    task?.performerType === 'INTERNAL' &&
-    STAFFING_REQUESTABLE_STATUSES.includes(status) &&
-    (isAccount || isAdminOverride) &&
-    !isPendingStaffingRequest;
-  const canRespondStaffing = isPendingStaffingRequest && canRespondStaffingRole;
-  const canMarkNotPurchased =
-    isVideoDemoTask && status === 'INTERNAL_COMPLETED' && NOT_PURCHASE_ROLES.includes(role);
-  const canDeleteTask =  isAdminOverride;
+  const canSubmitForReview = policy.submitReview.enabled;
+  const canRequestStaffing = policy.requestStaffing.enabled;
+  const canRespondStaffing = (policy.resolveStaffing.enabled || policy.rejectStaffing.enabled) && task?.supportRequestType === 'STAFFING' && task?.isSupportRequested && !task?.isSupportAccepted;
+  const canMarkNotPurchased = policy.customerNotPurchase.enabled;
+  const canDeleteTask = policy.delete.enabled;
 
   const isPending =
     startTaskMutation.isPending ||
@@ -135,6 +128,7 @@ export default function TaskLifecycleActions({
   if (!task) return null;
 
   const handleStart = async () => {
+    if (!policy.start.enabled || isPending) return;
     try {
       await startTaskMutation.mutateAsync({ id: task.id, projectId: resolvedProjectId });
       Alert.alert('Thành công', 'Đã bắt đầu công việc');
@@ -145,6 +139,7 @@ export default function TaskLifecycleActions({
   };
 
   const handleOpenResultModal = () => {
+    if (!policy.uploadResult.enabled || isPending) return;
     if (onOpenResultModal) {
       onOpenResultModal();
       return;
@@ -153,6 +148,7 @@ export default function TaskLifecycleActions({
   };
 
   const handleSubmitForReview = async () => {
+    if (!policy.submitReview.enabled || isPending) return;
     try {
       await submitResultForReviewMutation.mutateAsync({ id: task.id, projectId: resolvedProjectId });
       Alert.alert('Thành công', 'Đã gửi kết quả để duyệt');
@@ -163,6 +159,7 @@ export default function TaskLifecycleActions({
   };
 
   const handleRequestStaffing = async () => {
+    if (!policy.requestStaffing.enabled || isPending) return;
     const note = staffingNote.trim();
     if (!note) {
       setNoteError('Vui lòng nhập nhu cầu nhân sự');
@@ -181,6 +178,7 @@ export default function TaskLifecycleActions({
   };
 
   const handleRespondStaffing = async (action: 'RESOLVE' | 'REJECT') => {
+    if (!(action === 'RESOLVE' ? policy.resolveStaffing : policy.rejectStaffing).enabled || isPending) return;
     try {
       await respondTaskStaffingMutation.mutateAsync({ id: task.id, action });
       Alert.alert(
@@ -194,6 +192,7 @@ export default function TaskLifecycleActions({
   };
 
   const handleCustomerNotPurchase = () => {
+    if (!policy.customerNotPurchase.enabled || isPending) return;
     Alert.alert('Xác nhận', 'Đánh dấu khách hàng không mua cho công việc này?', [
       { text: 'Hủy', style: 'cancel' },
       {
@@ -215,6 +214,7 @@ export default function TaskLifecycleActions({
   };
 
   const handleDeleteTask = () => {
+    if (!policy.delete.enabled || isPending) return;
     // Không thể xóa công việc khi còn công việc con (subtask)
     if ((task.subtasks || []).length > 0) {
       Alert.alert('Không thể xóa', 'Không thể xóa công việc khi còn công việc con');
@@ -243,34 +243,28 @@ export default function TaskLifecycleActions({
   const hasAnyAction =
     isStartableWindow ||
     canUploadResult ||
-    canSubmitForReview ||
     canRequestStaffing ||
     canRespondStaffing ||
     canMarkNotPurchased ||
-    canDeleteTask;
+    canDeleteTask ||
+    canAddSubtask ||
+    canRemind ||
+    canAssign ||
+    canRework ||
+    canReview ||
+    canCustomerApprove ||
+    canRequestSupport;
 
   // Ẩn hoàn toàn khối thao tác khi không đủ quyền và không có cảnh báo nào
   if (!hasAnyAction && !isParentBlocked) return null;
 
-  const buttonBase = 'flex-1 flex-row items-center justify-center gap-2 px-4 h-[42px] rounded-xl';
-  const disabledClass = isPending ? 'opacity-60' : '';
+  const buttonBase = 'flex-row items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl min-h-[40px]';
+  const disabledClass = isPending || isActionLoading ? 'opacity-60' : '';
   const blockedClass = 'opacity-40';
 
   return (
     <>
       <View className="gap-2">
-        {/* <View className="flex-row items-center gap-2.5">
-          <View className="w-8 h-8 rounded-lg bg-blue-50 items-center justify-center">
-            <Feather name="zap" size={16} color="#2563EB" />
-          </View>
-          <View className="flex-1">
-            <Text className="text-[15px] font-bold text-slate-900">Thao tác công việc</Text>
-            <Text className="text-[10px] font-semibold text-slate-400">
-              Vòng đời: bắt đầu → nộp kết quả → gửi duyệt
-            </Text>
-          </View>
-        </View> */}
-
         {/* Banner khóa task cha khi còn công việc con chưa hoàn tất */}
         {isParentBlocked && (
           <View className="flex-row items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
@@ -279,59 +273,52 @@ export default function TaskLifecycleActions({
           </View>
         )}
 
-        <View className="flex-row flex-wrap gap-2">
-          {/* 1. Bắt đầu — chỉ assignee */}
-          {isStartableWindow && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, flexDirection: 'row', alignItems: 'center' }}
+          className="pb-0.5"
+        >
+          {/* 1. Bắt đầu công việc */}
+          {policy.start.enabled && (
             <TouchableOpacity
-              className={`${buttonBase} bg-blue-600 ${canStart && !isPending ? '' : blockedClass}`}
+              accessibilityLabel="Bắt đầu công việc"
+              className={`${buttonBase} bg-primary ${isPending ? blockedClass : ''}`}
               onPress={handleStart}
-              disabled={!canStart || isPending}
+              disabled={isPending}
               activeOpacity={0.85}
+              style={[isPending ? { opacity: 0.5 } : undefined]}
+              accessibilityRole="button"
             >
               {startTaskMutation.isPending ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Feather name="play" size={15} color="#FFFFFF" />
+                <Feather name="play" size={14} color="#FFFFFF" />
               )}
-              <Text className="text-xs font-bold text-white">Bắt đầu</Text>
+              <Text className="text-xs font-bold text-white">Bắt đầu công việc</Text>
             </TouchableOpacity>
           )}
 
-          {/* 2. Nộp kết quả — mở modal nộp kết quả có sẵn của tasks/[id].tsx */}
-          {/* {canUploadResult && (
+          {/* 2. Nhắc việc */}
+          {canRemind && onSendReminder && (
             <TouchableOpacity
-              className={`${buttonBase} bg-primary ${isParentBlocked || isPending ? blockedClass : ''}`}
-              onPress={handleOpenResultModal}
-              disabled={isParentBlocked || isPending}
+              accessibilityLabel="Nhắc việc"
+              className={`${buttonBase} bg-primary ${isActionLoading ? blockedClass : ''}`}
+              onPress={onSendReminder}
+              disabled={isActionLoading || isPending}
               activeOpacity={0.85}
+              style={[isActionLoading || isPending ? { opacity: 0.5 } : undefined]}
+              accessibilityRole="button"
             >
-              <Feather name="upload" size={15} color="#FFFFFF" />
-              <Text className="text-xs font-bold text-white">
-                {hasSubmittedResult ? 'Cập nhật kết quả' : 'Nộp kết quả'}
-              </Text>
-            </TouchableOpacity>
-          )} */}
-
-          {/* 3. Gửi duyệt — đã có kết quả chờ gửi */}
-          {canSubmitForReview && (
-            <TouchableOpacity
-              className={`${buttonBase} bg-emerald-600 ${isParentBlocked || isPending ? blockedClass : ''}`}
-              onPress={handleSubmitForReview}
-              disabled={isParentBlocked || isPending}
-              activeOpacity={0.85}
-            >
-              {submitResultForReviewMutation.isPending ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Feather name="send" size={15} color="#FFFFFF" />
-              )}
-              <Text className="text-xs font-bold text-white">Gửi duyệt</Text>
+              <Feather name="bell" size={14} color="#FFFFFF" />
+              <Text className="text-xs font-bold text-white">Nhắc việc</Text>
             </TouchableOpacity>
           )}
 
-          {/* 4. Nhờ hỗ trợ (điều phối nhân sự) — Account/Admin, note bắt buộc */}
-          {canRequestStaffing && (
+          {/* 3. Yêu cầu thêm người */}
+          {policy.requestStaffing.enabled && (
             <TouchableOpacity
+              accessibilityLabel="Yêu cầu thêm người"
               className={`${buttonBase} bg-orange-50 border border-orange-200 ${disabledClass}`}
               onPress={() => {
                 setNoteError(null);
@@ -339,85 +326,171 @@ export default function TaskLifecycleActions({
               }}
               disabled={isPending}
               activeOpacity={0.85}
+              style={[isPending ? { opacity: 0.5 } : undefined]}
+              accessibilityRole="button"
             >
-              <Feather name="user-plus" size={15} color="#C2410C" />
-              <Text className="text-xs font-bold text-orange-700">Yêu cầu thêm người</Text>
+              <Feather name="user-plus" size={14} color={BrandColors.primary} />
+              <Text className="text-xs font-bold text-orange-700">
+                {task?.supportRequestType === 'STAFFING' && task?.isSupportRequested && !task?.isSupportAccepted
+                  ? 'Đang chờ PM'
+                  : 'Yêu cầu thêm người'}
+              </Text>
             </TouchableOpacity>
           )}
 
-          {/* 5. Phản hồi điều phối — PM được chỉ định / ADMIN / BOD */}
+          {/* 4. Thêm subtask */}
+          {canAddSubtask && onOpenSubtaskModal && (
+            <TouchableOpacity
+              accessibilityLabel="Thêm subtask"
+              className={`${buttonBase} bg-orange-50 border border-orange-200 ${disabledClass}`}
+              onPress={onOpenSubtaskModal}
+              disabled={isPending || isActionLoading}
+              activeOpacity={0.85}
+              style={[isPending || isActionLoading ? { opacity: 0.5 } : undefined]}
+              accessibilityRole="button"
+            >
+              <Feather name="plus" size={14} color={BrandColors.primary} />
+              <Text className="text-xs font-bold text-orange-700">Thêm subtask</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* 5. Phân công (chỉ khi task chưa có người thực hiện) */}
+          {canAssign && onOpenAssignModal && (
+            <TouchableOpacity
+              accessibilityLabel="Phân công"
+              className={`${buttonBase} bg-primary`}
+              onPress={onOpenAssignModal}
+              disabled={isPending || isActionLoading}
+              activeOpacity={0.85}
+              style={[isPending || isActionLoading ? { opacity: 0.5 } : undefined]}
+              accessibilityRole="button"
+            >
+              <Feather name="users" size={14} color="#FFFFFF" />
+              <Text className="text-xs font-bold text-white">Phân công</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* 6. Yêu cầu làm lại */}
+          {canRework && onOpenReworkModal && (
+            <TouchableOpacity
+              accessibilityLabel="Yêu cầu làm lại"
+              className={`${buttonBase} bg-amber-50 border border-amber-200`}
+              onPress={onOpenReworkModal}
+              disabled={isPending || isActionLoading}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+            >
+              <Feather name="rotate-ccw" size={14} color="#D97706" />
+              <Text className="text-xs font-bold text-amber-700">Yêu cầu làm lại</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* 7. Đánh giá & Duyệt */}
+          {canReview && onOpenReviewModal && (
+            <TouchableOpacity
+              accessibilityLabel="Đánh giá và duyệt"
+              className={`${buttonBase} bg-primary`}
+              onPress={onOpenReviewModal}
+              disabled={isPending || isActionLoading}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+            >
+              <Feather name="check-circle" size={14} color="#FFFFFF" />
+              <Text className="text-xs font-bold text-white">Đánh giá & Duyệt</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* 8. Khách hàng duyệt */}
+          {canCustomerApprove && onCustomerApprove && (
+            <TouchableOpacity
+              accessibilityLabel="Khách hàng duyệt"
+              className={`${buttonBase} bg-emerald-600`}
+              onPress={onCustomerApprove}
+              disabled={isPending || isActionLoading}
+              activeOpacity={0.85}
+              style={[isPending || isActionLoading ? { opacity: 0.5 } : undefined]}
+              accessibilityRole="button"
+            >
+              <Feather name="check" size={14} color="#FFFFFF" />
+              <Text className="text-xs font-bold text-white">Khách hàng duyệt</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* 9. Nhờ hỗ trợ */}
+          {canRequestSupport && onRequestSupport && (
+            <TouchableOpacity
+              accessibilityLabel="Nhờ hỗ trợ"
+              className={`${buttonBase} bg-red-50 border border-red-200`}
+              onPress={onRequestSupport}
+              disabled={isPending || isActionLoading}
+              activeOpacity={0.85}
+              style={[isPending || isActionLoading ? { opacity: 0.5 } : undefined]}
+              accessibilityRole="button"
+            >
+              <Feather name="help-circle" size={14} color="#DC2626" />
+              <Text className="text-xs font-bold text-red-600">Nhờ hỗ trợ</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* 10. Phản hồi điều phối nhân sự — PM được chỉ định / ADMIN / BOD */}
           {canRespondStaffing && (
             <>
-              <TouchableOpacity
-                className={`${buttonBase} bg-emerald-600`}
-                onPress={() => handleRespondStaffing('RESOLVE')}
-                disabled={isPending}
-                activeOpacity={0.85}
-              >
-                {respondTaskStaffingMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Feather name="check" size={15} color="#FFFFFF" />
-                )}
-                <Text className="text-xs font-bold text-white">Xác nhận điều phối</Text>
-              </TouchableOpacity>
+              {policy.resolveStaffing.enabled && (
+                <TouchableOpacity
+                  accessibilityLabel="Xác nhận bổ sung nhân sự"
+                  className={`${buttonBase} bg-emerald-600`}
+                  onPress={() => handleRespondStaffing('RESOLVE')}
+                  disabled={isPending}
+                  activeOpacity={0.85}
+                  style={[isPending ? { opacity: 0.5 } : undefined]}
+                  accessibilityRole="button"
+                >
+                  {respondTaskStaffingMutation.isPending ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Feather name="check" size={14} color="#FFFFFF" />
+                  )}
+                  <Text className="text-xs font-bold text-white">Xác nhận điều phối</Text>
+                </TouchableOpacity>
+              )}
 
-              <TouchableOpacity
-                className={`${buttonBase} bg-red-50 border border-red-200`}
-                onPress={() => handleRespondStaffing('REJECT')}
-                disabled={isPending}
-                activeOpacity={0.85}
-              >
-                <Feather name="x" size={15} color="#DC2626" />
-                <Text className="text-xs font-bold text-red-600">Từ chối</Text>
-              </TouchableOpacity>
+              {policy.rejectStaffing.enabled && (
+                <TouchableOpacity
+                  accessibilityLabel="Từ chối yêu cầu nhân sự"
+                  className={`${buttonBase} bg-red-50 border border-red-200`}
+                  onPress={() => handleRespondStaffing('REJECT')}
+                  disabled={isPending}
+                  activeOpacity={0.85}
+                  style={[isPending ? { opacity: 0.5 } : undefined]}
+                  accessibilityRole="button"
+                >
+                  <Feather name="x" size={14} color="#DC2626" />
+                  <Text className="text-xs font-bold text-red-600">Từ chối</Text>
+                </TouchableOpacity>
+              )}
             </>
           )}
 
-          {/* 6. Khách không mua — chỉ task Video AI demo, status INTERNAL_COMPLETED, BD/ADMIN_SALE/ADMIN/BOD */}
-          {canMarkNotPurchased && (
+          {/* 11. Khách không mua — chỉ task Video AI demo */}
+          {policy.customerNotPurchase.enabled && (
             <TouchableOpacity
+              accessibilityLabel="Khách hàng không mua"
               className={`${buttonBase} bg-amber-50 border border-amber-200`}
               onPress={handleCustomerNotPurchase}
               disabled={isPending}
               activeOpacity={0.85}
+              style={[isPending ? { opacity: 0.5 } : undefined]}
+              accessibilityRole="button"
             >
               {customerNotPurchaseMutation.isPending ? (
                 <ActivityIndicator size="small" color="#D97706" />
               ) : (
-                <Feather name="user-x" size={15} color="#D97706" />
+                <Feather name="user-x" size={14} color="#D97706" />
               )}
               <Text className="text-xs font-bold text-amber-700">Khách không mua</Text>
             </TouchableOpacity>
           )}
-
-          {/* 7. Xóa công việc — Account/ADMIN */}
-          {/* {canDeleteTask && (
-            <TouchableOpacity
-              className={`${buttonBase} bg-red-50 border border-red-200`}
-              onPress={handleDeleteTask}
-              disabled={isPending}
-              activeOpacity={0.85}
-            >
-              {deleteTaskMutation.isPending ? (
-                <ActivityIndicator size="small" color="#DC2626" />
-              ) : (
-                <Feather name="trash-2" size={15} color="#DC2626" />
-              )}
-              <Text className="text-xs font-bold text-red-600">Xóa công việc</Text>
-            </TouchableOpacity>
-          )} */}
-        </View>
-
-        {/* Lý do không thể bắt đầu */}
-        {isStartableWindow && !isAssignee && (
-          <View className="flex-row items-center gap-2">
-            <Feather name="info" size={12} color="#94A3B8" />
-            <Text className="flex-1 text-[11px] font-semibold text-slate-400">
-              Chỉ người được giao công việc mới có thể bắt đầu
-            </Text>
-          </View>
-        )}
+        </ScrollView>
       </View>
 
       {/* Bottom sheet nhập nhu cầu nhân sự */}
@@ -477,21 +550,22 @@ export default function TaskLifecycleActions({
                 <Text className="text-sm font-semibold text-slate-600">Hủy bỏ</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                className={`flex-[2] min-h-[48px] flex-row items-center justify-center gap-2 bg-primary py-3.5 rounded-xl ${
-                  requestTaskStaffingMutation.isPending ? 'opacity-60' : ''
-                }`}
-                onPress={handleRequestStaffing}
-                disabled={requestTaskStaffingMutation.isPending}
-                activeOpacity={0.85}
-              >
-                {requestTaskStaffingMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Feather name="send" size={15} color="#FFFFFF" />
-                )}
-                <Text className="text-sm font-bold text-white">Gửi cho PM</Text>
-              </TouchableOpacity>
+              {policy.requestStaffing.enabled && (
+                <TouchableOpacity accessibilityLabel="Yêu cầu thêm người"
+                  className={`min-h-[48px] flex-[2] flex-row items-center justify-center gap-2 bg-primary py-3.5 rounded-xl ${requestTaskStaffingMutation.isPending ? 'opacity-60' : ''
+                    }`}
+                  onPress={handleRequestStaffing}
+                  disabled={requestTaskStaffingMutation.isPending}
+                  activeOpacity={0.85}
+                  style={[requestTaskStaffingMutation.isPending ? { opacity: 0.5 } : undefined]} accessibilityRole="button">
+                  {requestTaskStaffingMutation.isPending ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Feather name="send" size={15} color="#FFFFFF" />
+                  )}
+                  <Text className="text-sm font-bold text-white">Gửi cho PM</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </View>
